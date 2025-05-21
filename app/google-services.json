@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1048309727525",
+    "project_id": "cellsignalmapper-a9da1",
+    "storage_bucket": "cellsignalmapper-a9da1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1048309727525:android:0dec06ba7c36765a299acc",
+        "android_client_info": {
+          "package_name": "com.example.cellsignalmapper"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBk1FqcIGiSc1jybXgBq78ksFQ2A4dJMA8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

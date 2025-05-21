@@ -25,10 +25,22 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.*
 import android.telephony.TelephonyManager
+import android.util.Log
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.*
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var telephonyManager: TelephonyManager
+
+    private var isLogging by mutableStateOf(false)
 
     private val locationText = mutableStateOf("Getting Location...")
     private val signalStrengthText = mutableStateOf("Getting Signal Strength...")
@@ -84,10 +96,68 @@ class MainActivity : ComponentActivity() {
 
                     cellInfoText.value = getFormattedCellInfo(this@MainActivity)
                 }
+                if (locationText.value.startsWith("Latitude:") && signalStrengthText.value.contains("dBm")) {
+                    val lat = locationText.value.substringAfter("Latitude: ").substringBefore(",").toDoubleOrNull()
+                    val lon = locationText.value.substringAfter("Longitude: ").toDoubleOrNull()
+                    val signal = signalStrengthText.value.substringAfter("Signal Strength: ").substringBefore(" ").toIntOrNull()
+
+                    val registered = telephonyManager.allCellInfo?.find { it.isRegistered }
+                    val identity = registered?.cellIdentity
+
+                    val (mcc, mnc) = when (identity) {
+                        is android.telephony.CellIdentityLte -> identity.mccString to identity.mncString
+                        is android.telephony.CellIdentityNr -> identity.mccString to identity.mncString
+                        is android.telephony.CellIdentityGsm -> identity.mccString to identity.mncString
+                        is android.telephony.CellIdentityWcdma -> identity.mccString to identity.mncString
+                        else -> null to null
+                    }
+
+                    val cellInfo = when (identity) {
+                        is android.telephony.CellIdentityLte -> "CI: ${identity.ci}, TAC: ${identity.tac}, PCI: ${identity.pci}"
+                        is android.telephony.CellIdentityNr -> "CI: ${identity.nci}, TAC: ${identity.tac}, PCI: ${identity.pci}"
+                        is android.telephony.CellIdentityGsm -> "CID: ${identity.cid}, LAC: ${identity.lac}"
+                        is android.telephony.CellIdentityWcdma -> "CID: ${identity.cid}, LAC: ${identity.lac}"
+                        else -> "Unknown"
+                    }
+
+                    val entry = SignalLogEntry(
+                        timestamp = System.currentTimeMillis(),
+                        latitude = lat,
+                        longitude = lon,
+                        signalDbm = signal ?: -999,
+                        carrier = getCarrierName(mcc ?: "?", mnc ?: "?"),
+                        mcc = mcc ?: "?",
+                        mnc = mnc ?: "?",
+                        cellInfo = cellInfo
+                    )
+
+                    SignalLogger.logEntry(this@MainActivity, entry)
+                }
+
                 delay(1000)
             }
         }
     }
+
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    private fun toggleLogging() {
+        if (!isLogging) {
+            startLocationUpdates()
+            isLogging = true
+        } else {
+            updateJob?.cancel()
+            updateJob = null
+            isLogging = false
+            locationText.value = ""
+            signalStrengthText.value = ""
+            cellInfoText.value = emptyList()
+
+            FirebaseUploader.uploadLogFile(this) {
+                Log.d("MainActivity", "Upload complete: $it")
+            }
+        }
+    }
+
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,17 +168,24 @@ class MainActivity : ComponentActivity() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
-        startLocationUpdates()
+        FirebaseApp.initializeApp(this)
+        FirebaseAuth.getInstance().signInAnonymously()
+            .addOnSuccessListener { Log.d("Auth", "Signed in anonymously") }
+            .addOnFailureListener { Log.e("Auth", "Failed to sign in anonymously", it) }
+
 
         setContent {
             CellSignalMapperTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
+                    LoggerButton(
+                        isLogging = isLogging,
+                        onToggle = { toggleLogging() },
                         location = locationText.value,
                         signalStrength = signalStrengthText.value,
                         cellInfo = cellInfoText.value,
                         modifier = Modifier.padding(innerPadding)
                     )
+
                 }
             }
         }
@@ -116,24 +193,34 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun Greeting(location: String, signalStrength: String, cellInfo: List<String>, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(text = location)
-        Text(text = signalStrength)
-        cellInfo.forEach { line ->
-            Text(text = line)
+fun LoggerButton(
+    isLogging: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    location: String = "",
+    signalStrength: String = "",
+    cellInfo: List<String> = emptyList()
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Button(
+            onClick = onToggle,
+            modifier = Modifier.size(200.dp)
+        ) {
+            Text(if (isLogging) "STOP" else "LOG")
         }
-    }
-}
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    CellSignalMapperTheme {
-        Greeting(
-            location = "Preview Location",
-            signalStrength = "Preview Signal Strength",
-            cellInfo = listOf("Tower 1 info", "Tower 2 info")
-        )
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(location)
+        Text(signalStrength)
+        cellInfo.forEach {
+            Text(it)
+        }
     }
 }
