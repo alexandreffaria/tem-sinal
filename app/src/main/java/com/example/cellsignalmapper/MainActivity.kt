@@ -1,6 +1,7 @@
 package com.example.cellsignalmapper
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -35,6 +36,11 @@ import androidx.compose.foundation.layout.*
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.Context
+
+
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -55,6 +61,17 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.READ_PHONE_STATE
     )
 
+    private val logUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            intent?.let {
+                locationText.value = it.getStringExtra("location") ?: ""
+                signalStrengthText.value = it.getStringExtra("signal") ?: ""
+                cellInfoText.value = listOf(it.getStringExtra("cell") ?: "")
+            }
+        }
+    }
+
+
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
     }
@@ -69,94 +86,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-    private fun startLocationUpdates() {
-        updateJob = CoroutineScope(Dispatchers.Main).launch {
-            while (isActive) {
-                if (allPermissionsGranted()) {
-                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                        locationText.value = if (location != null) {
-                            "Latitude: ${location.latitude}, Longitude: ${location.longitude}"
-                        } else {
-                            "Location not available"
-                        }
-                    }
-
-                    val cellInfoList = telephonyManager.allCellInfo
-                    val signalInfo = cellInfoList?.firstOrNull()
-                    val strength = when (signalInfo) {
-                        is android.telephony.CellInfoGsm -> signalInfo.cellSignalStrength.dbm
-                        is android.telephony.CellInfoLte -> signalInfo.cellSignalStrength.dbm
-                        is android.telephony.CellInfoNr -> signalInfo.cellSignalStrength.dbm
-                        is android.telephony.CellInfoWcdma -> signalInfo.cellSignalStrength.dbm
-                        else -> null
-                    }
-                    signalStrengthText.value = strength?.let { "Signal Strength: $it dBm" }
-                        ?: "Signal Strength not available"
-
-                    cellInfoText.value = getFormattedCellInfo(this@MainActivity)
-                }
-                if (locationText.value.startsWith("Latitude:") && signalStrengthText.value.contains("dBm")) {
-                    val lat = locationText.value.substringAfter("Latitude: ").substringBefore(",").toDoubleOrNull()
-                    val lon = locationText.value.substringAfter("Longitude: ").toDoubleOrNull()
-                    val signal = signalStrengthText.value.substringAfter("Signal Strength: ").substringBefore(" ").toIntOrNull()
-
-                    val registered = telephonyManager.allCellInfo?.find { it.isRegistered }
-                    val identity = registered?.cellIdentity
-
-                    val (mcc, mnc) = when (identity) {
-                        is android.telephony.CellIdentityLte -> identity.mccString to identity.mncString
-                        is android.telephony.CellIdentityNr -> identity.mccString to identity.mncString
-                        is android.telephony.CellIdentityGsm -> identity.mccString to identity.mncString
-                        is android.telephony.CellIdentityWcdma -> identity.mccString to identity.mncString
-                        else -> null to null
-                    }
-
-                    val cellInfo = when (identity) {
-                        is android.telephony.CellIdentityLte -> "CI: ${identity.ci}, TAC: ${identity.tac}, PCI: ${identity.pci}"
-                        is android.telephony.CellIdentityNr -> "CI: ${identity.nci}, TAC: ${identity.tac}, PCI: ${identity.pci}"
-                        is android.telephony.CellIdentityGsm -> "CID: ${identity.cid}, LAC: ${identity.lac}"
-                        is android.telephony.CellIdentityWcdma -> "CID: ${identity.cid}, LAC: ${identity.lac}"
-                        else -> "Unknown"
-                    }
-
-                    val entry = SignalLogEntry(
-                        timestamp = System.currentTimeMillis(),
-                        latitude = lat,
-                        longitude = lon,
-                        signalDbm = signal ?: -999,
-                        carrier = getCarrierName(mcc ?: "?", mnc ?: "?"),
-                        mcc = mcc ?: "?",
-                        mnc = mnc ?: "?",
-                        cellInfo = cellInfo
-                    )
-
-                    SignalLogger.logEntry(this@MainActivity, entry)
-                }
-
-                delay(1000)
-            }
-        }
-    }
-
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     private fun toggleLogging() {
         if (!isLogging) {
-            startLocationUpdates()
+            val serviceIntent = Intent(this, LoggerService::class.java)
+            startForegroundService(serviceIntent)
             isLogging = true
         } else {
-            updateJob?.cancel()
-            updateJob = null
+            val stopIntent = Intent(this, LoggerService::class.java)
+            stopService(stopIntent)
             isLogging = false
-            locationText.value = ""
-            signalStrengthText.value = ""
-            cellInfoText.value = emptyList()
 
             FirebaseUploader.uploadLogFile(this) {
                 Log.d("MainActivity", "Upload complete: $it")
             }
         }
+
+        locationText.value = ""
+        signalStrengthText.value = ""
+        cellInfoText.value = emptyList()
     }
+
 
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
@@ -172,6 +121,13 @@ class MainActivity : ComponentActivity() {
         FirebaseAuth.getInstance().signInAnonymously()
             .addOnSuccessListener { Log.d("Auth", "Signed in anonymously") }
             .addOnFailureListener { Log.e("Auth", "Failed to sign in anonymously", it) }
+
+        registerReceiver(
+            logUpdateReceiver,
+            IntentFilter("com.example.cellsignalmapper.LOG_UPDATE"),
+            RECEIVER_NOT_EXPORTED
+        )
+
 
 
         setContent {

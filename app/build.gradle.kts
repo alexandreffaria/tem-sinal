@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.cellsignalmapper"
+    namespace = "dev.meuquerido.cellsignalmapper"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.cellsignalmapper"
+        applicationId = "dev.meuquerido.cellsignalmapper"
         minSdk = 30
         targetSdk = 35
         versionCode = 1
