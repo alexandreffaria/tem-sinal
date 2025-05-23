@@ -1,6 +1,5 @@
-package com.example.cellsignalmapper.ui.theme
+package dev.meuquerido.cellsignalmapper
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

@@ -1,4 +1,4 @@
-package com.example.cellsignalmapper
+package dev.meuquerido.cellsignalmapper
 
 import android.annotation.SuppressLint
 
@@ -6,7 +6,6 @@ import android.content.Context
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.gson.Gson
-import java.io.File
 
 object FirebaseUploader {
     @SuppressLint("StaticFieldLeak")

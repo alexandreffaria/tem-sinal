@@ -1,4 +1,4 @@
-package com.example.cellsignalmapper
+package dev.meuquerido.cellsignalmapper
 
 import android.Manifest
 import android.telephony.CellIdentityGsm
@@ -6,7 +6,6 @@ import android.telephony.CellIdentityLte
 import android.telephony.CellIdentityNr
 import android.telephony.CellIdentityWcdma
 import androidx.annotation.RequiresPermission
-import android.os.Build
 
 
 import android.content.Context

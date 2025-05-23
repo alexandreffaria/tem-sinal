@@ -1,4 +1,4 @@
-package com.example.cellsignalmapper
+package dev.meuquerido.cellsignalmapper
 
 import android.content.Context
 import com.google.gson.Gson

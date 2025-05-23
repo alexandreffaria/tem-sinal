@@ -1,4 +1,4 @@
-package com.example.cellsignalmapper
+package dev.meuquerido.cellsignalmapper
 
 data class SignalLogEntry(
     val timestamp: Long,

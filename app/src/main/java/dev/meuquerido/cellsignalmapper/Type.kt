@@ -1,4 +1,4 @@
-package com.example.cellsignalmapper.ui.theme
+package dev.meuquerido.cellsignalmapper
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

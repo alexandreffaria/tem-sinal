@@ -1,22 +1,18 @@
-package com.example.cellsignalmapper
+package dev.meuquerido.cellsignalmapper
 
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.location.Location
-import android.os.Build
 import android.os.IBinder
 import android.telephony.TelephonyManager
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.*
-import java.util.*
 
 class LoggerService : Service() {
 
@@ -111,7 +107,7 @@ class LoggerService : Service() {
 
                 SignalLogger.logEntry(this@LoggerService, entry)
 
-                val intent = Intent("com.example.cellsignalmapper.LOG_UPDATE").apply {
+                val intent = Intent("dev.meuquerido.cellsignalmapper.LOG_UPDATE").apply {
                     putExtra("location", "Lat: $lat, Lon: $lon")
                     putExtra("signal", "Signal Strength: $signalDbm dBm")
                     putExtra("cell", cellInfo)
