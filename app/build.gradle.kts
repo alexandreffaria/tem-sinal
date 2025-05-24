@@ -22,7 +22,7 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("release-key.jks")
+            storeFile = rootProject.file("release-key.jks")
             storePassword = "REMOVED"
             keyAlias = "release"
             keyPassword = "REMOVED"
