@@ -14,7 +14,7 @@ android {
         applicationId = "dev.meuquerido.cellsignalmapper"
         minSdk = 30
         targetSdk = 35
-        versionCode = 5
+        versionCode = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "1")
         versionName = "0.32"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
