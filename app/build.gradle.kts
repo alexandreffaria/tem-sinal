@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
+    id("com.github.triplet.play")
 }
 
 android {
@@ -13,21 +14,32 @@ android {
         applicationId = "dev.meuquerido.cellsignalmapper"
         minSdk = 30
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 5
+        versionName = "0.32"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("release-key.jks")
+            storePassword = "REMOVED"
+            keyAlias = "release"
+            keyPassword = "REMOVED"
+        }
+    }
+
     buildTypes {
-        release {
+        getByName("release") {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release") // ✅ THIS IS ESSENTIAL
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -38,6 +50,11 @@ android {
     buildFeatures {
         compose = true
     }
+}
+
+play {
+    serviceAccountCredentials.set(file("play-account.json"))
+    track.set("plz")
 }
 
 dependencies {

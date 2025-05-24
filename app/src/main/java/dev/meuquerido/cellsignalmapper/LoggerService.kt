@@ -19,6 +19,10 @@ class LoggerService : Service() {
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private lateinit var telephonyManager: TelephonyManager
 
+    private var lastLat: Double? = null
+    private var lastLon: Double? = null
+    private var lastSignal: Int? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -58,6 +62,7 @@ class LoggerService : Service() {
     private fun startLoggingLoop() {
         val locationClient = LocationServices.getFusedLocationProviderClient(this)
 
+
         coroutineScope.launch {
             while (isActive) {
                 val locTask = locationClient.lastLocation
@@ -94,6 +99,21 @@ class LoggerService : Service() {
 
                 val signalDbm = registered?.cellSignalStrength?.dbm ?: -999
 
+                // 🔁 Skip bad or duplicate data
+                if (lat == null || lon == null || signalDbm == -999) {
+                    delay(1000)
+                    continue
+                }
+                if (lat == lastLat && lon == lastLon && signalDbm == lastSignal) {
+                    delay(1000)
+                    continue
+                }
+
+                // 🧠 Update last values
+                lastLat = lat
+                lastLon = lon
+                lastSignal = signalDbm
+
                 val entry = SignalLogEntry(
                     timestamp = System.currentTimeMillis(),
                     latitude = lat,
@@ -114,8 +134,9 @@ class LoggerService : Service() {
                 }
                 sendBroadcast(intent)
 
-                delay(1000)
+                delay(5000)
             }
+
         }
     }
 

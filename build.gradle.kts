@@ -4,4 +4,5 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.google.gms.services) apply false
+    id("com.github.triplet.play") version "3.8.4" apply false
 }

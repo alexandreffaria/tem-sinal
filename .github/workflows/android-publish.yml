@@ -1,0 +1,40 @@
+name: Deploy to Play Store
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build & Upload AAB
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: 11
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > keystore.jks
+
+      - name: Set up Gradle
+        uses: gradle/gradle-build-action@v2
+
+      - name: Build & Publish AAB
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+        run: |
+          echo "$SERVICE_ACCOUNT_JSON" > play-account.json
+          ./gradlew publishReleaseBundle \
+            -Pandroid.injected.signing.store.file=keystore.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} \
+            -Ptrack=plz
