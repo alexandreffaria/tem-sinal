@@ -15,7 +15,7 @@ android {
         minSdk = 30
         targetSdk = 35
         versionCode = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "1")
-        versionName = "0.33"
+        versionName = "i swear to god"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
