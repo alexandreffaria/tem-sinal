@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -26,8 +24,6 @@ import com.google.android.gms.location.LocationServices
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
 import com.google.firebase.FirebaseApp
@@ -51,6 +47,10 @@ class MainActivity : ComponentActivity() {
 
     private var pendingPoints by mutableIntStateOf(0)
 
+    private val lastPingResult = mutableStateOf("")
+    private val pingAnimationKey = mutableIntStateOf(0)
+    private val debugText = mutableStateOf("")
+
     private val PERMISSIONS_REQUEST_CODE = 1001
     private val REQUIRED_PERMISSIONS = arrayOf(
         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -65,6 +65,9 @@ class MainActivity : ComponentActivity() {
                 signalStrengthText.value = it.getStringExtra("signal") ?: ""
                 cellInfoText.value = listOf(it.getStringExtra("cell") ?: "")
                 pendingPoints = FirebaseUploader.getPendingLogCount(applicationContext)
+                lastPingResult.value = it.getStringExtra("pingResult") ?: ""
+                pingAnimationKey.intValue++
+                debugText.value = it.getStringExtra("debug") ?: ""
             }
         }
     }
@@ -132,72 +135,37 @@ class MainActivity : ComponentActivity() {
         setContent {
             CellSignalMapperTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    LoggerButton(
-                        isLogging = isLogging,
-                        onToggle = { toggleLogging() },
-                        onUpload = { FirebaseUploader.uploadLogFile(this){
-                            Log.d("MainActivity", "Upload complete: $it")
-                            pendingPoints = FirebaseUploader.getPendingLogCount(this)
-                        } },
-                        location = locationText.value,
-                        signalStrength = signalStrengthText.value,
-                        cellInfo = cellInfoText.value,
-                        pendingPoints = pendingPoints,
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        PingVisualizer(result = lastPingResult.value, animationKey = pingAnimationKey.value)
 
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        LoggerButton(
+                            isLogging = isLogging,
+                            onToggle = { toggleLogging() },
+                            onUpload = {
+                                FirebaseUploader.uploadLogFile(this@MainActivity) {
+                                    Log.d("MainActivity", "Upload complete: $it")
+                                    pendingPoints = FirebaseUploader.getPendingLogCount(this@MainActivity)
+                                }
+                            },
+                            location = locationText.value,
+                            signalStrength = signalStrengthText.value,
+                            cellInfo = cellInfoText.value,
+                            pendingPoints = pendingPoints,
+                            debugText = debugText.value
+                        )
+                    }
                 }
             }
         }
+
     }
 }
 
-@Composable
-fun LoggerButton(
-    isLogging: Boolean,
-    onToggle: () -> Unit,
-    onUpload: () -> Unit,
-    modifier: Modifier = Modifier,
-    location: String = "",
-    signalStrength: String = "",
-    cellInfo: List<String> = emptyList(),
-    pendingPoints: Int = 0
-) {
-
-
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-
-
-        Text("$pendingPoints pending points stored")
-        Spacer(modifier = Modifier.height(50.dp))
-
-        Button(
-            onClick = onToggle,
-            modifier = Modifier.size(200.dp)
-        ) {
-            Text(if (isLogging) "STOP" else "LOG")
-        }
-
-        if (pendingPoints > 0) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = onUpload) {
-                Text("Send my data")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Text(location)
-        Text(signalStrength)
-        cellInfo.forEach {
-            Text(it)
-        }
-    }
-}

@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.location.Location
 import android.os.IBinder
+import android.os.Looper
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
@@ -17,6 +18,10 @@ import kotlinx.coroutines.*
 import java.util.UUID
 
 class LoggerService : Service() {
+
+    enum class PingResult {
+        SUCCESS, DUPLICATE, BAD
+    }
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private lateinit var telephonyManager: TelephonyManager
@@ -70,15 +75,33 @@ class LoggerService : Service() {
         coroutineScope.launch {
             while (isActive) {
                 Log.d("LoggerService", "Requesting last location...")
-                val locTask = locationClient.lastLocation
                 val location = try {
-                    kotlinx.coroutines.suspendCancellableCoroutine<Location?> { cont ->
-                        locTask.addOnSuccessListener { cont.resume(it, null) }
-                        locTask.addOnFailureListener { cont.resume(null, null) }
+                    withTimeout(5000) {
+                        suspendCancellableCoroutine<Location?> { cont ->
+                            val request = com.google.android.gms.location.LocationRequest.Builder(
+                                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 1000L
+                            )
+                                .setWaitForAccurateLocation(true)
+                                .setMaxUpdateDelayMillis(0)
+                                .build()
+
+                            locationClient.requestLocationUpdates(
+                                request,
+                                object : com.google.android.gms.location.LocationCallback() {
+                                    override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
+                                        cont.resume(result.lastLocation, onCancellation = null)
+                                        locationClient.removeLocationUpdates(this)
+                                    }
+                                },
+                                Looper.getMainLooper()
+                            )
+                        }
                     }
                 } catch (e: Exception) {
+                    Log.e("LoggerService", "Failed to get fresh location", e)
                     null
                 }
+
 
                 val lat = location?.latitude
                 val lon = location?.longitude
@@ -109,52 +132,76 @@ class LoggerService : Service() {
 
                 val signalDbm = registered?.cellSignalStrength?.dbm ?: -999
 
-
-
-                // 🔁 Skip bad or duplicate data
-                if (lat == null || lon == null || signalDbm == -999) {
-                    delay(1000)
-                    continue
+                val pingResult = when {
+                    lat == null || lon == null || signalDbm == -999 -> PingResult.BAD
+                    lastLat == null || lastLon == null -> PingResult.SUCCESS // first fix
+                    !hasMoved(lat, lon, lastLat!!, lastLon!!, 10f) -> {
+                        Log.d("LoggerService", "Skipped point — no significant movement")
+                        PingResult.DUPLICATE
+                    }
+                    else -> PingResult.SUCCESS
                 }
-                if (lat == lastLat && lon == lastLon && signalDbm == lastSignal) {
-                    delay(1000)
-                    continue
+                if (pingResult == PingResult.SUCCESS) {
+                    // Log point
+                    lastLat = lat
+                    lastLon = lon
+                    lastSignal = signalDbm
+
+                    val carrierName = getCarrierName(mcc ?: "?", mnc ?: "?")
+                    val pointId = UUID.nameUUIDFromBytes("$carrierName|$latRounded|$lonRounded|$signalDbm".toByteArray()).toString()
+
+                    val entry = SignalLogEntry(
+                        id = pointId,
+                        timestamp = System.currentTimeMillis(),
+                        latitude = latRounded,
+                        longitude = lonRounded,
+                        signalDbm = signalDbm,
+                        carrier = carrierName,
+                        mcc = mcc ?: "?",
+                        mnc = mnc ?: "?",
+                        cellInfo = cellInfo
+                    )
+
+                    SignalLogger.logEntry(this@LoggerService, entry)
                 }
 
-                // 🧠 Update last values
-                lastLat = lat
-                lastLon = lon
-                lastSignal = signalDbm
+                val distance = if (lastLat != null && lastLon != null && lat != null && lon != null) {
+                    val result = FloatArray(1)
+                    Location.distanceBetween(lastLat!!, lastLon!!, lat, lon, result)
+                    result[0] // distance in meters
+                } else {
+                    0f
+                }
 
-                val carrierName = getCarrierName(mcc ?: "?", mnc ?: "?")
-                val pointId = UUID.nameUUIDFromBytes("$carrierName|$latRounded|$lonRounded|$signalDbm".toByteArray()).toString()
-
-                val entry = SignalLogEntry(
-                    id = pointId,
-                    timestamp = System.currentTimeMillis(),
-                    latitude = lat,
-                    longitude = lon,
-                    signalDbm = signalDbm,
-                    carrier = getCarrierName(mcc ?: "?", mnc ?: "?"),
-                    mcc = mcc ?: "?",
-                    mnc = mnc ?: "?",
-                    cellInfo = cellInfo
-                )
-
-                SignalLogger.logEntry(this@LoggerService, entry)
-
+                val debugInfo = "GPS=$lat, $lon | S=$signalDbm | PING=$pingResult | Δ=${
+                    "%.1f".format(
+                        distance
+                    )
+                }m\""
                 val intent = Intent("dev.meuquerido.cellsignalmapper.LOG_UPDATE").apply {
                     putExtra("location", "Lat: $lat, Lon: $lon")
                     putExtra("signal", "Signal Strength: $signalDbm dBm")
                     putExtra("cell", cellInfo)
+                    putExtra("pingResult", pingResult.name)
+                    putExtra("debug", debugInfo)
                 }
                 sendBroadcast(intent)
 
                 delay(5000)
+
+
+
             }
 
         }
     }
+
+    private fun hasMoved(lat1: Double, lon1: Double, lat2: Double, lon2: Double, thresholdMeters: Float = 10f): Boolean {
+        val result = FloatArray(1)
+        Location.distanceBetween(lat1, lon1, lat2, lon2, result)
+        return result[0] > thresholdMeters
+    }
+
 
     override fun onDestroy() {
         coroutineScope.cancel()
