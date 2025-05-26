@@ -202,6 +202,9 @@ class LoggerService : Service() {
         return result[0] > thresholdMeters
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
 
     override fun onDestroy() {
         coroutineScope.cancel()
