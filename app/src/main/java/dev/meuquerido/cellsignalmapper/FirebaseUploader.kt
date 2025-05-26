@@ -21,6 +21,7 @@ object FirebaseUploader {
             return
         }
 
+
         val lines = file.readLines()
         if (lines.isEmpty()) {
             Log.d("FirebaseUploader", "Log file is empty.")
@@ -34,7 +35,7 @@ object FirebaseUploader {
         lines.forEachIndexed { index, line ->
             try {
                 val entry = gson.fromJson(line, SignalLogEntry::class.java)
-                val doc = collection.document() // auto-ID
+                val doc = collection.document(entry.id) // auto-ID
                 batch.set(doc, entry)
             } catch (e: Exception) {
                 Log.e("FirebaseUploader", "Failed to parse line $index", e)
@@ -49,5 +50,10 @@ object FirebaseUploader {
             Log.e("FirebaseUploader", "Upload failed", it)
             onComplete(false)
         }
+    }
+
+    fun getPendingLogCount(context: Context): Int{
+        val file = SignalLogger.getLogFile(context)
+        return if (file.exists()) file.readLines().size else 0
     }
 }

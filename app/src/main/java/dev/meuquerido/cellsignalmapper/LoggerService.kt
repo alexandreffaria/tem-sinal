@@ -9,10 +9,12 @@ import android.content.Intent
 import android.location.Location
 import android.os.IBinder
 import android.telephony.TelephonyManager
+import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.*
+import java.util.UUID
 
 class LoggerService : Service() {
 
@@ -28,6 +30,8 @@ class LoggerService : Service() {
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     override fun onCreate() {
         super.onCreate()
+        Log.d("LoggerService", "Service created and starting logging loop")
+
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
         startForegroundService()
         startLoggingLoop()
@@ -65,6 +69,7 @@ class LoggerService : Service() {
 
         coroutineScope.launch {
             while (isActive) {
+                Log.d("LoggerService", "Requesting last location...")
                 val locTask = locationClient.lastLocation
                 val location = try {
                     kotlinx.coroutines.suspendCancellableCoroutine<Location?> { cont ->
@@ -77,6 +82,11 @@ class LoggerService : Service() {
 
                 val lat = location?.latitude
                 val lon = location?.longitude
+                val latRounded = "%.5f".format(lat).toDouble()
+                val lonRounded = "%.5f".format(lon).toDouble()
+
+
+
 
                 val registered = telephonyManager.allCellInfo?.find { it.isRegistered }
                 val identity = registered?.cellIdentity
@@ -99,6 +109,8 @@ class LoggerService : Service() {
 
                 val signalDbm = registered?.cellSignalStrength?.dbm ?: -999
 
+
+
                 // 🔁 Skip bad or duplicate data
                 if (lat == null || lon == null || signalDbm == -999) {
                     delay(1000)
@@ -114,7 +126,11 @@ class LoggerService : Service() {
                 lastLon = lon
                 lastSignal = signalDbm
 
+                val carrierName = getCarrierName(mcc ?: "?", mnc ?: "?")
+                val pointId = UUID.nameUUIDFromBytes("$carrierName|$latRounded|$lonRounded|$signalDbm".toByteArray()).toString()
+
                 val entry = SignalLogEntry(
+                    id = pointId,
                     timestamp = System.currentTimeMillis(),
                     latitude = lat,
                     longitude = lon,

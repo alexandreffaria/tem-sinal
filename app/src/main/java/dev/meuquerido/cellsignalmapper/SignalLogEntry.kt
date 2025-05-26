@@ -1,6 +1,7 @@
 package dev.meuquerido.cellsignalmapper
 
 data class SignalLogEntry(
+    val id: String,
     val timestamp: Long,
     val latitude: Double?,
     val longitude: Double?,
