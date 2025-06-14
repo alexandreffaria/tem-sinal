@@ -14,7 +14,7 @@ android {
         applicationId = "dev.meuquerido.cellsignalmapper"
         minSdk = 30
         targetSdk = 35
-        versionCode = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "1")
+        versionCode = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "10")
         versionName = "new cell polling"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
