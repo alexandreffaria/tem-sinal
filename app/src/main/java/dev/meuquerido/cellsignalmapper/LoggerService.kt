@@ -33,15 +33,12 @@ class LoggerService : Service() {
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private lateinit var telephonyManager: TelephonyManager
 
-    // --- NEW: hold the real-time dBm ---
     private var currentDbm: Int = -999
 
-    // --- NEW: modern callback for API31+ ---
     private val telephonyCallback = @RequiresApi(Build.VERSION_CODES.S)
     object : TelephonyCallback(),
         TelephonyCallback.SignalStrengthsListener {
         override fun onSignalStrengthsChanged(ss: SignalStrength) {
-            // pick first available RAT
             val css = ss.cellSignalStrengths.firstOrNull()
             val dbm = css?.dbm
                 ?: ss.gsmSignalStrength.takeIf { it != 99 }
@@ -65,11 +62,8 @@ class LoggerService : Service() {
 
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
-        // --- NEW: register modern callback ---
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             telephonyManager.registerTelephonyCallback(mainExecutor, telephonyCallback)
-        } else {
-            // fallback if you ever care about pre-S: nothing here
         }
 
         startForegroundService()
@@ -107,7 +101,6 @@ class LoggerService : Service() {
 
         coroutineScope.launch {
             while (isActive) {
-                // --- get fresh location ---
                 val location = try {
                     withTimeout(5000) {
                         suspendCancellableCoroutine<Location?> { cont ->
@@ -141,7 +134,6 @@ class LoggerService : Service() {
                 val latRounded = lat?.let { "%.5f".format(it).toDouble() }
                 val lonRounded = lon?.let { "%.5f".format(it).toDouble() }
 
-                // --- use our real-time dBm instead of stale allCellInfo ---
                 val signalDbm = currentDbm
 
                 val pingResult = when {
@@ -155,46 +147,48 @@ class LoggerService : Service() {
                     else -> PingResult.SUCCESS
                 }
 
-                if (pingResult == PingResult.SUCCESS) {
+                // Get SIM operator MCC and MNC
+                val simOperator = telephonyManager.simOperator
+                val simMcc = simOperator.take(3)
+                val simMnc = simOperator.drop(3)
+
+                // Get registered cell info
+                val infoList = telephonyManager.allCellInfo
+                val registeredInfo = infoList?.find { it.isRegistered }
+                val identity = registeredInfo?.cellIdentity
+
+                val (rawMcc, rawMnc) = when (identity) {
+                    is CellIdentityLte   -> identity.mccString to identity.mncString
+                    is CellIdentityNr    -> identity.mccString to identity.mncString
+                    is CellIdentityGsm   -> identity.mccString to identity.mncString
+                    is CellIdentityWcdma -> identity.mccString to identity.mncString
+                    else                  -> null to null
+                }
+                val mcc = rawMcc ?: "?"
+                val mnc = rawMnc ?: "?"
+
+                val carrierName = getCarrierName(mcc, mnc)
+
+                val cellInfoString = when (identity) {
+                    is CellIdentityLte   -> "CI:${identity.ci}, TAC:${identity.tac}, PCI:${identity.pci}"
+                    is CellIdentityNr    -> "CI:${identity.nci}, TAC:${identity.tac}, PCI:${identity.pci}"
+                    is CellIdentityGsm   -> "CID:${identity.cid}, LAC:${identity.lac}"
+                    is CellIdentityWcdma -> "CID:${identity.cid}, LAC:${identity.lac}"
+                    else                  -> "Unknown Cell Identity"
+                }
+
+                val isSameCarrier = (mcc == simMcc && mnc == simMnc)
+
+                if (pingResult == PingResult.SUCCESS && isSameCarrier) {
                     lastLat = lat
                     lastLon = lon
                     lastSignal = signalDbm
 
-                    // get the registered cell info list
-                    val infoList = telephonyManager.allCellInfo
-                    val registeredInfo = infoList?.find { it.isRegistered }
-                    val identity = registeredInfo?.cellIdentity
-
-// extract MCC/MNC
-                    val (rawMcc, rawMnc) = when (identity) {
-                        is CellIdentityLte   -> identity.mccString to identity.mncString
-                        is CellIdentityNr    -> identity.mccString to identity.mncString
-                        is CellIdentityGsm   -> identity.mccString to identity.mncString
-                        is CellIdentityWcdma -> identity.mccString to identity.mncString
-                        else                  -> null to null
-                    }
-                    val mcc = rawMcc ?: "?"
-                    val mnc = rawMnc ?: "?"
-
-// lookup carrier name
-                    val carrierName = getCarrierName(mcc, mnc)
-
-// format a human-readable cell-info string
-                    val cellInfoString = when (identity) {
-                        is CellIdentityLte   -> "CI:${identity.ci}, TAC:${identity.tac}, PCI:${identity.pci}"
-                        is CellIdentityNr    -> "CI:${identity.nci}, TAC:${identity.tac}, PCI:${identity.pci}"
-                        is CellIdentityGsm   -> "CID:${identity.cid}, LAC:${identity.lac}"
-                        is CellIdentityWcdma -> "CID:${identity.cid}, LAC:${identity.lac}"
-                        else                  -> "Unknown Cell Identity"
-                    }
-
-// regenerate your point ID including the real carrier
                     val pointId = UUID.nameUUIDFromBytes(
                         "$carrierName|$latRounded|$lonRounded|$signalDbm"
                             .toByteArray()
                     ).toString()
 
-// build the log entry with real carrier, mcc, mnc, and cellInfo
                     val entry = SignalLogEntry(
                         id = pointId,
                         timestamp = System.currentTimeMillis(),
@@ -207,11 +201,12 @@ class LoggerService : Service() {
                         cellInfo = cellInfoString
                     )
 
-
                     SignalLogger.logEntry(this@LoggerService, entry)
+
+                } else if (pingResult == PingResult.SUCCESS && !isSameCarrier) {
+                    Log.d("LoggerService", "Skipped — Not user carrier (SIM $simMcc$simMnc vs Tower $mcc$mnc)")
                 }
 
-                // … broadcast update as you had it …
                 val intent = Intent("dev.meuquerido.cellsignalmapper.LOG_UPDATE").apply {
                     putExtra("location", "Lat: $lat, Lon: $lon")
                     putExtra("signal", "Signal Strength: $signalDbm dBm")
@@ -235,7 +230,6 @@ class LoggerService : Service() {
         START_STICKY
 
     override fun onDestroy() {
-        // unregister callback on API31+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             telephonyManager.unregisterTelephonyCallback(telephonyCallback)
         }
