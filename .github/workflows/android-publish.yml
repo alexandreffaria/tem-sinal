@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'decisions/**'
+      - 'plans/**'
+      - 'docs/**'
+      - '.claude/**'
+      - '**.md'
+      - '.github/workflows/ci.yml'
 
 jobs:
   build:
@@ -15,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: 17
@@ -26,7 +33,7 @@ jobs:
           echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/release-key.jks" >> $GITHUB_ENV
 
       - name: Set up Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Build & Publish AAB
         env:
