@@ -5,10 +5,15 @@
    The sample files and Firestore's local cache (the database domain, which holds
    the samples written to it) contain exact locations and times, so they
    never leave the device.
+   Firebase Installations keeps the installation id in
+   PersistedInstallation.<persistence key of the default FirebaseApp>.json; restored on
+   another phone it would make both installs one device. The key encodes the Android app id
+   in google-services.json, so this name changes if that app id changes.
 -->
 <full-backup-content>
     <exclude domain="file" path="signal_log.json" />
     <exclude domain="file" path="signal_log.pending.json" />
     <exclude domain="file" path="signal_log.rejected.json" />
     <exclude domain="database" path="." />
+    <exclude domain="file" path="PersistedInstallation.W0RFRkFVTFRd+MToxMDQ4MzA5NzI3NTI1OmFuZHJvaWQ6MWMzZjIyMmI0ZDY3ZDlmZjI5OWFjYw.json" />
 </full-backup-content>
