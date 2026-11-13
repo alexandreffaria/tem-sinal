@@ -53,6 +53,7 @@ options:
 resolution:
   choice: monthly
   resolved_at: 2026-11-13T00:44:16Z
+applied_at: 2026-11-13T02:46:01Z
 ---
 
 ## Context
