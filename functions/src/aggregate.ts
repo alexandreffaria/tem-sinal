@@ -273,21 +273,28 @@ function toPublic(h3: string, cell: Bucket): PublicCell {
 /**
  * The daily publication at [nowMs]: the public cells from the previous publication, updated by
  * the rule of card 20261113a7do. A cell backed by two or more installs that was never held is
- * updated every day. Any other cell changes only in the batch on the 1st of the month (UTC): a
- * single-install cell once its first sample is at least [LONE_CELL_AGE_MS] old, a held cell that
- * has since gained a second install at once. A batch publishes such a cell from its samples before
- * the batch's month only, so a lone visit shows as no more than its month. Returns the new private state, with `held` set for
- * cells that wait, and the new public cells; neither input is changed.
+ * updated every day. Any other cell changes only in the monthly batch (UTC): a single-install cell
+ * once its first sample is at least [LONE_CELL_AGE_MS] old, a held cell that has since gained a
+ * second install at once. The batch runs in the first publication of a month later than
+ * [lastBatch], the month ("YYYY-MM") of the previous batch or null if there was none, so a missed
+ * run on the 1st doesn't delay it a month. Run later than the 1st, it publishes only what a run
+ * at the end of the 1st would: a cell's age is measured at that time at the latest, and a batch
+ * publishes such a cell from its samples before the batch's month only, so a lone visit shows as
+ * no more than its month. Returns the new private state, with `held` set for cells that wait, the
+ * new public cells and the month of the latest batch; no input is changed.
  */
 export function publish(
   cells: Record<string, CellState>,
   previous: Record<string, PublicCell>,
+  lastBatch: string | null,
   nowMs: number,
-): { cells: Record<string, CellState>; published: Record<string, PublicCell> } {
-  const batch = new Date(nowMs).getUTCDate() === 1;
+): { cells: Record<string, CellState>; published: Record<string, PublicCell>; lastBatch: string | null } {
+  const month = monthOf(nowMs);
+  const batch = lastBatch === null || month > lastBatch;
+  const now = new Date(nowMs);
+  const ageAtMs = Math.min(nowMs, Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 2) - 1);
   const nextCells: Record<string, CellState> = {};
   const published: Record<string, PublicCell> = { ...previous };
-  const month = monthOf(nowMs);
   for (const [h3, cell] of Object.entries(cells)) {
     const all = merge(Object.values(cell.months));
     if (!all) continue;
@@ -297,14 +304,14 @@ export function publish(
       published[h3] = toPublic(h3, all);
     } else if (batch) {
       const before = merge(Object.entries(cell.months).filter(([m]) => m < month).map(([, b]) => b));
-      if (before && (shared || nowMs - before.firstMs >= LONE_CELL_AGE_MS)) {
+      if (before && (shared || ageAtMs - before.firstMs >= LONE_CELL_AGE_MS)) {
         published[h3] = toPublic(h3, before);
         held = false;
       }
     }
     nextCells[h3] = { ...cell, held };
   }
-  return { cells: nextCells, published };
+  return { cells: nextCells, published, lastBatch: batch ? month : lastBatch };
 }
 
 /** Public cells grouped by the H3 region tile that holds them, one file per tile. */
