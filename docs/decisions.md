@@ -2,6 +2,56 @@
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-13: No altitude on the map
+
+The public map shows signal only, as settled: no altitude from the phones' readings and none from
+a terrain model. The app still records each fix's ellipsoidal altitude and vertical accuracy
+(`docs/sample-schema.md`, **Fix**); the server publishes neither and converts neither to height
+above sea level.
+
+Card: `2026111304re` (choice: none).
+
+## 2026-11-13: Pressing LOG is the choice to share
+
+LOG (STOP while logging) is the only button and also means "share". Samples are sent
+automatically when logging stops and when the app starts, retrying until they go, and the "Send
+my data" button is removed. The pending count stays on the main screen while something is still
+to be sent, and a failed send keeps the samples on the phone. "What is shared?" says that pressing
+LOG shares what is recorded. Nobody can hold back a recorded session, for example one started at
+home by mistake; only the server's trim protects it. Nobody can record without sharing, as today.
+Issues #181 (upload on stop and background retry), #182 (the "What is shared?" text), #183 (the
+button).
+
+Card: `20261113og4j` (choice: one-button).
+
+## 2026-11-13: The public map stays at resolution 11; the private state moves to resolution 12
+
+Public cells stay H3 resolution 11 (about 50-57 m across) with per-carrier statistics and the
+month last seen, as settled; nothing new is published. The server keeps its private statistics
+per resolution 12 cell (about 19-22 m across) and publishes their resolution 11 parents, so a
+later switch to finer cells loses nothing. The cost: about 2.5 to 3 times more private state along
+walked tracks (up to seven times over a densely covered area), a few samples near cell edges
+rolling up to a neighbouring resolution 11 cell, and a private state, kept with no end date and
+listing which installs were in each cell each month, that places each install to about 20 m
+instead of 50 m. Issue #180, before #108.
+
+Card: `20261113mua9` (choice: today).
+
+## 2026-11-13: A stop counts as a destination after five minutes of travel
+
+A stay at the start or end of a session is hidden as a possible home, with the trim around it,
+until the phone has had 60 moving fixes (five minutes at one fix every 5 s) that are in no stay and
+lie outside the trim of where the session started or ended; a stay after that counts as a
+destination, such as a crag, and is kept. `DEPARTURE_FIXES = 60` in `functions/src/aggregate.ts`,
+as built. It withstands a wrong glide home shorter than about 400 s from 2 km away (590 s from
+1 km), four times the 100 s glide of #122. A crag reached on foot is kept only from about 860 m from
+the car at the shortest trim (1360 m at the longest), so a crag 1 km from the car shows up from
+about 7% of the sessions that start and end there, and one 1.5 km away from all of them. Nobody has
+measured how long such glides last on real phones. With a 3-minute rest every 10 minutes of
+walking, current `main` keeps no crag at trims of about 550 to 650 m and above (#179).
+
+Card: `20261113nk9r` (choice: five).
+
 ## 2026-11-13: The map labels a carrier by the best state 90% of readings reached
 
 For each carrier in each cell, the public map shows signal, emergency calls only or no signal,
