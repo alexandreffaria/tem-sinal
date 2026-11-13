@@ -4,6 +4,12 @@ import { cellToParent, greatCircleDistance, latLngToCell } from "h3-js";
 /** The H3 resolution of a public map cell: edge about 29 m. */
 export const CELL_RESOLUTION = 11;
 
+/**
+ * The H3 resolution of a private cell: edge about 11 m. Each one counts towards its parent public
+ * cell only, which near a public cell's edge can differ from the public cell of the same point.
+ */
+export const PRIVATE_RESOLUTION = 12;
+
 /** The H3 resolution of the region tile that groups public cells into one file. */
 export const TILE_RESOLUTION = 5;
 
@@ -70,13 +76,11 @@ export type Bucket = {
   carriers: Record<string, CarrierStats>;
 };
 
-/** A cell's private state: install ids and exact times never leave it. */
-export type CellState = {
-  /** One bucket per UTC month of the samples' `timeMs`, keyed "YYYY-MM". */
-  months: Record<string, Bucket>;
-  /** Seen by one install while unpublished; only a monthly batch publishes it. */
-  held: boolean;
-};
+/**
+ * A private cell's state: one bucket per UTC month of the samples' `timeMs`, keyed "YYYY-MM".
+ * Install ids, exact times and private cell ids never leave it.
+ */
+export type CellState = Record<string, Bucket>;
 
 /**
  * One carrier's figures in a public cell. `best` and `median` are the strongest and the lower
@@ -258,12 +262,12 @@ function headline(cell: NonNullable<StoredSample["sims"][number]["cells"]>[numbe
 const monthOf = (ms: number) => new Date(ms).toISOString().slice(0, 7);
 
 /**
- * Adds trimmed samples to [cells], keyed by H3 cell and month. Changes [cells] in place. A SIM
- * reading counts only when its carrier and service state are known and the radio was on
- * (`serviceState` not `POWER_OFF`); a sample with no such reading adds nothing. Each such reading
- * adds one to the count of its service state, whether its cells are known or not. Only an
- * `IN_SERVICE` reading with known cells adds a strength and a network type: a modem in limited
- * service can report the cell it is camped on as registered.
+ * Adds trimmed samples to [cells], keyed by the [PRIVATE_RESOLUTION] H3 cell of their fix and by
+ * month. Changes [cells] in place. A SIM reading counts only when its carrier and service state
+ * are known and the radio was on (`serviceState` not `POWER_OFF`); a sample with no such reading
+ * adds nothing. Each such reading adds one to the count of its service state, whether its cells
+ * are known or not. Only an `IN_SERVICE` reading with known cells adds a strength and a network
+ * type: a modem in limited service can report the cell it is camped on as registered.
  */
 export function accumulate(cells: Record<string, CellState>, samples: StoredSample[]): void {
   for (const sample of samples) {
@@ -273,8 +277,7 @@ export function accumulate(cells: Record<string, CellState>, samples: StoredSamp
         : [],
     );
     if (sims.length === 0) continue;
-    const h3 = latLngToCell(sample.fix.lat, sample.fix.lon, CELL_RESOLUTION);
-    const months = (cells[h3] ??= { months: {}, held: false }).months;
+    const months = (cells[latLngToCell(sample.fix.lat, sample.fix.lon, PRIVATE_RESOLUTION)] ??= {});
     const cell = (months[monthOf(sample.timeMs)] ??= { installs: [], firstMs: sample.timeMs, lastMs: sample.timeMs, carriers: {} });
     if (!cell.installs.includes(sample.installId)) cell.installs.push(sample.installId);
     cell.firstMs = Math.min(cell.firstMs, sample.timeMs);
@@ -341,26 +344,29 @@ function toPublic(h3: string, cell: Bucket): PublicCell {
 
 /**
  * The daily publication at [nowMs]: the public cells from the previous publication, updated by
- * the rule of card 20261113a7do. A cell backed by two or more installs that was never held is
- * updated every day. Any other cell changes only in the monthly batch (UTC): a single-install cell
- * once its first sample is at least [LONE_CELL_AGE_MS] old, a held cell that has since gained a
- * second install at once. The batch runs in the first publication of a month later than
- * [lastBatch], the month ("YYYY-MM") of the previous batch or null if there was none, so a missed
- * run on the 1st doesn't delay it a month. Run later than the 1st, it publishes only what a run
- * at the end of the 1st would: a cell's age is measured at that time at the latest, and a batch
- * publishes such a cell from its samples before the batch's month only, so a lone visit shows as
- * no more than its month. Returns the new private state, with `held` set for cells that wait, the
- * new public cells and the month of the latest batch; no input is changed. Throws, publishing
- * nothing, when [lastBatch] doesn't fit the state: null while [previous] holds cells (every
- * publication runs a batch when there was none, so a second batch would run in its month), or a
- * month later than [nowMs]'s (no batch would run until after it).
+ * the rule of card 20261113a7do. A public cell's figures, installs and times are those of the
+ * private [cells] it is the parent of, each install counted once however many of them it is in.
+ * A cell backed by two or more installs that was never held is updated every day. Any other cell
+ * changes only in the monthly batch (UTC): a single-install cell once its first sample is at least
+ * [LONE_CELL_AGE_MS] old, a held cell that has since gained a second install at once. The batch
+ * runs in the first publication of a month later than [lastBatch], the month ("YYYY-MM") of the
+ * previous batch or null if there was none, so a missed run on the 1st doesn't delay it a month.
+ * Run later than the 1st, it publishes only what a run at the end of the 1st would: a cell's age
+ * is measured at that time at the latest, and a batch publishes such a cell from its samples
+ * before the batch's month only, so a lone visit shows as no more than its month. [held] lists the
+ * public cells held so far: seen by one install while unpublished, they wait for a batch. Returns
+ * the public cells held now, sorted, the new public cells and the month of the latest batch; no
+ * input is changed. Throws, publishing nothing, when [lastBatch] doesn't fit the state: null while
+ * [previous] holds cells (every publication runs a batch when there was none, so a second batch
+ * would run in its month), or a month later than [nowMs]'s (no batch would run until after it).
  */
 export function publish(
   cells: Record<string, CellState>,
+  held: string[],
   previous: Record<string, PublicCell>,
   lastBatch: string | null,
   nowMs: number,
-): { cells: Record<string, CellState>; published: Record<string, PublicCell>; lastBatch: string | null } {
+): { held: string[]; published: Record<string, PublicCell>; lastBatch: string | null } {
   const month = monthOf(nowMs);
   if (lastBatch === null && Object.keys(previous).length > 0) {
     throw new Error("publish: no previous batch, but public cells exist");
@@ -371,25 +377,28 @@ export function publish(
   const batch = lastBatch === null || month > lastBatch;
   const now = new Date(nowMs);
   const ageAtMs = Math.min(nowMs, Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 2) - 1);
-  const nextCells: Record<string, CellState> = {};
+  const wasHeld = new Set(held);
+  const parents: Record<string, [string, Bucket][]> = {};
+  for (const [h3, months] of Object.entries(cells)) (parents[cellToParent(h3, CELL_RESOLUTION)] ??= []).push(...Object.entries(months));
+  const nextHeld: string[] = [];
   const published: Record<string, PublicCell> = { ...previous };
-  for (const [h3, cell] of Object.entries(cells)) {
-    const all = merge(Object.values(cell.months));
+  for (const [h3, months] of Object.entries(parents)) {
+    const all = merge(months.map(([, b]) => b));
     if (!all) continue;
     const shared = all.installs.length >= 2;
-    let held = cell.held || (!shared && !previous[h3]);
-    if (shared && !held) {
+    let waits = wasHeld.has(h3) || (!shared && !previous[h3]);
+    if (shared && !waits) {
       published[h3] = toPublic(h3, all);
     } else if (batch) {
-      const before = merge(Object.entries(cell.months).filter(([m]) => m < month).map(([, b]) => b));
+      const before = merge(months.filter(([m]) => m < month).map(([, b]) => b));
       if (before && (shared || ageAtMs - before.firstMs >= LONE_CELL_AGE_MS)) {
         published[h3] = toPublic(h3, before);
-        held = false;
+        waits = false;
       }
     }
-    nextCells[h3] = { ...cell, held };
+    if (waits) nextHeld.push(h3);
   }
-  return { cells: nextCells, published, lastBatch: batch ? month : lastBatch };
+  return { held: nextHeld.sort(), published, lastBatch: batch ? month : lastBatch };
 }
 
 /** Public cells grouped by the H3 region tile that holds them, one file per tile. */
