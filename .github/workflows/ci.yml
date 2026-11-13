@@ -15,10 +15,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check added files
+      - name: Check added, copied and renamed files
         run: |
-          added=$(git diff --name-only --diff-filter=A "origin/${{ github.base_ref }}...HEAD")
-          bad=$(printf '%s\n' "$added" | grep -E '\.(jks|keystore|p12|aab|apk|log)$|play-account\.json$|(^|/)\.env' || true)
+          added=$(git diff --name-only --find-renames --find-copies --diff-filter=ACR "origin/${{ github.base_ref }}...HEAD")
+          bad=$(printf '%s\n' "$added" | grep -E '\.(jks|keystore|p12|b64|pem|p8|key|aab|apk|log)$|play-account\.json$|(^|/)\.env' || true)
           if [ -n "$bad" ]; then
             echo "These files must not be committed:"
             echo "$bad"
