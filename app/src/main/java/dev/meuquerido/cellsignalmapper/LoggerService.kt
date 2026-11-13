@@ -14,10 +14,15 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.telephony.CellInfo
+import android.telephony.CellSignalStrengthNr
+import android.telephony.PhoneStateListener
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
+import android.telephony.TelephonyCallback
+import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -30,6 +35,7 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 
 class LoggerService : Service() {
@@ -52,6 +58,19 @@ class LoggerService : Service() {
             latestLocation = result.lastLocation ?: return
         }
     }
+
+    /**
+     * The latest `TelephonyDisplayInfo.getOverrideNetworkType()` per subscription id, written by
+     * the listeners in [displayInfoListeners].
+     */
+    private val overrideNetworkTypes = ConcurrentHashMap<Int, Int>()
+
+    /**
+     * What unregisters each subscription's display info listener, by subscription id. Guarded by
+     * itself, like [destroyed], so no listener is registered after [onDestroy] unregistered them.
+     */
+    private val displayInfoListeners = HashMap<Int, () -> Unit>()
+    private var destroyed = false
 
     /** The last sample logged, which the next tick's sample is compared with. */
     private var lastSample: Sample? = null
@@ -201,6 +220,7 @@ class LoggerService : Service() {
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     private suspend fun readSim(subscription: SubscriptionInfo): SimReading {
         val manager = telephonyManager.createForSubscriptionId(subscription.subscriptionId)
+        listenForDisplayInfo(subscription.subscriptionId, manager)
         val serviceState = try {
             manager.serviceState
         } catch (e: SecurityException) {
@@ -226,6 +246,9 @@ class LoggerService : Service() {
                 callback(null)
             }
         }
+        val nrStrength = manager.signalStrength
+            ?.getCellSignalStrengths(CellSignalStrengthNr::class.java)?.firstOrNull()
+        val nrLeg = nrStrength?.let { nrSignalStrengthLeg(it.ssRsrp, it.ssRsrq, it.ssSinr) }
         return simReading(
             slotIndex = subscription.simSlotIndex,
             simOperator = manager.simOperator,
@@ -236,8 +259,59 @@ class LoggerService : Service() {
                     contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0,
                 ) != 0,
             ),
-            cells = cells?.mapNotNull { it.toCellReading() },
+            overrideNetworkType = overrideNetworkTypes[subscription.subscriptionId],
+            cells = cellsWithNrLeg(cells?.mapNotNull { it.toCellReading() }, nrLeg),
         )
+    }
+
+    /**
+     * Keeps [overrideNetworkTypes] up to date for [subscriptionId] from now until [onDestroy];
+     * does nothing when it already is.
+     */
+    private fun listenForDisplayInfo(subscriptionId: Int, manager: TelephonyManager) {
+        synchronized(displayInfoListeners) {
+            if (destroyed || subscriptionId in displayInfoListeners) return
+            val record = { info: TelephonyDisplayInfo ->
+                overrideNetworkTypes[subscriptionId] = info.overrideNetworkType
+            }
+            displayInfoListeners[subscriptionId] =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    listenForDisplayInfoFromS(manager, record)
+                } else {
+                    listenForDisplayInfoBelowS(manager, record)
+                }
+        }
+    }
+
+    /** Registers a display info callback on [manager]; returns what unregisters it. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun listenForDisplayInfoFromS(
+        manager: TelephonyManager,
+        record: (TelephonyDisplayInfo) -> Unit,
+    ): () -> Unit {
+        val callback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
+            override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) =
+                record(telephonyDisplayInfo)
+        }
+        manager.registerTelephonyCallback(Executor(Runnable::run), callback)
+        return { manager.unregisterTelephonyCallback(callback) }
+    }
+
+    /**
+     * Registers a display info listener on [manager], which needs `READ_PHONE_STATE` on API 30;
+     * returns what unregisters it.
+     */
+    @Suppress("DEPRECATION") // TelephonyCallback replaces PhoneStateListener from API 31.
+    private fun listenForDisplayInfoBelowS(
+        manager: TelephonyManager,
+        record: (TelephonyDisplayInfo) -> Unit,
+    ): () -> Unit {
+        val listener = object : PhoneStateListener(Executor(Runnable::run)) {
+            override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) =
+                record(telephonyDisplayInfo)
+        }
+        manager.listen(listener, PhoneStateListener.LISTEN_DISPLAY_INFO_CHANGED)
+        return { manager.listen(listener, PhoneStateListener.LISTEN_NONE) }
     }
 
     private fun Location.toFix(): Fix = Fix(
@@ -273,6 +347,11 @@ class LoggerService : Service() {
             locationClient.removeLocationUpdates(locationCallback)
         }
         coroutineScope.cancel()
+        synchronized(displayInfoListeners) {
+            destroyed = true
+            displayInfoListeners.values.forEach { it() }
+            displayInfoListeners.clear()
+        }
         LoggerState.serviceStopped()
         super.onDestroy()
     }

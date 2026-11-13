@@ -24,7 +24,7 @@ class TickResultTest {
 
     private fun sim(serviceState: ServiceStatus?, cells: List<CellReading>?) = simReading(
         slotIndex = 0, simOperator = "00101", operatorNumeric = null, operatorAlphaLong = null,
-        serviceState = serviceState, cells = cells,
+        serviceState = serviceState, overrideNetworkType = null, cells = cells,
     )
 
     private fun sampleOf(vararg sims: SimReading) = sample(

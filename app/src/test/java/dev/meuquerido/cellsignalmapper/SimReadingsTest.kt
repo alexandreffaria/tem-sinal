@@ -49,12 +49,12 @@ class SimReadingsTest {
                 simReading(
                     slotIndex = 0, simOperator = "00101", operatorNumeric = "00101",
                     operatorAlphaLong = "Network One", serviceState = ServiceStatus.IN_SERVICE,
-                    cells = answered,
+                    overrideNetworkType = null, cells = answered,
                 ),
                 simReading(
                     slotIndex = 1, simOperator = "00102", operatorNumeric = null,
                     operatorAlphaLong = null, serviceState = ServiceStatus.OUT_OF_SERVICE,
-                    cells = silent,
+                    overrideNetworkType = null, cells = silent,
                 ),
             ),
         )
@@ -78,7 +78,7 @@ class SimReadingsTest {
             simReading(
                 slotIndex = 0, simOperator = "00101", operatorNumeric = "00101",
                 operatorAlphaLong = null, serviceState = ServiceStatus.IN_SERVICE,
-                cells = emptyList(),
+                overrideNetworkType = null, cells = emptyList(),
             ),
         )
 

@@ -429,3 +429,19 @@ emergency-only.
 
 AOSP: `CellSignalStrengthWcdma.getDbm()` in `frameworks/base/telephony/java/android/telephony/CellSignalStrengthWcdma.java`
 (android11-release onwards) is `if (mRscp != CellInfo.UNAVAILABLE) return mRscp; return mRssi;`.
+
+AOSP, for **5G NSA**, in `frameworks/base`:
+
+- `telephony/java/android/telephony/TelephonyDisplayInfo.java` (`main`):
+  `OVERRIDE_NETWORK_TYPE_NONE` 0, `LTE_CA` 1, `LTE_ADVANCED_PRO` 2, `NR_NSA` 3, `NR_NSA_MMWAVE` 4
+  (`@Deprecated`, "Use OVERRIDE_NETWORK_TYPE_NR_ADVANCED instead"), `NR_ADVANCED` 5.
+- `core/java/android/telephony/PhoneStateListener.java` (`android11-release`):
+  `LISTEN_DISPLAY_INFO_CHANGED` "Requires Permission: READ_PHONE_STATE", and
+  `onDisplayInfoChanged` is `@RequiresPermission(READ_PHONE_STATE)`.
+- `telephony/java/android/telephony/SignalStrength.java` (`main`):
+  `getCellSignalStrengths(Class)` returns at most one `CellSignalStrengthNr`, and only when it
+  `isValid()`.
+- `telephony/java/android/telephony/CellSignalStrengthNr.java` (`main`): `isValid()` is
+  `!equals(sInvalid)`, so an NR strength with only CSI values is valid, which is why the NR leg
+  needs an SS value; the constructor keeps SS-RSRP in -156..-31, SS-RSRQ in -43..20 and SS-SINR in
+  -23..40, and makes anything else `UNAVAILABLE`.
