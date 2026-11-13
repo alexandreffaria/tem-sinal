@@ -17,9 +17,11 @@ LOG (STOP while logging) is the only button and also means "share". Samples are 
 automatically when logging stops and when the app starts, retrying until they go, and the "Send
 my data" button is removed. The pending count stays on the main screen while something is still
 to be sent, and a failed send keeps the samples on the phone. "What is shared?" says that pressing
-LOG shares what is recorded. Nobody can hold back a recorded session, for example one started at
-home by mistake; only the server's trim protects it. Nobody can record without sharing, as today.
-Issues #181 (upload on stop and background retry), #182 (the "What is shared?" text), #183 (the
+LOG shares what is recorded. The new work, in the option's words: "an upload when logging stops
+and a background retry (for example WorkManager), with sign-in outside the main screen; today only
+starting the app retries; it can use today's uploader, and later the upload function of issue 87."
+Nobody can hold back a recorded session, for example one started at home by mistake; only the
+server's trim protects it. Nobody can record without sharing, as today. Issues #181 (upload on stop and background retry), #182 (the "What is shared?" text), #183 (the
 button).
 
 Card: `20261113og4j` (choice: one-button).
