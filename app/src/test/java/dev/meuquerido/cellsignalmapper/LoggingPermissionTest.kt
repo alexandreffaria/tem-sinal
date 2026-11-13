@@ -17,13 +17,13 @@ class LoggingPermissionTest {
         val message =
             loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = true, phoneStateGranted = true)
 
-        assertEquals(R.string.needs_precise_location, message)
+        assertEquals(UiText(R.string.needs_precise_location), message)
     }
 
     @Test
     fun noLocationBlocksLogging() {
         assertEquals(
-            R.string.needs_location,
+            UiText(R.string.needs_location),
             loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = false, phoneStateGranted = true),
         )
     }
@@ -33,7 +33,7 @@ class LoggingPermissionTest {
         val message =
             loggingDeniedMessage(fineLocationGranted = true, coarseLocationGranted = true, phoneStateGranted = false)
 
-        assertEquals(R.string.needs_phone, message)
+        assertEquals(UiText(R.string.needs_phone), message)
     }
 
     @Test
@@ -41,6 +41,6 @@ class LoggingPermissionTest {
         val message =
             loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = false, phoneStateGranted = false)
 
-        assertEquals(R.string.needs_location, message)
+        assertEquals(UiText(R.string.needs_location), message)
     }
 }
