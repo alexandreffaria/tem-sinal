@@ -77,7 +77,8 @@ A session that starts work:
     raw samples; aggregates only. Never read or print key files, keystores or passwords.
 11. **Branches.** Never commit to `main`. Branch from an up-to-date `main` as
     `i-<issue number>-<short-name>`. The one exception is president's Sync, which commits
-    `decisions/` to `main` by itself.
+    `decisions/` to `main` by itself. Never rename a branch that has an open pull request:
+    GitHub closes the pull request when its head branch is renamed.
 12. **Never merge your own pull request.** A reviewer session merges it (see "Merging").
 13. **Never commit card files.** Files under `decisions/` belong to the owner and the hub; stage
     your files by path, never with `git add -A`.
