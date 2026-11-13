@@ -24,14 +24,17 @@ data class LoggerUiState(
 
     fun serviceStopped(): LoggerUiState = copy(isLogging = false, location = "", signalStrength = "")
 
-    /** Ignores a sample that arrives after the service stopped. */
-    fun withSample(lat: Double?, lon: Double?, signalDbm: Int, pingResult: PingResult): LoggerUiState =
+    /**
+     * Shows a tick's position and its registered cell's headline strength, null when unknown.
+     * Ignores a tick that arrives after the service stopped.
+     */
+    fun withSample(lat: Double?, lon: Double?, signalDbm: Int?, pingResult: PingResult): LoggerUiState =
         if (!isLogging) {
             this
         } else {
             copy(
                 location = "Lat: $lat, Lon: $lon",
-                signalStrength = "Signal Strength: $signalDbm dBm",
+                signalStrength = "Signal Strength: ${signalDbm?.let { "$it dBm" } ?: "unknown"}",
                 pingResult = pingResult,
                 sampleCount = sampleCount + 1,
             )
@@ -47,7 +50,7 @@ object LoggerState {
 
     fun serviceStopped() = mutableState.update { it.serviceStopped() }
 
-    fun sample(lat: Double?, lon: Double?, signalDbm: Int, pingResult: PingResult) =
+    fun sample(lat: Double?, lon: Double?, signalDbm: Int?, pingResult: PingResult) =
         mutableState.update { it.withSample(lat, lon, signalDbm, pingResult) }
 
     fun pendingCount(count: Int) = mutableState.update { it.copy(pendingCount = count) }
