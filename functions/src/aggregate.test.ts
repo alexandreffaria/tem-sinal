@@ -192,8 +192,8 @@ test("a two-install cell is public the next day with per-carrier aggregates only
     [h3At(PLACE.lat)]: {
       h3: h3At(PLACE.lat),
       carriers: {
-        "72406": { best: -90, median: -98, tech: "LTE", n: 3, emergencyOnlySeen: false },
-        "72402": { best: null, median: null, tech: null, n: 0, emergencyOnlySeen: true },
+        "72406": { best: -90, median: -98, tech: "LTE", n: 3, emergencyN: 0 },
+        "72402": { best: null, median: null, tech: null, n: 0, emergencyN: 2 },
       },
       lastSeen: "2026-01",
     },
@@ -298,7 +298,7 @@ test("a reading with the radio off or the service state unknown says nothing abo
   const [published = {}] = publishOn(withOff, [JAN_10 + DAY]);
   const [expected = {}] = publishOn(without, [JAN_10 + DAY]);
   assert.deepEqual(published[h3At(north)]?.carriers["72406"], expected[h3At(north)]?.carriers["72406"]);
-  assert.deepEqual(published[h3At(north)]?.carriers["72402"], { best: null, median: null, tech: null, n: 1, emergencyOnlySeen: true });
+  assert.deepEqual(published[h3At(north)]?.carriers["72402"], { best: null, median: null, tech: null, n: 1, emergencyN: 2 });
 });
 
 test("a reading whose cells are unknown is not counted as no signal", () => {
@@ -312,6 +312,28 @@ test("a reading whose cells are unknown is not counted as no signal", () => {
     })));
   const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
   assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
-    "72402": { best: -85, median: -85, tech: "GSM", n: 2, emergencyOnlySeen: false },
+    "72402": { best: -85, median: -85, tech: "GSM", n: 2, emergencyN: 0 },
+  });
+});
+
+test("a carrier seen only in emergency-only service with its cells unknown publishes its emergency count", () => {
+  const cells: Record<string, CellState> = {};
+  const emergency = { simPlmn: "72402", serviceState: "EMERGENCY_ONLY", cells: null };
+  accumulate(cells, [ALICE, BRUNO, BRUNO].map((id, i) => sample(id, PLACE.lat, JAN_10 + i * 60_000, { sims: [emergency] })));
+  const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
+  assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
+    "72402": { best: null, median: null, tech: null, n: 0, emergencyN: 3 },
+  });
+});
+
+test("one emergency-only reading among in-service ones is counted once", () => {
+  const cells: Record<string, CellState> = {};
+  const inService = { simPlmn: "72406", serviceState: "IN_SERVICE", cells: [{ source: "CELL_INFO", rat: "LTE", registered: true, rsrp: -100 }] };
+  const emergency = { simPlmn: "72406", serviceState: "EMERGENCY_ONLY", cells: [{ source: "CELL_INFO", rat: "LTE", registered: false, rsrp: -120 }] };
+  accumulate(cells, [ALICE, BRUNO, ALICE, BRUNO, ALICE].map((id, i) =>
+    sample(id, PLACE.lat, JAN_10 + i * 60_000, { sims: [i === 2 ? emergency : inService] })));
+  const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
+  assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
+    "72406": { best: -100, median: -100, tech: "LTE", n: 5, emergencyN: 1 },
   });
 });

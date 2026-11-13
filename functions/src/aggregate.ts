@@ -46,11 +46,15 @@ export type StoredSample = {
   }[];
 };
 
-/** One carrier's running statistics in a cell. Keys of `strengths` and `techs` are dBm and RAT names. */
+/**
+ * One carrier's running statistics in a cell. Keys of `strengths` and `techs` are dBm and RAT
+ * names. `n` counts the readings whose cells are known; `emergencyN` counts the `EMERGENCY_ONLY`
+ * readings, whether their cells are known or not.
+ */
 export type CarrierStats = {
   strengths: Record<string, number>;
   techs: Record<string, number>;
-  emergencyOnlySeen: boolean;
+  emergencyN: number;
   n: number;
 };
 
@@ -70,7 +74,18 @@ export type CellState = {
   held: boolean;
 };
 
-export type PublicCarrier = { best: number | null; median: number | null; tech: string | null; n: number; emergencyOnlySeen: boolean };
+/**
+ * One carrier's figures in a public cell. `best` and `median` are the strongest and the lower
+ * median headline strength in dBm of the readings registered to a cell, and `tech` their most
+ * common network type; all three are null when no reading had a strength. `n` is the number of
+ * readings whose cells are known, and `emergencyN` the number of readings in emergency-only
+ * service, including those whose cells are unknown, so it can exceed `n`.
+ *
+ * A reader classifies the carrier in the cell, in this order: signal when `best` is not null;
+ * emergency calls only when `emergencyN` is above zero, whatever `n` is; no signal when `n` is
+ * above zero.
+ */
+export type PublicCarrier = { best: number | null; median: number | null; tech: string | null; n: number; emergencyN: number };
 
 /** A public cell: aggregates and the month last seen only. */
 export type PublicCell = { h3: string; carriers: Record<string, PublicCarrier>; lastSeen: string };
@@ -173,8 +188,8 @@ const monthOf = (ms: number) => new Date(ms).toISOString().slice(0, 7);
  * Adds trimmed samples to [cells], keyed by H3 cell and month. Changes [cells] in place. A SIM
  * reading counts only when its carrier and service state are known, the radio was on
  * (`serviceState` not `POWER_OFF`), and its cells are known or it is `EMERGENCY_ONLY`; a sample
- * with no such reading adds nothing. Such a reading with `cells` null only sets
- * `emergencyOnlySeen`, so `n` counts the readings whose cells are known.
+ * with no such reading adds nothing. Such a reading with `cells` null counts only towards
+ * `emergencyN`, so `n` counts the readings whose cells are known.
  */
 export function accumulate(cells: Record<string, CellState>, samples: StoredSample[]): void {
   for (const sample of samples) {
@@ -191,8 +206,8 @@ export function accumulate(cells: Record<string, CellState>, samples: StoredSamp
     cell.firstMs = Math.min(cell.firstMs, sample.timeMs);
     cell.lastMs = Math.max(cell.lastMs, sample.timeMs);
     for (const sim of sims) {
-      const stats = (cell.carriers[sim.plmn] ??= { strengths: {}, techs: {}, emergencyOnlySeen: false, n: 0 });
-      if (sim.serviceState === "EMERGENCY_ONLY") stats.emergencyOnlySeen = true;
+      const stats = (cell.carriers[sim.plmn] ??= { strengths: {}, techs: {}, emergencyN: 0, n: 0 });
+      if (sim.serviceState === "EMERGENCY_ONLY") stats.emergencyN++;
       if (!sim.cells) continue;
       stats.n++;
       const registered = sim.cells.find((c) => c.source === "CELL_INFO" && c.registered);
@@ -213,10 +228,10 @@ function merge(buckets: Bucket[]): Bucket | null {
     merged.firstMs = Math.min(merged.firstMs, b.firstMs);
     merged.lastMs = Math.max(merged.lastMs, b.lastMs);
     for (const [plmn, s] of Object.entries(b.carriers)) {
-      const m = (merged.carriers[plmn] ??= { strengths: {}, techs: {}, emergencyOnlySeen: false, n: 0 });
+      const m = (merged.carriers[plmn] ??= { strengths: {}, techs: {}, emergencyN: 0, n: 0 });
       for (const [dbm, count] of Object.entries(s.strengths)) m.strengths[dbm] = (m.strengths[dbm] ?? 0) + count;
       for (const [rat, count] of Object.entries(s.techs)) m.techs[rat] = (m.techs[rat] ?? 0) + count;
-      m.emergencyOnlySeen ||= s.emergencyOnlySeen;
+      m.emergencyN += s.emergencyN;
       m.n += s.n;
     }
   }
@@ -243,7 +258,7 @@ function commonTech(techs: Record<string, number>): string | null {
 function toPublic(h3: string, cell: Bucket): PublicCell {
   const carriers: Record<string, PublicCarrier> = {};
   for (const [plmn, s] of Object.entries(cell.carriers)) {
-    carriers[plmn] = { ...bestAndMedian(s.strengths), tech: commonTech(s.techs), n: s.n, emergencyOnlySeen: s.emergencyOnlySeen };
+    carriers[plmn] = { ...bestAndMedian(s.strengths), tech: commonTech(s.techs), n: s.n, emergencyN: s.emergencyN };
   }
   return { h3, carriers, lastSeen: monthOf(cell.lastMs) };
 }
