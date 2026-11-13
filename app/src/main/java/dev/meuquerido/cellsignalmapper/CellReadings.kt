@@ -68,9 +68,13 @@ fun cellConnection(status: Int): CellConnection? = when (status) {
     else -> null
 }
 
-/** MCC + MNC, or null when either is null or empty. */
+/** [value] when it is a PLMN (MCC + MNC) of 5 or 6 ASCII digits, else null. */
+fun plmnOrNull(value: String?): String? =
+    value?.takeIf { it.length in 5..6 && it.all { c -> c in '0'..'9' } }
+
+/** MCC + MNC by [plmnOrNull], or null when either is null. */
 fun plmnOf(mcc: String?, mnc: String?): String? =
-    if (mcc.isNullOrEmpty() || mnc.isNullOrEmpty()) null else mcc + mnc
+    if (mcc == null || mnc == null) null else plmnOrNull(mcc + mnc)
 
 /**
  * A [CellSource.CELL_INFO] reading from the raw values Android reports for a [rat] cell. Every
@@ -128,7 +132,7 @@ fun CellReading.headlineDbm(): Int? = when (rat) {
  * A [SimReading] from raw values: [slotIndex] is null or negative (`INVALID_SIM_SLOT_INDEX`) when
  * unknown, [simOperator] is empty while the SIM isn't ready, and [operatorNumeric] and
  * [operatorAlphaLong] are the subscription's `ServiceState` values, null or empty when it isn't
- * registered.
+ * registered. A PLMN that [plmnOrNull] rejects is null.
  */
 fun simReading(
     slotIndex: Int?,
@@ -140,8 +144,8 @@ fun simReading(
 ): SimReading =
     SimReading(
         slot = slotIndex?.takeIf { it >= 0 },
-        simPlmn = simOperator?.ifEmpty { null },
-        registeredPlmn = operatorNumeric?.ifEmpty { null },
+        simPlmn = plmnOrNull(simOperator),
+        registeredPlmn = plmnOrNull(operatorNumeric),
         operatorName = operatorAlphaLong?.ifEmpty { null },
         serviceState = serviceState,
         overrideNetworkType = null,
