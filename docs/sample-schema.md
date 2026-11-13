@@ -199,9 +199,9 @@ coverage.
 
 The aggregation counts a SIM's reading towards coverage only when it says something about it. A
 reading with `serviceState` `POWER_OFF` (the radio wasn't listening) or `null` (unknown) is left
-out of every coverage figure: best and median strength, technology, emergency-only seen, and the
-sample count `n`; the sample's other SIMs still count. A reading with `cells` null counts only
-towards emergency-only seen, never towards `n` or no signal. A sample with no reading that counts
+out of every coverage figure: best and median strength, technology, the emergency-only count
+`emergencyN`, and the sample count `n`; the sample's other SIMs still count. A reading with `cells`
+null counts only towards `emergencyN`, never towards `n` or no signal. A sample with no reading that counts
 adds nothing to its cell. The app and the upload keep every sample as recorded.
 
 AOSP sources, in `android.googlesource.com/platform`:
@@ -308,8 +308,8 @@ The manifest already declares all of them. The logger checks them before it star
 ## Privacy
 
 Card `20261113a7do` fixes what the public map shows: H3 resolution 11 cells with, per carrier, the
-best and median strength, the network type, whether emergency-only service was seen, the sample
-count and the month last seen. Raw samples stay private; session starts and ends are dropped
+best and median strength, the network type, the sample count, how many of the readings were
+emergency-only, and the month last seen (see **Public cells**). Raw samples stay private; session starts and ends are dropped
 before aggregation; single-install cells are published in monthly batches.
 
 **Personal data.** A sample as a whole is personal data under LGPD art. 5 I: an exact position and
@@ -343,6 +343,28 @@ until then it still shows in queries. `expireAt` minus 90 days is the receive ti
 aggregation reads new samples by `expireAt` (it keeps an ascending index for that) and counts each
 one within hours of the end of its session, long before it expires. The aggregates are kept with
 no expiry; they are the public map.
+
+## Public cells
+
+A public cell is `{"h3": "8b…", "carriers": {"72406": {...}}, "lastSeen": "2026-01"}`, keyed by
+the SIM's PLMN, and published under the install-count rules of card `20261113a7do`. Per carrier:
+
+| Field | Meaning |
+|---|---|
+| `best` | the strongest headline strength in dBm (RSRP for LTE and NR, RSCP for WCDMA, RSSI for GSM) of the readings registered to a cell; null when none had one |
+| `median` | the lower median of the same strengths; null when `best` is |
+| `tech` | the network type registered most often, a tie going to the newer one; null when no reading was registered |
+| `n` | the readings whose cells are known |
+| `emergencyN` | the readings in `EMERGENCY_ONLY` service, including those whose cells are unknown, so it can exceed `n` |
+
+A reader classifies a carrier in a cell, in this order:
+
+1. **Signal** when `best` is not null.
+2. **Emergency calls only** when `emergencyN` is above zero, whatever `n` is. A carrier with `n`
+   0 and `emergencyN` above zero is emergency calls only, never no data.
+3. **No signal** when `n` is above zero.
+
+A carrier missing from `carriers` has no data in that cell.
 
 ## Example
 
