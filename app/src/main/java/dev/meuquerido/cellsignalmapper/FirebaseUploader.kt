@@ -67,8 +67,8 @@ object FirebaseUploader {
     private val uploadLock = Mutex()
 
     /**
-     * Uploads every logged sample off the main thread, one upload at a time, and calls
-     * [onComplete] on the main thread. The pending file is deleted only after every batch was
+     * Uploads every logged sample off the main thread, one upload at a time, publishes the pending
+     * count, and calls [onComplete] on the main thread. The pending file is deleted only after every batch was
      * committed; a failed or timed-out upload keeps it for the next attempt, and samples logged
      * meanwhile stay in the log. Re-uploading a batch is harmless because each document id is the
      * sample's id, so a timed-out write that Firestore still delivers later only rewrites the same
@@ -78,6 +78,7 @@ object FirebaseUploader {
         val appContext = context.applicationContext
         scope.launch {
             val result = uploadLock.withLock { upload(appContext) }
+            SignalLogger.publishPendingCount(appContext)
             withContext(Dispatchers.Main) { onComplete(result) }
         }
     }
@@ -114,10 +115,4 @@ object FirebaseUploader {
             return false
         }
     }
-
-    /** Samples not uploaded yet: the log plus a pending file left by a failed upload. */
-    fun getPendingLogCount(context: Context): Int =
-        listOf(SignalLogger.getLogFile(context), SignalLogger.getPendingFile(context))
-            .filter { it.exists() }
-            .sumOf { file -> file.readLines().count { it.isNotBlank() } }
 }

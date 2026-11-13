@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,14 +31,14 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 
 import android.content.Intent
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var telephonyManager: TelephonyManager
-
-    private var pendingPoints by mutableIntStateOf(0)
 
     /** Shown instead of starting logging when a permission it needs is denied; null otherwise. */
     private var permissionMessage by mutableStateOf<String?>(null)
@@ -108,23 +107,17 @@ class MainActivity : ComponentActivity() {
                 Log.d("Auth", "Signed in anonymously")
                 FirebaseUploader.uploadLogFile(this) {
                     Log.d("MainActivity", "Retry upload on start: $it")
-                    pendingPoints = FirebaseUploader.getPendingLogCount(this)
                 }
             }
             .addOnFailureListener { Log.e("Auth", "Failed to sign in anonymously", it) }
 
 
-        pendingPoints = FirebaseUploader.getPendingLogCount(this)
+        lifecycleScope.launch(Dispatchers.IO) { SignalLogger.publishPendingCount(applicationContext) }
 
 
         setContent {
             CellSignalMapperTheme {
                 val loggerState by LoggerState.state.collectAsState()
-                LaunchedEffect(loggerState.sampleCount) {
-                    if (loggerState.sampleCount > 0) {
-                        pendingPoints = FirebaseUploader.getPendingLogCount(this@MainActivity)
-                    }
-                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(
                         modifier = Modifier
@@ -150,12 +143,11 @@ class MainActivity : ComponentActivity() {
                             onUpload = {
                                 FirebaseUploader.uploadLogFile(this@MainActivity) {
                                     Log.d("MainActivity", "Upload complete: $it")
-                                    pendingPoints = FirebaseUploader.getPendingLogCount(this@MainActivity)
                                 }
                             },
                             location = loggerState.location,
                             signalStrength = loggerState.signalStrength,
-                            pendingPoints = pendingPoints
+                            pendingPoints = loggerState.pendingCount
                         )
                     }
                 }
