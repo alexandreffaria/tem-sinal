@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { cellToParent, greatCircleDistance, latLngToCell } from "h3-js";
 import {
   type CellState, type PublicCell, type StoredSample,
-  CELL_RESOLUTION, TILE_RESOLUTION, TRIM_M, accumulate, publish, tiles, trimLengths, trimSession,
+  ANCHOR_FIXES, CELL_RESOLUTION, TILE_RESOLUTION, TRIM_M, accumulate, publish, tiles, trimLengths, trimSession,
 } from "./aggregate.js";
 
 // Made-up installs, sessions and places; 0.001 degrees of latitude is about 111 m.
@@ -17,7 +17,7 @@ const DAY = 86_400_000;
 function sample(installId: string, lat: number, timeMs: number, options: Partial<StoredSample> = {}): StoredSample {
   return {
     installId, sessionId: SESSION, timeMs, elapsedRealtimeMs: timeMs - JAN_10 + 1_000_000,
-    fix: { lat, lon: PLACE.lon, mock: false },
+    fix: { lat, lon: PLACE.lon, accuracyM: 5, mock: false },
     sims: [
       {
         simPlmn: "72406", serviceState: "IN_SERVICE",
@@ -43,38 +43,73 @@ function publishOn(cells: Record<string, CellState>, days: number[]): Record<str
   });
 }
 
-test("a session loses the samples within its trim lengths of either end", () => {
-  const walk = Array.from({ length: 41 }, (_, i) => sample(ALICE, PLACE.lat + i * 0.0009, JAN_10 + i * 60_000));
-  const kept = trimSession(walk.toReversed(), 550, 350);
-  assert.deepEqual(kept, walk.slice(6, 37));
+/** A walk north from [PLACE] with a fix every 5 s, about 10 m apart. */
+const walk = (length: number) =>
+  Array.from({ length }, (_, i) => sample(ALICE, PLACE.lat + i * 0.00009, JAN_10 + i * 5_000));
+
+/** [length] fixes 30 s apart from [from] 30 s steps on, still within about 10 m of [lat]. */
+const still = (lat: number, from: number, length = 360) =>
+  Array.from({ length }, (_, i) => sample(ALICE, lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + (from + i) * 30_000));
+
+/** Asserts that [kept] is not empty and that none of it lies within [trimM] of the latitudes [places]. */
+function assertClear(kept: StoredSample[], places: number[], trimM: number, message?: string) {
+  assert.ok(kept.length > 0, message);
+  for (const { fix } of kept) {
+    for (const lat of places) assert.ok(greatCircleDistance([lat, PLACE.lon], [fix.lat, fix.lon], "m") > trimM, message);
+  }
+}
+
+test("a session loses the samples within its trim lengths of either end and of the fixes there", () => {
+  const fixes = walk(401);
+  const kept = trimSession(fixes.toReversed(), 555, 345);
+  // The first and last ANCHOR_FIXES fixes (about 110 m) widen each straight-line cut by their spread.
+  assert.equal(ANCHOR_FIXES, 12);
+  assert.deepEqual(kept, fixes.slice(67, 355));
 
   const cells: Record<string, CellState> = {};
   accumulate(cells, kept);
-  for (const end of [...walk.slice(0, 5), ...walk.slice(-3)]) assert.equal(cells[h3At(end.fix.lat)], undefined);
+  for (const end of [...fixes.slice(0, 50), ...fixes.slice(-30)]) assert.equal(cells[h3At(end.fix.lat)], undefined);
 });
 
 test("a phone left still at either end loses those samples despite GPS jitter", () => {
   // Three hours still at each end, a fix every 30 s within about 10 m, and a 3 km walk between.
-  const still = (lat: number, from: number) =>
-    Array.from({ length: 360 }, (_, i) => sample(ALICE, lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + (from + i) * 30_000));
   const end = PLACE.lat + 0.027;
-  const walk = Array.from({ length: 30 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.0009, JAN_10 + (360 + i) * 30_000));
-  const session = [...still(PLACE.lat, 0), ...walk, ...still(end, 390)];
-  const kept = trimSession(session, TRIM_M.max, TRIM_M.max);
-  assert.ok(kept.length > 0);
-  for (const { fix } of kept) {
-    for (const lat of [PLACE.lat, end]) assert.ok(greatCircleDistance([lat, PLACE.lon], [fix.lat, fix.lon], "m") > TRIM_M.max);
+  const between = Array.from({ length: 30 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.0009, JAN_10 + (360 + i) * 30_000));
+  assertClear(trimSession([...still(PLACE.lat, 0), ...between, ...still(end, 390)], TRIM_M.max, TRIM_M.max), [PLACE.lat, end], TRIM_M.max);
+});
+
+test("coarse fixes at either end don't stand in for the place the phone sits", () => {
+  // Three hours still at each end and a 3 km walk between, as above; 0.011 degrees is about 1.2 km.
+  const end = PLACE.lat + 0.027;
+  const between = Array.from({ length: 30 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.0009, JAN_10 + (361 + i) * 30_000));
+  const coarse = (lat: number, at: number, accuracyM: number | null) => {
+    const s = sample(ALICE, lat, JAN_10 + at * 30_000);
+    return { ...s, fix: { ...s.fix, accuracyM } };
+  };
+  // Each way to go wrong, given the latitude of the coarse fixes and the 30 s step of the first.
+  const ways = {
+    "one coarse fix": (lat: number, at: number) => [coarse(lat, at, 1500)],
+    "one fix without an accuracy": (lat: number, at: number) => [coarse(lat, at, null)],
+    "ten minutes of coarse fixes": (lat: number, at: number) =>
+      Array.from({ length: 20 }, (_, i) => coarse(lat + 0.004 * Math.sin(i), at + i, 1500)),
+    "wrong fixes that claim to be accurate": (lat: number, at: number) =>
+      Array.from({ length: ANCHOR_FIXES - 1 }, (_, i) => coarse(lat, at + i / 6, 20)),
+  };
+  for (const [name, wrong] of Object.entries(ways)) {
+    // Coarse fixes 1.2 km beyond each end, ten minutes without a fix, then three hours still there.
+    const session = [...wrong(PLACE.lat - 0.011, -40), ...still(PLACE.lat, 0), ...between, ...still(end, 391), ...wrong(end + 0.011, 771)];
+    for (const trimM of [TRIM_M.min, TRIM_M.max]) assertClear(trimSession(session, trimM, trimM), [PLACE.lat, end], trimM, name);
   }
 });
 
 test("mock fixes are dropped and a session shorter than both trims keeps nothing", () => {
-  const walk = Array.from({ length: 21 }, (_, i) => sample(ALICE, PLACE.lat + i * 0.0009, JAN_10 + i * 60_000));
-  const mocked = { ...walk[10], fix: { lat: PLACE.lat + 0.009, lon: PLACE.lon, mock: true } } as StoredSample;
-  walk[10] = mocked;
-  const kept = trimSession(walk, 350, 350);
+  const fixes = walk(211);
+  const mocked = { ...fixes[105], fix: { lat: PLACE.lat + 0.009, lon: PLACE.lon, accuracyM: 5, mock: true } } as StoredSample;
+  fixes[105] = mocked;
+  const kept = trimSession(fixes, 355, 355);
   assert.equal(kept.includes(mocked), false);
-  assert.equal(kept.length, 12);
-  assert.deepEqual(trimSession(walk, 1100, 1100), []);
+  assert.deepEqual(kept, [...fixes.slice(47, 105), ...fixes.slice(106, 164)]);
+  assert.deepEqual(trimSession(fixes, 1100, 1100), []);
 });
 
 test("trim lengths are drawn in the configured range", () => {

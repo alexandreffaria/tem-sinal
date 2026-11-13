@@ -13,13 +13,16 @@ export const TRIM_M = { min: 300, max: 800 } as const;
 /** How old a single-install cell's first sample must be before a monthly batch publishes it. */
 export const LONE_CELL_AGE_MS = 30 * 86_400_000;
 
+/** How many fixes accurate to within the drawn trim anchor each end's straight-line cut: a minute at the app's 5 s interval. */
+export const ANCHOR_FIXES = 12;
+
 /** The fields of a stored sample (docs/sample-schema.md) that aggregation reads. */
 export type StoredSample = {
   installId: string;
   sessionId: string;
   timeMs: number;
   elapsedRealtimeMs: number;
-  fix: { lat: number; lon: number; mock: boolean };
+  fix: { lat: number; lon: number; accuracyM?: number | null; mock: boolean };
   sims: {
     simPlmn?: string | null;
     serviceState?: string | null;
@@ -63,10 +66,28 @@ export function trimLengths(random: () => number = Math.random): { startM: numbe
 }
 
 /**
- * The samples of one whole session that lie more than [startM] metres from its first fix and more
- * than [endM] from its last, both along its path and in a straight line, in `elapsedRealtimeMs`
- * order. The straight-line cut holds where GPS jitter uses up the path while the phone sits
- * still. Mock fixes are dropped first and count for neither the path nor the result.
+ * The fixes that anchor one end's straight-line cut, from that end inwards: every fix up to and
+ * including the [ANCHOR_FIXES]th whose `accuracyM` is under [trimM]. Coarse fixes, and fixes
+ * without an accuracy, don't count, so a coarse fix at a cold start can't stand in for the place
+ * the phone then sits, and a few wrong fixes that claim to be accurate can't either.
+ */
+function anchors(samples: StoredSample[], trimM: number): StoredSample["fix"][] {
+  const result: StoredSample["fix"][] = [];
+  let accurate = 0;
+  for (const { fix } of samples) {
+    if (accurate === ANCHOR_FIXES) break;
+    result.push(fix);
+    if (fix.accuracyM != null && fix.accuracyM < trimM) accurate++;
+  }
+  return result;
+}
+
+/**
+ * The samples of one whole session that lie more than [startM] metres along its path from its
+ * first fix and more than [endM] from its last, and more than those distances in a straight line
+ * from every anchor fix of that end, in `elapsedRealtimeMs` order. The straight-line cut holds
+ * where GPS jitter uses up the path while the phone sits still. Mock fixes are dropped first and
+ * count for neither the path, the anchors nor the result.
  */
 export function trimSession(session: StoredSample[], startM: number, endM: number): StoredSample[] {
   const samples = session.filter((s) => !s.fix.mock).sort((a, b) => a.elapsedRealtimeMs - b.elapsedRealtimeMs);
@@ -77,13 +98,13 @@ export function trimSession(session: StoredSample[], startM: number, endM: numbe
     previous = fix;
     return total;
   });
-  const first = samples[0]?.fix;
-  const last = samples.at(-1)?.fix;
-  const from = (end: StoredSample["fix"] | undefined, fix: StoredSample["fix"]) =>
-    end ? greatCircleDistance([end.lat, end.lon], [fix.lat, fix.lon], "m") : 0;
+  const starts = anchors(samples, startM);
+  const ends = anchors(samples.toReversed(), endM);
+  const beyond = (anchorFixes: StoredSample["fix"][], trimM: number, fix: StoredSample["fix"]) =>
+    anchorFixes.every((a) => greatCircleDistance([a.lat, a.lon], [fix.lat, fix.lon], "m") > trimM);
   return samples.filter(({ fix }, i) => {
     const metres = along[i] ?? 0;
-    return metres > startM && total - metres > endM && from(first, fix) > startM && from(last, fix) > endM;
+    return metres > startM && total - metres > endM && beyond(starts, startM, fix) && beyond(ends, endM, fix);
   });
 }
 
