@@ -87,21 +87,22 @@ type Anchor = { fix: StoredSample["fix"]; radiusM: number };
  * step longer than [trimM] or faster than [MAX_SPEED_MPS] (the fixes before it may be wrong), and
  * at each stay. The first two cut [trimM] around each of the [ANCHOR_FIXES] fixes from where they
  * start. A stay cuts [trimM] + 2 [STAY_M] around its first fix, which covers [trimM] around every
- * point within [STAY_M] of any of its fixes. Every place that starts before [DEPARTURE_FIXES] fixes
- * have come outside the cut of the places started before each of them is one of the end's resting
- * places, and a sample is beyond the cut if it lies outside every resting place's cut. So
- * [STAY_FIXES] consecutive fixes within [STAY_M] / 2 of where the phone rests cut that place out,
- * whatever wrong fixes come before or among them, unless [DEPARTURE_FIXES] of those wrong fixes lie
- * outside the cut of everywhere the phone seemed to be before them, as the fixes of a trip away do.
+ * point within [STAY_M] of any of its fixes. The phone has left the end once [DEPARTURE_FIXES]
+ * fixes have moved: lain in no stay and outside the cut of the places of the first two kinds that
+ * started by then. Every place that starts before that is one of the end's resting places, and a
+ * sample is beyond the cut if it lies outside every resting place's cut. So [STAY_FIXES]
+ * consecutive fixes within [STAY_M] / 2 of where the phone rests cut that place out, whatever wrong
+ * fixes come before or among them, unless [DEPARTURE_FIXES] of those wrong fixes move.
  */
 function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   const fixes = samples.map((s) => s.fix);
-  const places: { from: number; anchors: Anchor[] }[] = [];
+  const places: { from: number; stay: boolean; anchors: Anchor[] }[] = [];
+  const inStay = fixes.map(() => false);
   samples.forEach((s, i) => {
     const before = samples[i - 1];
     const metres = before ? metresApart(before.fix, s.fix) : Infinity;
     if (metres > trimM || metres > (MAX_SPEED_MPS * Math.abs(s.elapsedRealtimeMs - (before?.elapsedRealtimeMs ?? 0))) / 1000) {
-      places.push({ from: i, anchors: fixes.slice(i, i + ANCHOR_FIXES).map((fix) => ({ fix, radiusM: trimM })) });
+      places.push({ from: i, stay: false, anchors: fixes.slice(i, i + ANCHOR_FIXES).map((fix) => ({ fix, radiusM: trimM })) });
     }
   });
   let next = 0;
@@ -110,22 +111,26 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
     let j = i + 1;
     for (let fix = fixes[j]; fix && metresApart(first, fix) <= STAY_M; fix = fixes[++j]);
     if (j - i < STAY_FIXES) return;
-    places.push({ from: i, anchors: [{ fix: first, radiusM: trimM + 2 * STAY_M }] });
+    places.push({ from: i, stay: true, anchors: [{ fix: first, radiusM: trimM + 2 * STAY_M }] });
+    inStay.fill(true, i, j);
     next = j;
   });
   places.sort((a, b) => a.from - b.from);
   const beyond = fixes.map(() => true);
+  const moving = fixes.map((_, i) => !inStay[i]);
   let resting = 0;
   let away = 0;
   for (let i = 0; i < fixes.length && away < DEPARTURE_FIXES; i++) {
     for (let place = places[resting]; place && place.from <= i; place = places[++resting]) {
       for (const { fix, radiusM } of place.anchors) {
         fixes.forEach((f, k) => {
-          if (metresApart(fix, f) <= radiusM) beyond[k] = false;
+          if (metresApart(fix, f) > radiusM) return;
+          beyond[k] = false;
+          if (!place.stay) moving[k] = false;
         });
       }
     }
-    if (beyond[i]) away++;
+    if (moving[i]) away++;
   }
   return beyond;
 }

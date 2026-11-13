@@ -125,11 +125,11 @@ test("a stay is cut out unless the phone first moves away from the end for DEPAR
   };
   const atCrag = (metres: number) =>
     trimSession(session(metres), TRIM_M.max, TRIM_M.max).filter((s) => s.fix.lat === PLACE.lat + metres / 111_195).length;
-  // The walk leaves the end's cut 900 m out, and DEPARTURE_FIXES at 2 m/s take it 600 m further; the
-  // crag's stay starts STAY_M short of it.
+  // The walk leaves the cut of the end's first fixes 800 m out, and DEPARTURE_FIXES at 2 m/s take it
+  // 600 m further; the crag's stay starts STAY_M short of it.
   assert.deepEqual([DEPARTURE_FIXES, STAY_M], [60, 50]);
-  assert.equal(atCrag(1500), 0);
-  assert.equal(atCrag(1600), 1440);
+  assert.equal(atCrag(1400), 0);
+  assert.equal(atCrag(1500), 1440);
 });
 
 test("a step faster than any phone moves after an end's cut doesn't restart it", () => {
