@@ -1,7 +1,7 @@
 ---
 id: "202611131rcc"
 title: How should the public map label a carrier at a spot where readings disagree?
-status: open
+status: resolved
 kind: choice
 priority: normal
 created: 2026-11-13T15:27:40Z
@@ -74,6 +74,9 @@ options:
       - A mixed colour or bar per carrier per cell is hard to draw clearly and to explain in a legend in two languages.
       - Leaves the safety judgement to each reader, who may read a 60% bar as "there is signal".
       - The shares carry the same lean towards in-service readings where people stop or move slowly (see Context).
+resolution:
+  choice: reliable
+  resolved_at: 2026-11-13T17:13:07Z
 ---
 
 ## Context
