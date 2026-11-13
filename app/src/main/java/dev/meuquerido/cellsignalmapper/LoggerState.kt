@@ -92,7 +92,11 @@ data class LoggerUiState(
                 .filter { it.registered }
                 .firstNotNullOfOrNull { it.headlineDbm() }
             copy(
-                location = UiText(R.string.location, listOf(lat.toString(), lon.toString())),
+                location = if (lat != null && lon != null) {
+                    UiText(R.string.location, listOf(lat.toString(), lon.toString()))
+                } else {
+                    UiText(R.string.no_location_fix)
+                },
                 signalStrength = signalDbm?.let { UiText(R.string.signal_strength_dbm, listOf(it)) }
                     ?: UiText(R.string.signal_strength_unknown),
                 service = serviceText(sims),
