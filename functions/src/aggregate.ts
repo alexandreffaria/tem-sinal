@@ -13,6 +13,12 @@ export const TRIM_M = { min: 300, max: 800 } as const;
 /** How old a single-install cell's first sample must be before a monthly batch publishes it. */
 export const LONE_CELL_AGE_MS = 30 * 86_400_000;
 
+/** How many fixes from where a session's end starts anchor its straight-line cut: a minute at the app's 5 s interval. */
+export const ANCHOR_FIXES = 12;
+
+/** A speed in m/s, 180 km/h, above any road's limit in Brazil: a step between two fixes faster than this means one of them is wrong. */
+export const MAX_SPEED_MPS = 50;
+
 /** The fields of a stored sample (docs/sample-schema.md) that aggregation reads. */
 export type StoredSample = {
   installId: string;
@@ -62,29 +68,50 @@ export function trimLengths(random: () => number = Math.random): { startM: numbe
   return { startM: draw(), endM: draw() };
 }
 
+const metresApart = (a: StoredSample["fix"], b: StoredSample["fix"]) => greatCircleDistance([a.lat, a.lon], [b.lat, b.lon], "m");
+
 /**
- * The samples of one whole session that lie more than [startM] metres from its first fix and more
- * than [endM] from its last, both along its path and in a straight line, in `elapsedRealtimeMs`
- * order. The straight-line cut holds where GPS jitter uses up the path while the phone sits
- * still. Mock fixes are dropped first and count for neither the path nor the result.
+ * Which of [samples], ordered from one end of a session inwards, lie beyond that end's cut of
+ * [trimM] metres: more than [trimM] along the path from where the end starts, and more than [trimM]
+ * in a straight line from every fix up to [ANCHOR_FIXES] fixes past that start. The end starts
+ * after the last step, before the first sample beyond the cut, that is longer than [trimM] or
+ * faster than [MAX_SPEED_MPS]. Such a step can't be told apart from the fixes before it being wrong
+ * (a coarse or mislocated fix at a cold start, however accurate it claims to be), so the place the
+ * phone rests is taken to be where the fixes after it are.
+ */
+function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
+  const fixes = samples.map((s) => s.fix);
+  const steps = samples.map((s, i) => {
+    const before = samples[i - 1];
+    if (!before) return { metres: 0, seconds: Infinity };
+    return { metres: metresApart(before.fix, s.fix), seconds: Math.abs(s.elapsedRealtimeMs - before.elapsedRealtimeMs) / 1000 };
+  });
+  let total = 0;
+  const along = steps.map(({ metres }) => (total += metres));
+  const breaks = steps.map(({ metres, seconds }) => metres > trimM || metres > MAX_SPEED_MPS * seconds);
+  for (let start = 0; ; ) {
+    const anchors = fixes.slice(0, start + ANCHOR_FIXES);
+    const from = along[start] ?? 0;
+    const beyond = fixes.map((fix, i) =>
+      (along[i] ?? 0) - from > trimM && anchors.every((a) => metresApart(a, fix) > trimM));
+    const first = beyond.indexOf(true);
+    const next = breaks.findLastIndex((b, i) => b && i > start && (first === -1 || i <= first));
+    if (next === -1) return beyond;
+    start = next;
+  }
+}
+
+/**
+ * The samples of one whole session that lie beyond the cut of [startM] metres at its first end and
+ * of [endM] at its last, in `elapsedRealtimeMs` order. The straight-line cut holds where GPS jitter
+ * uses up the path while the phone sits still, and the anchors past the end hold where its first
+ * or last fixes are coarse or wrong. Mock fixes are dropped first and count for nothing.
  */
 export function trimSession(session: StoredSample[], startM: number, endM: number): StoredSample[] {
   const samples = session.filter((s) => !s.fix.mock).sort((a, b) => a.elapsedRealtimeMs - b.elapsedRealtimeMs);
-  let total = 0;
-  let previous: StoredSample["fix"] | undefined;
-  const along = samples.map(({ fix }) => {
-    if (previous) total += greatCircleDistance([previous.lat, previous.lon], [fix.lat, fix.lon], "m");
-    previous = fix;
-    return total;
-  });
-  const first = samples[0]?.fix;
-  const last = samples.at(-1)?.fix;
-  const from = (end: StoredSample["fix"] | undefined, fix: StoredSample["fix"]) =>
-    end ? greatCircleDistance([end.lat, end.lon], [fix.lat, fix.lon], "m") : 0;
-  return samples.filter(({ fix }, i) => {
-    const metres = along[i] ?? 0;
-    return metres > startM && total - metres > endM && from(first, fix) > startM && from(last, fix) > endM;
-  });
+  const fromStart = beyondEnd(samples, startM);
+  const fromEnd = beyondEnd(samples.toReversed(), endM).toReversed();
+  return samples.filter((_, i) => fromStart[i] && fromEnd[i]);
 }
 
 /** The headline strength of a registered cell: RSRP for LTE and NR, RSCP for WCDMA, RSSI for GSM. */
