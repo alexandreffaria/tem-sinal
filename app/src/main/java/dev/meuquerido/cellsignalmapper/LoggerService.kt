@@ -38,6 +38,13 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 
+/** The subscription ids whose display info listener is to be registered, and to be unregistered. */
+data class ListenerChanges(val add: Set<Int>, val remove: Set<Int>)
+
+/** What makes the listeners registered on [registeredIds] exactly one on each of [activeIds]. */
+fun listenerChanges(activeIds: Set<Int>, registeredIds: Set<Int>): ListenerChanges =
+    ListenerChanges(add = activeIds - registeredIds, remove = registeredIds - activeIds)
+
 class LoggerService : Service() {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
@@ -66,8 +73,9 @@ class LoggerService : Service() {
     private val overrideNetworkTypes = ConcurrentHashMap<Int, Int>()
 
     /**
-     * What unregisters each subscription's display info listener, by subscription id. Guarded by
-     * itself, like [destroyed], so no listener is registered after [onDestroy] unregistered them.
+     * What unregisters each active subscription's display info listener, by subscription id.
+     * Guarded by itself, like [destroyed], so no listener is registered after [onDestroy]
+     * unregistered them.
      */
     private val displayInfoListeners = HashMap<Int, () -> Unit>()
     private var destroyed = false
@@ -212,6 +220,7 @@ class LoggerService : Service() {
         } catch (e: SecurityException) {
             return emptyList()
         }
+        listenForDisplayInfo(subscriptions.map { it.subscriptionId }.toSet())
         return kotlinx.coroutines.coroutineScope {
             subscriptions.map { async { readSim(it) } }.awaitAll()
         }
@@ -220,7 +229,6 @@ class LoggerService : Service() {
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     private suspend fun readSim(subscription: SubscriptionInfo): SimReading {
         val manager = telephonyManager.createForSubscriptionId(subscription.subscriptionId)
-        listenForDisplayInfo(subscription.subscriptionId, manager)
         val serviceState = try {
             manager.serviceState
         } catch (e: SecurityException) {
@@ -265,21 +273,29 @@ class LoggerService : Service() {
     }
 
     /**
-     * Keeps [overrideNetworkTypes] up to date for [subscriptionId] from now until [onDestroy];
-     * does nothing when it already is.
+     * Keeps one display info listener on each of [activeIds], which keeps [overrideNetworkTypes]
+     * up to date for it; unregisters the listener and drops the value of every other subscription.
      */
-    private fun listenForDisplayInfo(subscriptionId: Int, manager: TelephonyManager) {
+    private fun listenForDisplayInfo(activeIds: Set<Int>) {
         synchronized(displayInfoListeners) {
-            if (destroyed || subscriptionId in displayInfoListeners) return
-            val record = { info: TelephonyDisplayInfo ->
-                overrideNetworkTypes[subscriptionId] = info.overrideNetworkType
+            if (destroyed) return
+            val changes = listenerChanges(activeIds, displayInfoListeners.keys)
+            changes.remove.forEach { subscriptionId ->
+                displayInfoListeners.remove(subscriptionId)?.invoke()
+                overrideNetworkTypes.remove(subscriptionId)
             }
-            displayInfoListeners[subscriptionId] =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    listenForDisplayInfoFromS(manager, record)
-                } else {
-                    listenForDisplayInfoBelowS(manager, record)
+            changes.add.forEach { subscriptionId ->
+                val manager = telephonyManager.createForSubscriptionId(subscriptionId)
+                val record = { info: TelephonyDisplayInfo ->
+                    overrideNetworkTypes[subscriptionId] = info.overrideNetworkType
                 }
+                displayInfoListeners[subscriptionId] =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        listenForDisplayInfoFromS(manager, record)
+                    } else {
+                        listenForDisplayInfoBelowS(manager, record)
+                    }
+            }
         }
     }
 
