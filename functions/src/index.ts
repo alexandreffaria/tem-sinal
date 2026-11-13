@@ -3,13 +3,11 @@ import { getAppCheck } from "firebase-admin/app-check";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
+import { createAll } from "./bulk-create.js";
 import { type SampleStore, ingest } from "./ingest.js";
 
 initializeApp();
 const db = getFirestore();
-
-/** gRPC ALREADY_EXISTS, which a create gets when the document exists. */
-const ALREADY_EXISTS = 6;
 
 /** How long a counter document is kept after its hour starts; a TTL policy on `expireAt` deletes it. */
 const COUNTER_LIFETIME_MS = 2 * 3_600_000;
@@ -28,16 +26,12 @@ const firestoreStore: SampleStore = {
       });
       return true;
     }),
-  create: async (samples) => {
-    const writer = db.bulkWriter();
+  create: (samples) => {
     const collection = db.collection("signal_logs");
-    const writes = samples.map((sample) =>
-      writer.create(collection.doc(sample.id), sample).catch((error: { code?: number }) => {
-        if (error.code !== ALREADY_EXISTS) throw error;
-      }),
+    return createAll(
+      db.bulkWriter(),
+      samples.map((sample) => ({ ref: collection.doc(sample.id), data: sample })),
     );
-    await writer.close();
-    await Promise.all(writes);
   },
 };
 
