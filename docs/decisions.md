@@ -2,6 +2,37 @@
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-13: Raw samples are kept 90 days
+
+The server deletes a raw sample 90 days after it received it; the public map keeps its running
+statistics. That is a month beyond the longest wait before a sample reaches the map (the monthly
+batch for single-install cells), long enough to find a bug and rerun the aggregation, and a
+Firestore TTL policy can apply it with no deletion job. Issue #64.
+
+Card: `20261113bmjv` (choice: ninety-days).
+
+## 2026-11-13: Single-install cells are published in monthly batches
+
+A cell backed by two or more installs is updated daily. A cell backed by one install, including
+that install's later visits, is published only in the batch on the 1st of the month, once its
+first sample is at least 30 days old. Every crag still reaches the map, and a lone visit shows only
+as "some time that month". Fixed for every cell: H3 resolution 11, per-carrier statistics and the
+month last seen, randomised trimming of each session's ends, raw samples never public. Issue #16.
+
+Card: `20261113a7do` (choice: monthly).
+
+## 2026-11-13: Uploads go through a Cloud Function; a scheduled function publishes the map
+
+The app sends batches to an HTTPS Cloud Function that checks App Check, validates each sample
+against the schema, throttles per install and writes to Firestore; clients can't write Firestore
+directly. A scheduled function aggregates new samples into the public cell files, served as
+static files from Firebase. Everything stays in the existing Firebase project, which moves to the
+Blaze plan with a budget alert. The functions are TypeScript: Cloud Functions for Firebase run
+Node.js or Python, not Go, and TypeScript has `h3-js` and the most complete Firebase support.
+Issues #15, #16, #59.
+
+Card: `20261113p3kn` (choice: firebase-functions).
+
 ## 2026-11-13: Sample schema v2
 
 One sample per tick that has a location fix and an active subscription, including ticks with no
