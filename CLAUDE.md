@@ -33,6 +33,7 @@ Settled decisions: `docs/decisions.md`.
 
 ## Checks
 
-`scripts/check.sh`, run on this machine (it installs JDK 17 and the Android SDK on first use). The
-account has no GitHub Actions minutes, so nothing runs the checks on GitHub: the author runs them
-before opening the pull request and after each push, and the merging session runs them again.
+`scripts/check.sh`, run on this machine (it needs Node and npm, and installs JDK 17 and the
+Android SDK on first use). The account has no GitHub Actions minutes, so nothing runs the checks
+on GitHub: the author runs them before opening the pull request and after each push, and the
+merging session runs them again.

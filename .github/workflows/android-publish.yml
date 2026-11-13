@@ -9,6 +9,7 @@ on:
       - 'plans/**'
       - 'docs/**'
       - '.claude/**'
+      - 'functions/**'
       - '**.md'
       - '.github/workflows/ci.yml'
 
