@@ -131,8 +131,8 @@ class LoggerService : Service() {
 
                 val lat = location?.latitude
                 val lon = location?.longitude
-                val latRounded = lat?.let { "%.5f".format(it).toDouble() }
-                val lonRounded = lon?.let { "%.5f".format(it).toDouble() }
+                val latRounded = lat?.let(::roundCoordinate)
+                val lonRounded = lon?.let(::roundCoordinate)
 
                 val signalDbm = currentDbm
 
