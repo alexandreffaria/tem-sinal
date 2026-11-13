@@ -125,16 +125,19 @@ type Anchor = { fix: StoredSample["fix"]; radiusM: number };
  * [ANCHOR_FIXES] fixes from where they start. A stay of radius r cuts [trimM] + s + r / 2 around
  * its first fix, s being its fixes' largest distance from that fix, which covers [trimM] around
  * every point within r / 2 of any of its fixes. The phone has left the end once [DEPARTURE_FIXES]
- * fixes have moved: lain in no stay and outside the cut of every place that started by then. Every
- * place that starts before that is one of the end's resting places, and a sample is beyond the cut
- * if it lies outside every resting place's cut. So ten minutes of consecutive fixes within 100 m of
- * where the phone rests (or three minutes within 25 m) cut that place out, whatever wrong fixes come
- * before or among them, unless [DEPARTURE_FIXES] of those wrong fixes move.
+ * fixes have moved: lain in no run of consecutive fixes long enough for a stay, and outside the cut
+ * of every place of the first two kinds that started by then. A stay's cut doesn't stop a fix
+ * moving, so rests along the way don't keep the phone from leaving. Every place that starts before
+ * the phone has left is one of the end's resting places, and a sample is beyond the cut if it lies
+ * outside every resting place's cut. So ten minutes of consecutive fixes within 100 m of where the
+ * phone rests (or three minutes within 25 m) cut that place out, whatever wrong fixes come before
+ * or among them, unless [DEPARTURE_FIXES] of those wrong fixes move.
  *
  * No fix in a run long enough for a stay moves, whichever stays the scan picks: the scan, which
  * skips the fixes of a stay it has found, either starts a stay at the run's first fix or finds it in
  * a stay that started at an earlier fix a. The run's fixes past that stay then lie within r of the
- * run's first fix, so within s + r of a, inside a's cut since [trimM] > r / 2.
+ * run's first fix, so within s + r of a, and the consecutive fixes after a stay that lie within
+ * s + r of its first fix don't move.
  *
  * Consecutive samples can carry the same fix. A sample whose fix has the coordinates of the one
  * before it counts once, with it, towards [ANCHOR_FIXES] and [DEPARTURE_FIXES]. Stays and the speed
@@ -146,6 +149,7 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   const fixes = samples.map((s) => s.fix);
   const repeat = fixes.map((fix, i) => fix.lat === fixes[i - 1]?.lat && fix.lon === fixes[i - 1]?.lon);
   const places: { from: number; anchors: Anchor[] }[] = [];
+  const stays: ({ from: number } & Anchor)[] = [];
   const inStay = fixes.map(() => false);
   samples.forEach((s, i) => {
     const before = samples[i - 1];
@@ -170,18 +174,18 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
         spreadM = Math.max(spreadM, metres);
       }
       if (j - i < stay.fixes) return;
-      places.push({ from: i, anchors: [{ fix: first, radiusM: trimM + spreadM + stay.radiusM / 2 }] });
+      stays.push({ from: i, fix: first, radiusM: trimM + spreadM + stay.radiusM / 2 });
       inStay.fill(true, i, j);
       next = j;
+      for (let fix = fixes[j]; fix && metresApart(first, fix) <= spreadM + stay.radiusM; fix = fixes[++j]) inStay[j] = true;
     });
   }
-  places.sort((a, b) => a.from - b.from);
   // Fixes in cubes of the unit sphere's space whose side is at least the widest cut's straight-line
   // length plus REFERENCE_M, so every fix within that many metres of a point lies in the point's
   // cube or the 26 next to it. 6 300 km is below the Earth's radius in h3-js, 6 371 km, which only
   // widens the cubes. A fix leaves its cube once cut.
-  let widestM = 0;
-  for (const place of places) for (const { radiusM } of place.anchors) widestM = Math.max(widestM, radiusM);
+  let widestM = trimM;
+  for (const { radiusM } of stays) widestM = Math.max(widestM, radiusM);
   const cubeOf = ({ lat, lon }: StoredSample["fix"], side: number) => {
     const [φ, λ] = [(lat * Math.PI) / 180, (lon * Math.PI) / 180];
     return [Math.cos(φ) * Math.cos(λ), Math.cos(φ) * Math.sin(λ), Math.sin(φ)].map((c) => Math.floor(c / side));
@@ -203,40 +207,41 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   // fixes; 1 m more covers rounding in distances of a few kilometres many times over.
   const references = new Map<string, { fix: StoredSample["fix"]; left: { metres: number; entry: Entry }[] }>();
   const beyond = fixes.map(() => true);
+  const cut = ({ fix, radiusM }: Anchor) => {
+    const at = cubeOf(fix, REFERENCE_M / (2 * 6_371_000)).join();
+    const reference = references.get(at);
+    if (reference) {
+      const boundM = metresApart(reference.fix, fix) + radiusM + 1;
+      for (const { metres, entry } of reference.left) {
+        if (metres > boundM) break;
+        if (beyond[entry.k] && metresApart(fix, entry.fix) <= radiusM) beyond[entry.k] = false;
+      }
+      return;
+    }
+    const left: { metres: number; entry: Entry }[] = [];
+    const [x = 0, y = 0, z = 0] = cubeOf(fix, side);
+    for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
+      const key = [x + dx, y + dy, z + dz].join();
+      const cube = cubes.get(key);
+      if (!cube) continue;
+      for (const entry of cube) {
+        if (!beyond[entry.k]) continue;
+        const metres = metresApart(fix, entry.fix);
+        if (metres > radiusM) left.push({ metres, entry });
+        else beyond[entry.k] = false;
+      }
+      cubes.set(key, cube.filter(({ k }) => beyond[k]));
+    }
+    references.set(at, { fix, left: left.sort((a, b) => a.metres - b.metres) });
+  };
   let resting = 0;
   let away = 0;
-  for (let i = 0; i < fixes.length && away < DEPARTURE_FIXES; i++) {
-    for (let place = places[resting]; place && place.from <= i; place = places[++resting]) {
-      for (const { fix, radiusM } of place.anchors) {
-        const at = cubeOf(fix, REFERENCE_M / (2 * 6_371_000)).join();
-        const reference = references.get(at);
-        if (reference) {
-          const boundM = metresApart(reference.fix, fix) + radiusM + 1;
-          for (const { metres, entry } of reference.left) {
-            if (metres > boundM) break;
-            if (beyond[entry.k] && metresApart(fix, entry.fix) <= radiusM) beyond[entry.k] = false;
-          }
-          continue;
-        }
-        const left: { metres: number; entry: Entry }[] = [];
-        const [x = 0, y = 0, z = 0] = cubeOf(fix, side);
-        for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
-          const key = [x + dx, y + dy, z + dz].join();
-          const cube = cubes.get(key);
-          if (!cube) continue;
-          for (const entry of cube) {
-            if (!beyond[entry.k]) continue;
-            const metres = metresApart(fix, entry.fix);
-            if (metres > radiusM) left.push({ metres, entry });
-            else beyond[entry.k] = false;
-          }
-          cubes.set(key, cube.filter(({ k }) => beyond[k]));
-        }
-        references.set(at, { fix, left: left.sort((a, b) => a.metres - b.metres) });
-      }
-    }
+  let i = 0;
+  for (; i < fixes.length && away < DEPARTURE_FIXES; i++) {
+    for (let place = places[resting]; place && place.from <= i; place = places[++resting]) place.anchors.forEach(cut);
     if (beyond[i] && !inStay[i] && !repeat[i]) away++;
   }
+  for (const stay of stays) if (stay.from < i) cut(stay);
   return beyond;
 }
 
