@@ -17,7 +17,6 @@ round of fixes by the author, then one confirmation, and no review after that.
    ```sh
    gh pr view $ARGUMENTS --json number,title,body,baseRefName,headRefName,headRefOid,files,additions,deletions
    gh pr diff $ARGUMENTS
-   gh pr checks $ARGUMENTS
    # the earlier review, for a confirmation
    gh pr view $ARGUMENTS --comments
    gh api --paginate repos/{owner}/{repo}/pulls/$ARGUMENTS/comments \
@@ -31,7 +30,15 @@ round of fixes by the author, then one confirmation, and no review after that.
    `format(`, `toDouble()`, `Locale`, `registerReceiver`, `requestLocationUpdates`,
    `allCellInfo`, `Log.` and `delete(`, which are where this app has broken before. Classify each
    finding as **blocking** or **follow-up**.
-5. If CI is still running, say so; don't mark the CI item pass until it's green.
+5. Run the checks on the pull request's latest commit, in a worktree of your own, and remove it
+   afterwards:
+   ```sh
+   git fetch origin pull/$ARGUMENTS/head:review/pr-$ARGUMENTS
+   git worktree add .claude/worktrees/review-$ARGUMENTS review/pr-$ARGUMENTS
+   (cd .claude/worktrees/review-$ARGUMENTS && scripts/check.sh)
+   git worktree remove --force .claude/worktrees/review-$ARGUMENTS
+   ```
+   A failure is blocking. Name the commit the checks ran on in the review.
 6. File every follow-up before posting, one issue each, so none is dropped. Pick the kind and
    priority from the tables under "Filing work" in `plans/README.md`, and write the body from the
    template there (Depends on, Read first, Do, Don't, Done when, ending "Found in review of
@@ -47,8 +54,8 @@ round of fixes by the author, then one confirmation, and no review after that.
    Format: a first line `Second review: ready to merge` or `Second review: N blocking`, then a
    table `| # | Item | Result | Note |` with a row per item, then a **Blocking** list and a
    **Follow-ups filed** list with each issue number and title. Ready to merge means nothing
-   blocking. If this is the confirmation, check only that the blocking findings are fixed and CI
-   is green. Keep notes to one sentence; plain words.
+   blocking. If this is the confirmation, check only that the blocking findings are fixed and the
+   checks pass. Keep notes to one sentence; plain words.
 8. If it's ready to merge, merge it yourself, following "Merging" in `plans/README.md`, and remove
    `blocked` from issues whose only open dependency was the one this closed. If it has blocking
    findings, don't merge: the author fixes them and starts a fresh confirmation.

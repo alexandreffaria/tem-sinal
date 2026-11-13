@@ -2,6 +2,16 @@
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-13: Checks run on this machine, not on GitHub-hosted runners
+
+The account has no GitHub Actions minutes. `scripts/check.sh` runs every check; the author runs it
+before opening a pull request and the merging session runs it again on the latest commit. The
+`CI` workflow calls the same script, so moving the checks to the self-hosted runners in Docker on
+the owner's workstation, as Geode does, changes only where it runs. Until a runner is
+registered for this repo, no workflow runs, the Play deploy included. Issue #89.
+
+Card: `20261113tc78`, answered in chat ("we run ci locally or on the workstation docker setup").
+
 ## 2026-11-13: Raw samples are kept 90 days
 
 The server deletes a raw sample 90 days after it received it; the public map keeps its running
