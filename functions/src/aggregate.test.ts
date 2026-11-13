@@ -193,8 +193,8 @@ test("a two-install cell is public the next day with per-carrier aggregates only
     [h3At(PLACE.lat)]: {
       h3: h3At(PLACE.lat),
       carriers: {
-        "72406": { best: -90, median: -98, tech: "LTE", n: 3, emergencyN: 0 },
-        "72402": { best: null, median: null, tech: null, n: 0, emergencyN: 2 },
+        "72406": { best: -90, median: -98, tech: "LTE", serviceN: 3, emergencyN: 0, noServiceN: 0 },
+        "72402": { best: null, median: null, tech: null, serviceN: 0, emergencyN: 2, noServiceN: 0 },
       },
       lastSeen: "2026-01",
     },
@@ -224,7 +224,7 @@ test("a held cell that gains a second install still waits for the next batch", (
   ({ cells, published, lastBatch } = publish(cells, published, lastBatch, JAN_10 + 2 * DAY));
   assert.deepEqual(published, {});
   ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 1, 1, 6)));
-  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.n, 2);
+  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
 });
 
 test("a published one-install cell changes only in monthly batches", () => {
@@ -239,7 +239,7 @@ test("a published one-install cell changes only in monthly batches", () => {
   ({ cells, published, lastBatch } = publish(cells, published, lastBatch, Date.UTC(2026, 2, 6, 6)));
   assert.deepEqual(published, march);
   ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 3, 1, 6)));
-  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.n, 2);
+  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
   assert.equal(published[h3At(PLACE.lat)]?.lastSeen, "2026-03");
 });
 
@@ -257,7 +257,7 @@ test("a batch missed on the 1st runs in the next publication with what the 1st w
   const [janLast, febCatchUp = {}, marBatch = {}] = publishOn(cells, days);
   assert.deepEqual(janLast, {});
   assert.deepEqual(Object.keys(febCatchUp), [h3At(early)]);
-  assert.equal(febCatchUp[h3At(early)]?.carriers["72406"]?.n, 1);
+  assert.equal(febCatchUp[h3At(early)]?.carriers["72406"]?.serviceN, 1);
   assert.equal(febCatchUp[h3At(early)]?.lastSeen, "2026-01");
   assert.deepEqual(Object.keys(marBatch).sort(), [h3At(early), h3At(late)].sort());
   assert.equal(marBatch[h3At(early)]?.lastSeen, "2026-02");
@@ -277,7 +277,7 @@ test("two publications in one month run the batch only once", () => {
   assert.deepEqual(published, february);
   assert.equal(lastBatch, "2026-02");
   ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 2, 4, 6)));
-  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.n, 2);
+  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
 });
 
 test("public cells are grouped by their region tile", () => {
@@ -301,7 +301,7 @@ test("a batch leaves out a lone install's samples from the batch's own month", (
   ({ cells, published, lastBatch } = publish(cells, published, lastBatch, Date.UTC(2026, 3, 1, 6)));
   assert.deepEqual(published, march);
   ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 4, 1, 6)));
-  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.n, 2);
+  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
   assert.equal(published[h3At(PLACE.lat)]?.lastSeen, "2026-04");
 });
 
@@ -340,7 +340,7 @@ test("a reading with the radio off or the service state unknown says nothing abo
   const [published = {}] = publishOn(withOff, [JAN_10 + DAY]);
   const [expected = {}] = publishOn(without, [JAN_10 + DAY]);
   assert.deepEqual(published[h3At(north)]?.carriers["72406"], expected[h3At(north)]?.carriers["72406"]);
-  assert.deepEqual(published[h3At(north)]?.carriers["72402"], { best: null, median: null, tech: null, n: 1, emergencyN: 2 });
+  assert.deepEqual(published[h3At(north)]?.carriers["72402"], { best: null, median: null, tech: null, serviceN: 0, emergencyN: 2, noServiceN: 1 });
 });
 
 test("a reading whose cells are unknown is not counted as no signal", () => {
@@ -354,7 +354,18 @@ test("a reading whose cells are unknown is not counted as no signal", () => {
     })));
   const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
   assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
-    "72402": { best: -85, median: -85, tech: "GSM", n: 2, emergencyN: 0 },
+    "72402": { best: -85, median: -85, tech: "GSM", serviceN: 2, emergencyN: 0, noServiceN: 0 },
+  });
+});
+
+test("an in-service reading whose cells are unknown counts towards serviceN and nothing else", () => {
+  const cells: Record<string, CellState> = {};
+  const unknown = { simPlmn: "72406", serviceState: "IN_SERVICE", cells: null };
+  const known = { simPlmn: "72406", serviceState: "IN_SERVICE", cells: [{ source: "CELL_INFO", rat: "LTE", registered: true, rsrp: -100 }] };
+  accumulate(cells, [ALICE, BRUNO, ALICE].map((id, i) => sample(id, PLACE.lat, JAN_10 + i * 60_000, { sims: [i === 1 ? known : unknown] })));
+  const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
+  assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
+    "72406": { best: -100, median: -100, tech: "LTE", serviceN: 3, emergencyN: 0, noServiceN: 0 },
   });
 });
 
@@ -364,7 +375,7 @@ test("a carrier seen only in emergency-only service with its cells unknown publi
   accumulate(cells, [ALICE, BRUNO, BRUNO].map((id, i) => sample(id, PLACE.lat, JAN_10 + i * 60_000, { sims: [emergency] })));
   const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
   assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
-    "72402": { best: null, median: null, tech: null, n: 0, emergencyN: 3 },
+    "72402": { best: null, median: null, tech: null, serviceN: 0, emergencyN: 3, noServiceN: 0 },
   });
 });
 
@@ -376,6 +387,22 @@ test("one emergency-only reading among in-service ones is counted once", () => {
     sample(id, PLACE.lat, JAN_10 + i * 60_000, { sims: [i === 2 ? emergency : inService] })));
   const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
   assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
-    "72406": { best: -100, median: -100, tech: "LTE", n: 5, emergencyN: 1 },
+    "72406": { best: -100, median: -100, tech: "LTE", serviceN: 4, emergencyN: 1, noServiceN: 0 },
+  });
+});
+
+test("only in-service readings give a strength and a network type, and each state is counted once", () => {
+  const cells: Record<string, CellState> = {};
+  const registered = (rsrp: number) => [{ source: "CELL_INFO", rat: "LTE", registered: true, rsrp }];
+  const inService = { simPlmn: "72406", serviceState: "IN_SERVICE", cells: registered(-120) };
+  const emergency = { simPlmn: "72406", serviceState: "EMERGENCY_ONLY", cells: registered(-80) };
+  const outOfService = { simPlmn: "72402", serviceState: "OUT_OF_SERVICE", cells: [{ source: "CELL_INFO", rat: "GSM", registered: true, rssi: -70 }] };
+  const camped = { simPlmn: "72402", serviceState: "EMERGENCY_ONLY", cells: registered(-90) };
+  accumulate(cells, Array.from({ length: 201 }, (_, i) =>
+    sample(i % 2 ? ALICE : BRUNO, PLACE.lat, JAN_10 + i * 60_000, { sims: [i === 0 ? inService : emergency, i < 3 ? outOfService : camped] })));
+  const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
+  assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
+    "72406": { best: -120, median: -120, tech: "LTE", serviceN: 1, emergencyN: 200, noServiceN: 0 },
+    "72402": { best: null, median: null, tech: null, serviceN: 0, emergencyN: 198, noServiceN: 3 },
   });
 });
