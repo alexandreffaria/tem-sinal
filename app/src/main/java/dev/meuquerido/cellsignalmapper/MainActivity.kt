@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -121,6 +122,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             CellSignalMapperTheme {
                 val loggerState by LoggerState.state.collectAsState()
+                // Held here, above the portrait and landscape layouts, so the dialog stays open
+                // when the phone rotates.
+                var showSharing by rememberSaveable { mutableStateOf(false) }
+                if (showSharing) {
+                    SharingDialog(onDismiss = { showSharing = false })
+                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val controls = @Composable { sideBySide: Boolean ->
                         permissionMessage?.let {
@@ -141,7 +148,8 @@ class MainActivity : ComponentActivity() {
                             service = loggerState.service,
                             pendingPoints = loggerState.pendingCount,
                             hint = loggerState.hint,
-                            onDismissHint = { LoggerState.dismissHint() }
+                            onDismissHint = { LoggerState.dismissHint() },
+                            onShowSharing = { showSharing = true }
                         )
                     }
                     val pingResult = loggerState.pingResult?.name ?: ""

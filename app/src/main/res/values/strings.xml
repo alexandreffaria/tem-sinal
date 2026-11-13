@@ -28,6 +28,13 @@
     <string name="indoor_hint">Looks like you\'re indoors. We suggest logging on the trail: it keeps where you live out of the data, and it measures the signal where people will need it.</string>
     <string name="dismiss">Dismiss</string>
 
+    <string name="what_is_shared">What is shared?</string>
+    <string name="sharing_recording">Nothing is recorded until you press %1$s, and recording stops when you press %2$s.</string>
+    <string name="sharing_sample">Each sample holds the position and time, the location\'s accuracy and altitude, and for each SIM its carrier, service state, signal readings and the IDs of the cell towers it hears. It also carries a random app ID made on this phone and a random ID for each recording. A sample never holds your name, phone number, accounts, IMEI or Android ID.</string>
+    <string name="sharing_server">Samples stay on this phone until they are sent, which happens when you open the app or tap %1$s. On our server they are private and never published. Once our upload server is running, each sample will be deleted 90 days after it arrives; until then, samples on the server are not deleted automatically.</string>
+    <string name="sharing_personal">The samples themselves are not anonymous: the random app ID links one phone\'s samples, so under Brazil\'s data protection law (LGPD) they are personal data.</string>
+    <string name="sharing_map">The public map, not online yet, will be anonymous. It will show only totals per small area (hexagons about 50 m across) and carrier: signal strength, network type, how often there was service, emergency calls only or no service, and the month last seen. No app ID, recording, exact time or exact point will be published. A random 300 to 800 m or more will be left out around where each recording starts and ends, and around where you stop before really setting off. An area seen by only one phone will appear only in a monthly batch, so a lone visit shows as “some time that month”.</string>
+
     <string name="needs_precise_location">Logging needs precise location. Allow precise location for this app in Settings.</string>
     <string name="needs_location">Logging needs location access. Allow location for this app in Settings.</string>
     <string name="needs_phone">Logging needs phone access to read your SIM. Allow Phone for this app in Settings.</string>
