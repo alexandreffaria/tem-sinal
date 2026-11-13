@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { HOURLY_LIMIT, type SampleStore, ingest } from "./ingest.js";
+import { HOURLY_LIMIT, SAMPLE_LIFETIME_MS, type SampleStore, ingest } from "./ingest.js";
 import { INSTALL_ID, testSample } from "./test-sample.js";
 
 /** A [SampleStore] in memory, with create-only writes like Firestore's. */
@@ -29,16 +29,24 @@ const UID = "test-user";
 const HOUR = `${INSTALL_ID}_${Date.UTC(2026, 0, 1, 10)}`;
 const USER_HOUR = `uid_${UID}_${Date.UTC(2026, 0, 1, 10)}`;
 
-test("a valid batch sent twice is written once and accepted both times", async () => {
+test("a stored sample expires 90 days after the server received it", async () => {
+  const fake = fakeStore();
+  const sample = testSample();
+  await ingest({ samples: [sample] }, UID, fake.store, NOW);
+  assert.equal(SAMPLE_LIFETIME_MS, 90 * 24 * 3_600_000);
+  assert.deepEqual(fake.stored.get(sample.id), { ...sample, expireAt: new Date(NOW + SAMPLE_LIFETIME_MS) });
+});
+
+test("a valid batch sent twice is written once, keeps its first expiry and is accepted both times", async () => {
   const fake = fakeStore();
   const sample = testSample();
   const body = { samples: [sample, testSample()] };
   const first = await ingest(body, UID, fake.store, NOW);
-  const second = await ingest(body, UID, fake.store, NOW);
+  const second = await ingest(body, UID, fake.store, NOW + 3_600_000);
   assert.deepEqual(first, { status: 200, body: { accepted: 2, rejected: [] } });
   assert.deepEqual(second, first);
   assert.equal(fake.stored.size, 2);
-  assert.deepEqual(fake.stored.get(sample.id), sample);
+  assert.deepEqual(fake.stored.get(sample.id), { ...sample, expireAt: new Date(NOW + SAMPLE_LIFETIME_MS) });
 });
 
 test("an invalid sample is reported and not written; the rest are", async () => {
