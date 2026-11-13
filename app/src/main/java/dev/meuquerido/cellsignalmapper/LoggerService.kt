@@ -15,6 +15,7 @@ import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.telephony.PhoneStateListener
 import android.telephony.SignalStrength
 import android.telephony.TelephonyCallback
@@ -23,7 +24,12 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import kotlinx.coroutines.*
 import java.util.UUID
 
@@ -37,6 +43,18 @@ class LoggerService : Service() {
 
     /** Stops the signal-strength listener started in [onCreate]. */
     private var stopSignalListener: (() -> Unit)? = null
+
+    private lateinit var locationClient: FusedLocationProviderClient
+
+    /** Written on the main looper by [locationCallback], read by the logging loop. */
+    @Volatile
+    private var latestLocation: Location? = null
+
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            latestLocation = result.lastLocation ?: return
+        }
+    }
 
     private var lastLat: Double? = null
     private var lastLon: Double? = null
@@ -59,6 +77,8 @@ class LoggerService : Service() {
 
         startForegroundService()
         LoggerState.serviceStarted()
+        locationClient = LocationServices.getFusedLocationProviderClient(this)
+        startLocationUpdates()
         startLoggingLoop()
     }
 
@@ -115,39 +135,24 @@ class LoggerService : Service() {
             .createNotificationChannel(channel)
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
+    @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+    private fun startLocationUpdates() {
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000L)
+            .setWaitForAccurateLocation(true)
+            .setMaxUpdateDelayMillis(0)
+            .build()
+        locationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+    }
+
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     private fun startLoggingLoop() {
-        val locationClient = LocationServices.getFusedLocationProviderClient(this)
-
         coroutineScope.launch {
             while (isActive) {
-                val location = try {
-                    withTimeout(5000) {
-                        suspendCancellableCoroutine<Location?> { cont ->
-                            val request = com.google.android.gms.location.LocationRequest.Builder(
-                                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
-                                1000L
-                            )
-                                .setWaitForAccurateLocation(true)
-                                .setMaxUpdateDelayMillis(0)
-                                .build()
-
-                            locationClient.requestLocationUpdates(
-                                request,
-                                object : com.google.android.gms.location.LocationCallback() {
-                                    override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
-                                        cont.resume(result.lastLocation, onCancellation = null)
-                                        locationClient.removeLocationUpdates(this)
-                                    }
-                                },
-                                Looper.getMainLooper()
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("LoggerService", "Failed to get fresh location", e)
-                    null
+                val location = latestLocation?.takeIf {
+                    isFixFresh(
+                        it.elapsedRealtimeNanos / 1_000_000,
+                        SystemClock.elapsedRealtime()
+                    )
                 }
 
                 val lat = location?.latitude
@@ -247,6 +252,7 @@ class LoggerService : Service() {
     override fun onDestroy() {
         stopSignalListener?.invoke()
         stopSignalListener = null
+        locationClient.removeLocationUpdates(locationCallback)
         coroutineScope.cancel()
         LoggerState.serviceStopped()
         super.onDestroy()
