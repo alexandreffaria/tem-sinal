@@ -3,8 +3,16 @@ import { test } from "node:test";
 import { cellToParent, greatCircleDistance, latLngToCell } from "h3-js";
 import {
   type CellState, type PublicCell, type StoredSample,
-  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, STAYS, TILE_RESOLUTION, TRIM_M, accumulate, publish, tiles, trimLengths, trimSession,
+  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, STAYS, TILE_RESOLUTION, TRIM_M, accumulate, publish, tiles, trimLengths, trimSession as nearLinearTrim,
 } from "./aggregate.js";
+import { referenceTrimSession } from "./trim-reference.js";
+
+/** Every trim in these tests runs both implementations and asserts they keep the same samples. */
+function trimSession(session: StoredSample[], startM: number, endM: number): StoredSample[] {
+  const kept = nearLinearTrim(session, startM, endM);
+  assert.deepEqual(kept, referenceTrimSession(session, startM, endM));
+  return kept;
+}
 
 // Made-up installs, sessions and places; 0.001 degrees of latitude is about 111 m.
 const ALICE = "0b9d2e44-8f3a-4c6b-b1d7-5e2a9c8f7d36";
@@ -352,4 +360,80 @@ test("only in-service readings give a strength and a network type, and each stat
     "72406": { best: -120, median: -120, tech: "LTE", serviceN: 1, emergencyN: 200, noServiceN: 0 },
     "72402": { best: null, median: null, tech: null, serviceN: 0, emergencyN: 198, noServiceN: 3 },
   });
+});
+
+test("randomised sessions keep exactly the samples the reference trim keeps", () => {
+  // A seeded generator (mulberry32), so a failure can be replayed.
+  let seed = Number(process.env.TRIM_SEED ?? 124);
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+  const pick = <T,>(items: T[]): T => items[Math.floor(random() * items.length)] as T;
+  const count = (most: number) => Math.floor(random() * most);
+  const stats = { sessions: 0, fixes: 0, empty: 0, whole: 0, partial: 0 };
+  for (let n = 0; n < Number(process.env.TRIM_SESSIONS ?? 40); n++) {
+    // Mostly in Brazil, sometimes anywhere, near the poles and the antimeridian included.
+    const [baseLat, baseLon] = random() < 0.8 ? [-34 + random() * 39, -74 + random() * 40] : [-89 + random() * 178, -180 + random() * 360];
+    const lonM = 111_195 * Math.cos((baseLat * Math.PI) / 180);
+    // Positions in metres north and east of PLACE; [at] is where the phone really is.
+    let at: [number, number] = [0, 0];
+    let ms = 0;
+    const points: [number, number, number, boolean][] = [];
+    const add = ([north, east]: [number, number], step = pick([1_000, 5_000, 5_000, 5_000, 30_000])) => {
+      ms += random() < 0.005 ? pick([60_000, 600_000, 1_200_000]) : step;
+      points.push([north, east, ms, random() < 0.003]);
+    };
+    const off = (metres: number, angle = random() * 2 * Math.PI): [number, number] => [at[0] + metres * Math.cos(angle), at[1] + metres * Math.sin(angle)];
+    // Wrong fixes around an end: repeated, scattered, a glide in to [at] or out of it, one stray, or none.
+    const wrong = (inwards: boolean) => {
+      const metres = 300 + random() * 2_000;
+      const angle = random() * 2 * Math.PI;
+      const length = count(150);
+      const kind = pick(["repeat", "scatter", "glide", "single", "none"]);
+      if (kind === "repeat") for (let i = 0; i < length; i++) add(off(metres, angle));
+      if (kind === "scatter") for (let i = 0; i < length; i++) add(off(metres * (0.5 + random())));
+      if (kind === "single") add(off(metres, angle));
+      if (kind === "glide") {
+        const steps = 5 + count(40);
+        for (let i = 0; i < steps; i++) add(off((metres * (inwards ? steps - i : i + 1)) / steps, angle));
+      }
+    };
+    // The phone at rest: within 10 m under open sky, or 50 to 100 m indoors.
+    const rest = (length: number) => {
+      const [min, max] = pick<[number, number]>([[0, 10], [50, 100], [0, 200]]);
+      for (let i = 0; i < length; i++) add(off(min + random() * (max - min)), pick([5_000, 5_000, 30_000]));
+    };
+    const travel = (length: number) => {
+      const speed = pick([0.3 + random() * 1.5, 5 + random() * 30]);
+      const angle = random() * 2 * Math.PI;
+      for (let i = 0; i < length; i++) {
+        at = off(5 * speed, angle);
+        add(random() < 0.01 ? off(1_000 + random() * 3_000) : at, 5_000);
+        if (random() < 0.002) for (let j = 0; j < 12; j++) add(j % 2 ? off(1_500) : at, 5_000);
+      }
+    };
+    wrong(true);
+    rest(count(400));
+    for (let leg = 1 + count(3); leg > 0; leg--) {
+      travel(20 + count(300));
+      if (random() < 0.6) rest(count(300));
+    }
+    rest(count(400));
+    wrong(false);
+    const session = points.map(([north, east, time, mock]) => ({
+      ...sample(ALICE, baseLat + north / 111_195, JAN_10 + time),
+      fix: { lat: baseLat + north / 111_195, lon: baseLon + east / lonM, mock },
+    }));
+    const draw = () => TRIM_M.min + random() * (TRIM_M.max - TRIM_M.min);
+    const kept = trimSession(random() < 0.3 ? session.toReversed() : session, draw(), draw());
+    stats.sessions++;
+    stats.fixes += session.length;
+    if (kept.length === 0) stats.empty++;
+    else if (kept.length === session.filter((s) => !s.fix.mock).length) stats.whole++;
+    else stats.partial++;
+  }
+  console.log(JSON.stringify(stats));
 });

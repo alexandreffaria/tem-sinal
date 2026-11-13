@@ -148,6 +148,26 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
     });
   }
   places.sort((a, b) => a.from - b.from);
+  // Fixes in cubes of the unit sphere's space whose side is at least the widest cut's straight-line
+  // length, so a cut reaches only fixes in its own cube and the 26 next to it. A fix leaves a cube's
+  // [uncut] once cut and its [moving] once it no longer moves, so no cut tests it again.
+  let widestM = 0;
+  for (const place of places) for (const { radiusM } of place.anchors) widestM = Math.max(widestM, radiusM);
+  // 6 300 km is below the Earth's radius in h3-js, 6 371 km, which only widens the cubes.
+  const side = widestM / 6_300_000;
+  const cubeOf = ({ lat, lon }: StoredSample["fix"]) => {
+    const [φ, λ] = [(lat * Math.PI) / 180, (lon * Math.PI) / 180];
+    return [Math.cos(φ) * Math.cos(λ), Math.cos(φ) * Math.sin(λ), Math.sin(φ)].map((c) => Math.floor(c / side));
+  };
+  type Entry = { k: number; fix: StoredSample["fix"] };
+  const cubes = new Map<string, { uncut: Entry[]; moving: Entry[] }>();
+  fixes.forEach((fix, k) => {
+    const key = cubeOf(fix).join();
+    const cube = cubes.get(key) ?? { uncut: [], moving: [] };
+    cube.uncut.push({ k, fix });
+    if (!inStay[k]) cube.moving.push({ k, fix });
+    cubes.set(key, cube);
+  });
   const beyond = fixes.map(() => true);
   const moving = fixes.map((_, i) => !inStay[i]);
   let resting = 0;
@@ -155,11 +175,17 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   for (let i = 0; i < fixes.length && away < DEPARTURE_FIXES; i++) {
     for (let place = places[resting]; place && place.from <= i; place = places[++resting]) {
       for (const { fix, radiusM } of place.anchors) {
-        fixes.forEach((f, k) => {
-          if (metresApart(fix, f) > radiusM) return;
-          beyond[k] = false;
-          if (!place.stay) moving[k] = false;
-        });
+        const outside = (entry: Entry) => metresApart(fix, entry.fix) > radiusM;
+        const [x = 0, y = 0, z = 0] = cubeOf(fix);
+        for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
+          const cube = cubes.get([x + dx, y + dy, z + dz].join());
+          if (!cube) continue;
+          for (const entry of cube.uncut) if (!outside(entry)) beyond[entry.k] = false;
+          cube.uncut = cube.uncut.filter(({ k }) => beyond[k]);
+          if (place.stay) continue;
+          for (const entry of cube.moving) if (!outside(entry)) moving[entry.k] = false;
+          cube.moving = cube.moving.filter(({ k }) => moving[k]);
+        }
       }
     }
     if (moving[i]) away++;
