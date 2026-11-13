@@ -74,6 +74,7 @@ seen_at: 2026-11-13T16:55:02Z
 resolution:
   choice: five
   resolved_at: 2026-11-13T18:43:05Z
+applied_at: 2026-11-13T18:59:10Z
 ---
 
 ## Your note, and what came of it

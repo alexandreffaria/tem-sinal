@@ -60,6 +60,7 @@ options:
 resolution:
   choice: one-button
   resolved_at: 2026-11-13T18:43:46Z
+applied_at: 2026-11-13T18:59:16Z
 ---
 
 ## Context
