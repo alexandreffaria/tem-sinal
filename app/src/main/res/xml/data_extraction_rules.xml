@@ -5,6 +5,12 @@
    The sample files and Firestore's local cache (the database domain, which holds
    the samples written to it) contain exact locations and times, so they go
    neither to the cloud backup nor to a new phone.
+   Firebase Auth keeps the signed-in anonymous user in shared preferences. Restored on a new
+   install or phone, it would sign that install in as the same account and link the two, so it
+   is kept on this phone like the install id. The file is
+   com.google.firebase.auth.api.Store.<key>.xml, where <key> is FirebaseApp.getPersistenceKey():
+   the URL-safe Base64 (no padding) of the app name "[DEFAULT]", a "+", then the same encoding of
+   mobilesdk_app_id in google-services.json. It changes if that app id changes.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -12,11 +18,13 @@
         <exclude domain="file" path="signal_log.pending.json" />
         <exclude domain="file" path="signal_log.rejected.json" />
         <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="com.google.firebase.auth.api.Store.W0RFRkFVTFRd+MToxMDQ4MzA5NzI3NTI1OmFuZHJvaWQ6MWMzZjIyMmI0ZDY3ZDlmZjI5OWFjYw.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="signal_log.json" />
         <exclude domain="file" path="signal_log.pending.json" />
         <exclude domain="file" path="signal_log.rejected.json" />
         <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="com.google.firebase.auth.api.Store.W0RFRkFVTFRd+MToxMDQ4MzA5NzI3NTI1OmFuZHJvaWQ6MWMzZjIyMmI0ZDY3ZDlmZjI5OWFjYw.xml" />
     </device-transfer>
 </data-extraction-rules>
