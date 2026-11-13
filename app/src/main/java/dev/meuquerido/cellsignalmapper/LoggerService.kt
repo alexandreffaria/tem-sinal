@@ -15,6 +15,7 @@ import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.telephony.PhoneStateListener
 import android.telephony.SignalStrength
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
@@ -31,21 +32,11 @@ class LoggerService : Service() {
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private lateinit var telephonyManager: TelephonyManager
 
-    private var currentDbm: Int = -999
+    @Volatile
+    private var currentDbm: Int = UNKNOWN_DBM
 
-    private val telephonyCallback = @RequiresApi(Build.VERSION_CODES.S)
-    object : TelephonyCallback(),
-        TelephonyCallback.SignalStrengthsListener {
-        override fun onSignalStrengthsChanged(ss: SignalStrength) {
-            val css = ss.cellSignalStrengths.firstOrNull()
-            val dbm = css?.dbm
-                ?: ss.gsmSignalStrength.takeIf { it != 99 }
-                    ?.let { asu -> -113 + 2 * asu }
-                ?: -999
-            currentDbm = dbm
-            Log.d("LoggerService", "Real-time dBm = $dbm")
-        }
-    }
+    /** Stops the signal-strength listener started in [onCreate]. */
+    private var stopSignalListener: (() -> Unit)? = null
 
     private var lastLat: Double? = null
     private var lastLon: Double? = null
@@ -60,13 +51,44 @@ class LoggerService : Service() {
 
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            telephonyManager.registerTelephonyCallback(mainExecutor, telephonyCallback)
+        stopSignalListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            listenWithTelephonyCallback()
+        } else {
+            listenWithPhoneStateListener()
         }
 
         startForegroundService()
         LoggerState.serviceStarted()
         startLoggingLoop()
+    }
+
+    private fun onSignalStrength(ss: SignalStrength) {
+        val dbm = loggedDbm(ss)
+        currentDbm = dbm
+        Log.d("LoggerService", "Real-time dBm = $dbm")
+    }
+
+    /** Listens on the main thread; returns the function that stops listening. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun listenWithTelephonyCallback(): () -> Unit {
+        val callback = object : TelephonyCallback(), TelephonyCallback.SignalStrengthsListener {
+            override fun onSignalStrengthsChanged(ss: SignalStrength) = onSignalStrength(ss)
+        }
+        telephonyManager.registerTelephonyCallback(mainExecutor, callback)
+        return { telephonyManager.unregisterTelephonyCallback(callback) }
+    }
+
+    /**
+     * Listens on the main thread below API 31, where [TelephonyCallback] doesn't exist;
+     * returns the function that stops listening.
+     */
+    @Suppress("DEPRECATION") // PhoneStateListener is the only signal listener below API 31.
+    private fun listenWithPhoneStateListener(): () -> Unit {
+        val listener = object : PhoneStateListener(mainExecutor) {
+            override fun onSignalStrengthsChanged(ss: SignalStrength) = onSignalStrength(ss)
+        }
+        telephonyManager.listen(listener, PhoneStateListener.LISTEN_SIGNAL_STRENGTHS)
+        return { telephonyManager.listen(listener, PhoneStateListener.LISTEN_NONE) }
     }
 
     private fun startForegroundService() {
@@ -136,7 +158,7 @@ class LoggerService : Service() {
                 val signalDbm = currentDbm
 
                 val pingResult = when {
-                    lat == null || lon == null || signalDbm == -999 -> PingResult.BAD
+                    lat == null || lon == null || signalDbm == UNKNOWN_DBM -> PingResult.BAD
                     lastLat == null || lastLon == null -> PingResult.SUCCESS
                     !hasMoved(lat, lon, lastLat!!, lastLon!!, 10f)
                             && signalDbm == lastSignal -> {
@@ -223,9 +245,8 @@ class LoggerService : Service() {
         START_STICKY
 
     override fun onDestroy() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            telephonyManager.unregisterTelephonyCallback(telephonyCallback)
-        }
+        stopSignalListener?.invoke()
+        stopSignalListener = null
         coroutineScope.cancel()
         LoggerState.serviceStopped()
         super.onDestroy()
