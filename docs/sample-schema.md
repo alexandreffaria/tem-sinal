@@ -199,10 +199,12 @@ coverage.
 
 The aggregation counts a SIM's reading towards coverage only when it says something about it. A
 reading with `serviceState` `POWER_OFF` (the radio wasn't listening) or `null` (unknown) is left
-out of every coverage figure: best and median strength, technology, the emergency-only count
-`emergencyN`, and the sample count `n`; the sample's other SIMs still count. A reading with `cells`
-null counts only towards `emergencyN`, never towards `n` or no signal. A sample with no reading that counts
-adds nothing to its cell. The app and the upload keep every sample as recorded.
+out of every coverage figure: best and median strength, technology, and the reading counts
+`serviceN`, `emergencyN` and `noServiceN`; the sample's other SIMs still count. A reading with
+`cells` null counts only when it is `EMERGENCY_ONLY`, towards `emergencyN`, never towards
+`serviceN` or `noServiceN`. Strength and technology come from `IN_SERVICE` readings only: a modem
+in limited service can report the cell it is camped on as registered. A sample with no reading
+that counts adds nothing to its cell. The app and the upload keep every sample as recorded.
 
 AOSP sources, in `android.googlesource.com/platform`:
 
@@ -308,8 +310,8 @@ The manifest already declares all of them. The logger checks them before it star
 ## Privacy
 
 Card `20261113a7do` fixes what the public map shows: H3 resolution 11 cells with, per carrier, the
-best and median strength, the network type, the sample count, how many of the readings were
-emergency-only, and the month last seen (see **Public cells**). Raw samples stay private; session starts and ends are dropped
+best and median strength, the network type, how many readings were in service, emergency-only
+and out of service, and the month last seen (see **Public cells**). Raw samples stay private; session starts and ends are dropped
 before aggregation; single-install cells are published in monthly batches.
 
 **Personal data.** A sample as a whole is personal data under LGPD art. 5 I: an exact position and
@@ -351,20 +353,17 @@ the SIM's PLMN, and published under the install-count rules of card `20261113a7d
 
 | Field | Meaning |
 |---|---|
-| `best` | the strongest headline strength in dBm (RSRP for LTE and NR, RSCP for WCDMA, RSSI for GSM) of the readings registered to a cell; null when none had one |
+| `best` | the strongest headline strength in dBm (RSRP for LTE and NR, RSCP for WCDMA, RSSI for GSM) of the `IN_SERVICE` readings registered to a cell; null when none had one |
 | `median` | the lower median of the same strengths; null when `best` is |
-| `tech` | the network type registered most often, a tie going to the newer one; null when no reading was registered |
-| `n` | the readings whose cells are known |
-| `emergencyN` | the readings in `EMERGENCY_ONLY` service, including those whose cells are unknown, so it can exceed `n` |
+| `tech` | the network type of those readings registered most often, a tie going to the newer one; null when no `IN_SERVICE` reading was registered |
+| `serviceN` | the `IN_SERVICE` readings whose cells are known |
+| `emergencyN` | the `EMERGENCY_ONLY` readings, whether their cells are known or not |
+| `noServiceN` | the `OUT_OF_SERVICE` readings whose cells are known |
 
-A reader classifies a carrier in a cell, in this order:
-
-1. **Signal** when `best` is not null.
-2. **Emergency calls only** when `emergencyN` is above zero, whatever `n` is. A carrier with `n`
-   0 and `emergencyN` above zero is emergency calls only, never no data.
-3. **No signal** when `n` is above zero.
-
-A carrier missing from `carriers` has no data in that cell.
+The three counts don't overlap: each counted reading is in exactly one of them, and their sum is
+the number of readings counted for the carrier in the cell. A carrier missing from `carriers` has
+no data in that cell. This format states what was measured; how the map labels a carrier from the
+counts is the map's rule.
 
 ## Example
 
