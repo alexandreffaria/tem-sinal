@@ -51,8 +51,12 @@ async function verifiedUid(appCheckToken: string | undefined, authorization: str
   }
 }
 
-/** `POST /v1/samples`: the function is named `v1` and serves the path `/samples`. */
-export const v1 = onRequest(async (req, res) => {
+/**
+ * `POST /v1/samples`: the function is named `v1` and serves the path `/samples`. At most 10
+ * instances run and a request is cut off after 30 seconds, so a flood of requests with valid
+ * tokens is bounded in cost.
+ */
+export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30 }, async (req, res) => {
   if (req.path !== "/samples") {
     res.status(404).json({ error: "not found" });
   } else if (req.method !== "POST") {
