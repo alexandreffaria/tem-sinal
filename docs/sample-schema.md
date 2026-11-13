@@ -197,6 +197,13 @@ cellular radio off for another reason and Wi-Fi calling registered, it is `POWER
 `getState()` says so and `OUT_OF_SERVICE` otherwise, since nothing public tells that apart from no
 coverage.
 
+The aggregation counts a SIM's reading towards coverage only when it says something about it. A
+reading with `serviceState` `POWER_OFF` (the radio wasn't listening) or `null` (unknown) is left
+out of every coverage figure: best and median strength, technology, emergency-only seen, and the
+sample count `n`; the sample's other SIMs still count. A reading with `cells` null counts only
+towards emergency-only seen, never towards `n` or no signal. A sample with no reading that counts
+adds nothing to its cell. The app and the upload keep every sample as recorded.
+
 AOSP sources, in `android.googlesource.com/platform`:
 
 - `frameworks/opt/telephony`, `src/java/com/android/internal/telephony/GsmCdmaPhone.java`:

@@ -169,21 +169,33 @@ function headline(cell: NonNullable<StoredSample["sims"][number]["cells"]>[numbe
 
 const monthOf = (ms: number) => new Date(ms).toISOString().slice(0, 7);
 
-/** Adds trimmed samples to [cells], keyed by H3 cell and month. Changes [cells] in place. */
+/**
+ * Adds trimmed samples to [cells], keyed by H3 cell and month. Changes [cells] in place. A SIM
+ * reading counts only when its carrier and service state are known, the radio was on
+ * (`serviceState` not `POWER_OFF`), and its cells are known or it is `EMERGENCY_ONLY`; a sample
+ * with no such reading adds nothing. Such a reading with `cells` null only sets
+ * `emergencyOnlySeen`, so `n` counts the readings whose cells are known.
+ */
 export function accumulate(cells: Record<string, CellState>, samples: StoredSample[]): void {
   for (const sample of samples) {
+    const sims = sample.sims.flatMap((sim) =>
+      sim.simPlmn && sim.serviceState && sim.serviceState !== "POWER_OFF" && (sim.cells || sim.serviceState === "EMERGENCY_ONLY")
+        ? [{ ...sim, plmn: sim.simPlmn }]
+        : [],
+    );
+    if (sims.length === 0) continue;
     const h3 = latLngToCell(sample.fix.lat, sample.fix.lon, CELL_RESOLUTION);
     const months = (cells[h3] ??= { months: {}, held: false }).months;
     const cell = (months[monthOf(sample.timeMs)] ??= { installs: [], firstMs: sample.timeMs, lastMs: sample.timeMs, carriers: {} });
     if (!cell.installs.includes(sample.installId)) cell.installs.push(sample.installId);
     cell.firstMs = Math.min(cell.firstMs, sample.timeMs);
     cell.lastMs = Math.max(cell.lastMs, sample.timeMs);
-    for (const sim of sample.sims) {
-      if (!sim.simPlmn) continue;
-      const stats = (cell.carriers[sim.simPlmn] ??= { strengths: {}, techs: {}, emergencyOnlySeen: false, n: 0 });
-      stats.n++;
+    for (const sim of sims) {
+      const stats = (cell.carriers[sim.plmn] ??= { strengths: {}, techs: {}, emergencyOnlySeen: false, n: 0 });
       if (sim.serviceState === "EMERGENCY_ONLY") stats.emergencyOnlySeen = true;
-      const registered = sim.cells?.find((c) => c.source === "CELL_INFO" && c.registered);
+      if (!sim.cells) continue;
+      stats.n++;
+      const registered = sim.cells.find((c) => c.source === "CELL_INFO" && c.registered);
       if (!registered) continue;
       stats.techs[registered.rat] = (stats.techs[registered.rat] ?? 0) + 1;
       const dbm = headline(registered);
