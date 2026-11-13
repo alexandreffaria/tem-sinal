@@ -280,6 +280,21 @@ test("two publications in one month run the batch only once", () => {
   assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
 });
 
+test("a publication without a previous batch but with public cells throws", () => {
+  const cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2025, 11, 20, 13))]);
+  const february = publish(cells, {}, null, Date.UTC(2026, 1, 1, 6));
+  assert.deepEqual(Object.keys(february.published), [h3At(PLACE.lat)]);
+  accumulate(february.cells, [sample(ALICE, PLACE.lat, Date.UTC(2026, 0, 25, 13))]);
+  assert.throws(() => publish(february.cells, february.published, null, Date.UTC(2026, 1, 15, 6)), /no previous batch/);
+});
+
+test("a publication whose previous batch is in a later month throws", () => {
+  const cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, JAN_10)]);
+  assert.throws(() => publish(cells, {}, "2026-03", Date.UTC(2026, 1, 1, 6)), /later than 2026-02/);
+});
+
 test("public cells are grouped by their region tile", () => {
   const cells: Record<string, CellState> = {};
   const far = PLACE.lat + 1;

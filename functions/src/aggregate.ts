@@ -281,7 +281,10 @@ function toPublic(h3: string, cell: Bucket): PublicCell {
  * at the end of the 1st would: a cell's age is measured at that time at the latest, and a batch
  * publishes such a cell from its samples before the batch's month only, so a lone visit shows as
  * no more than its month. Returns the new private state, with `held` set for cells that wait, the
- * new public cells and the month of the latest batch; no input is changed.
+ * new public cells and the month of the latest batch; no input is changed. Throws, publishing
+ * nothing, when [lastBatch] doesn't fit the state: null while [previous] holds cells (every
+ * publication runs a batch when there was none, so a second batch would run in its month), or a
+ * month later than [nowMs]'s (no batch would run until after it).
  */
 export function publish(
   cells: Record<string, CellState>,
@@ -290,6 +293,12 @@ export function publish(
   nowMs: number,
 ): { cells: Record<string, CellState>; published: Record<string, PublicCell>; lastBatch: string | null } {
   const month = monthOf(nowMs);
+  if (lastBatch === null && Object.keys(previous).length > 0) {
+    throw new Error("publish: no previous batch, but public cells exist");
+  }
+  if (lastBatch !== null && lastBatch > month) {
+    throw new Error(`publish: previous batch ${lastBatch} is later than ${month}`);
+  }
   const batch = lastBatch === null || month > lastBatch;
   const now = new Date(nowMs);
   const ageAtMs = Math.min(nowMs, Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 2) - 1);
