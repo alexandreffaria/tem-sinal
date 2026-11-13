@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.telephony.CellInfo
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
@@ -230,7 +231,11 @@ class LoggerService : Service() {
             simOperator = manager.simOperator,
             operatorNumeric = serviceState?.operatorNumeric,
             operatorAlphaLong = serviceState?.operatorAlphaLong,
-            serviceState = serviceState?.toServiceStatus(),
+            serviceState = serviceState?.toServiceStatus(
+                airplaneModeOn = Settings.Global.getInt(
+                    contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0,
+                ) != 0,
+            ),
             cells = cells?.mapNotNull { it.toCellReading() },
         )
     }
