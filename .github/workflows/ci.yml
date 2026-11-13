@@ -8,9 +8,10 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request supersedes its earlier run; every push to main is built.
+# A new push to a pull request cancels that pull request's earlier run. Each push to main gets
+# its own group (keyed by commit), so no main run is cancelled or replaced by a later push.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
