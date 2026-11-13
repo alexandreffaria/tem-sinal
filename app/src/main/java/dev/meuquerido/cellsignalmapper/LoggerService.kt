@@ -11,6 +11,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
 import android.os.IBinder
@@ -69,13 +70,30 @@ class LoggerService : Service() {
 
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
+        // startForeground comes first: a service started with startForegroundService crashes the
+        // app if it stops without calling it. On Android 14+ it throws SecurityException for a
+        // location service when no location permission is granted.
+        val inForeground = try {
+            startForegroundService()
+            true
+        } catch (e: SecurityException) {
+            Log.w("LoggerService", "Location not granted; cannot run in the foreground", e)
+            false
+        }
+        if (!inForeground ||
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w("LoggerService", "Fine location not granted; not logging")
+            stopSelf()
+            return
+        }
+
         stopSignalListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             listenWithTelephonyCallback()
         } else {
             listenWithPhoneStateListener()
         }
 
-        startForegroundService()
         LoggerState.serviceStarted()
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         startLocationUpdates()
@@ -179,7 +197,13 @@ class LoggerService : Service() {
                 val simMnc = simOperator.drop(3)
 
                 // Get registered cell info
-                val infoList = telephonyManager.allCellInfo
+                val infoList = try {
+                    telephonyManager.allCellInfo
+                } catch (e: SecurityException) {
+                    Log.e("LoggerService", "Location permission revoked; stopping", e)
+                    stopSelf()
+                    break
+                }
                 val registeredInfo = infoList?.find { it.isRegistered }
                 val identity = registeredInfo?.cellIdentity
 
@@ -252,7 +276,9 @@ class LoggerService : Service() {
     override fun onDestroy() {
         stopSignalListener?.invoke()
         stopSignalListener = null
-        locationClient.removeLocationUpdates(locationCallback)
+        if (::locationClient.isInitialized) {
+            locationClient.removeLocationUpdates(locationCallback)
+        }
         coroutineScope.cancel()
         LoggerState.serviceStopped()
         super.onDestroy()
