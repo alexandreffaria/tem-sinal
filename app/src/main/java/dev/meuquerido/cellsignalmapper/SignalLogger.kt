@@ -1,9 +1,11 @@
 package dev.meuquerido.cellsignalmapper
 
 import android.content.Context
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import java.io.File
+import java.io.IOException
 import java.io.RandomAccessFile
 
 object SignalLogger {
@@ -20,13 +22,26 @@ object SignalLogger {
 
     /**
      * Publishes to [LoggerState] the number of samples not uploaded yet. Counting and publishing
-     * hold the lock, so a later publish never carries an older count. Reads files: not for the main
-     * thread.
+     * hold the lock, so a later publish never carries an older count. Never throws: when the files
+     * can't be read it logs the failure and the last published count stays. Reads files: not for
+     * the main thread.
      */
     @Synchronized
     fun publishPendingCount(context: Context) {
-        LoggerState.pendingCount(pendingCount(getLogFile(context), getPendingFile(context)))
+        countPending(getLogFile(context), getPendingFile(context)).fold(LoggerState::pendingCount) {
+            Log.e("SignalLogger", "Could not count pending samples", it)
+        }
     }
+
+    /** [pendingCount], or the failure that stopped it: a file can't be read or is too large to read whole. */
+    fun countPending(log: File, pending: File): Result<Int> =
+        try {
+            Result.success(pendingCount(log, pending))
+        } catch (e: IOException) {
+            Result.failure(e)
+        } catch (e: OutOfMemoryError) {
+            Result.failure(e)
+        }
 
     /**
      * The non-blank lines in [log] and [pending]. Holds the lock that [takePending] and

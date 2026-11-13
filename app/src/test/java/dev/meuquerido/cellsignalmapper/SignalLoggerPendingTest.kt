@@ -3,6 +3,7 @@ package dev.meuquerido.cellsignalmapper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
@@ -115,5 +116,20 @@ class SignalLoggerPendingTest {
 
         assertEquals(counts.sorted(), counts)
         assertEquals(count, counts.last())
+    }
+
+    @Test
+    fun countOverAnUnreadableFileFailsWithoutThrowing() {
+        SignalLogger.appendLine(log, "sample 1")
+        pending.mkdir()
+
+        assertTrue(SignalLogger.countPending(log, pending).exceptionOrNull() is IOException)
+    }
+
+    @Test
+    fun countOfReadableFilesSucceeds() {
+        SignalLogger.appendLine(log, "sample 1")
+
+        assertEquals(1, SignalLogger.countPending(log, pending).getOrThrow())
     }
 }
