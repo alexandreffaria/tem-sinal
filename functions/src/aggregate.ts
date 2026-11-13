@@ -35,12 +35,18 @@ export type CarrierStats = {
   n: number;
 };
 
-/** A cell's private state: install ids and exact times never leave it. */
-export type CellState = {
+/** The statistics of a cell's samples, with the installs and the first and last sample times. */
+export type Bucket = {
   installs: string[];
   firstMs: number;
   lastMs: number;
   carriers: Record<string, CarrierStats>;
+};
+
+/** A cell's private state: install ids and exact times never leave it. */
+export type CellState = {
+  /** One bucket per UTC month of the samples' `timeMs`, keyed "YYYY-MM". */
+  months: Record<string, Bucket>;
   /** Seen by one install while unpublished; only a monthly batch publishes it. */
   held: boolean;
 };
@@ -57,9 +63,10 @@ export function trimLengths(random: () => number = Math.random): { startM: numbe
 }
 
 /**
- * The samples of one whole session that lie more than [startM] metres along its path from its
- * first fix and more than [endM] from its last, in `elapsedRealtimeMs` order. Mock fixes are
- * dropped first and count for neither the path nor the result.
+ * The samples of one whole session that lie more than [startM] metres from its first fix and more
+ * than [endM] from its last, both along its path and in a straight line, in `elapsedRealtimeMs`
+ * order. The straight-line cut holds where GPS jitter uses up the path while the phone sits
+ * still. Mock fixes are dropped first and count for neither the path nor the result.
  */
 export function trimSession(session: StoredSample[], startM: number, endM: number): StoredSample[] {
   const samples = session.filter((s) => !s.fix.mock).sort((a, b) => a.elapsedRealtimeMs - b.elapsedRealtimeMs);
@@ -70,9 +77,13 @@ export function trimSession(session: StoredSample[], startM: number, endM: numbe
     previous = fix;
     return total;
   });
-  return samples.filter((_, i) => {
+  const first = samples[0]?.fix;
+  const last = samples.at(-1)?.fix;
+  const from = (end: StoredSample["fix"] | undefined, fix: StoredSample["fix"]) =>
+    end ? greatCircleDistance([end.lat, end.lon], [fix.lat, fix.lon], "m") : 0;
+  return samples.filter(({ fix }, i) => {
     const metres = along[i] ?? 0;
-    return metres > startM && total - metres > endM;
+    return metres > startM && total - metres > endM && from(first, fix) > startM && from(last, fix) > endM;
   });
 }
 
@@ -83,11 +94,14 @@ function headline(cell: NonNullable<StoredSample["sims"][number]["cells"]>[numbe
   return cell.rssi ?? null;
 }
 
-/** Adds trimmed samples to [cells], keyed by H3 cell. Changes [cells] in place. */
+const monthOf = (ms: number) => new Date(ms).toISOString().slice(0, 7);
+
+/** Adds trimmed samples to [cells], keyed by H3 cell and month. Changes [cells] in place. */
 export function accumulate(cells: Record<string, CellState>, samples: StoredSample[]): void {
   for (const sample of samples) {
     const h3 = latLngToCell(sample.fix.lat, sample.fix.lon, CELL_RESOLUTION);
-    const cell = (cells[h3] ??= { installs: [], firstMs: sample.timeMs, lastMs: sample.timeMs, carriers: {}, held: false });
+    const months = (cells[h3] ??= { months: {}, held: false }).months;
+    const cell = (months[monthOf(sample.timeMs)] ??= { installs: [], firstMs: sample.timeMs, lastMs: sample.timeMs, carriers: {} });
     if (!cell.installs.includes(sample.installId)) cell.installs.push(sample.installId);
     cell.firstMs = Math.min(cell.firstMs, sample.timeMs);
     cell.lastMs = Math.max(cell.lastMs, sample.timeMs);
@@ -103,6 +117,25 @@ export function accumulate(cells: Record<string, CellState>, samples: StoredSamp
       if (dbm !== null) stats.strengths[dbm] = (stats.strengths[dbm] ?? 0) + 1;
     }
   }
+}
+
+/** The buckets combined into one; null when there are none. */
+function merge(buckets: Bucket[]): Bucket | null {
+  if (buckets.length === 0) return null;
+  const merged: Bucket = { installs: [], firstMs: Infinity, lastMs: -Infinity, carriers: {} };
+  for (const b of buckets) {
+    merged.installs = [...new Set([...merged.installs, ...b.installs])];
+    merged.firstMs = Math.min(merged.firstMs, b.firstMs);
+    merged.lastMs = Math.max(merged.lastMs, b.lastMs);
+    for (const [plmn, s] of Object.entries(b.carriers)) {
+      const m = (merged.carriers[plmn] ??= { strengths: {}, techs: {}, emergencyOnlySeen: false, n: 0 });
+      for (const [dbm, count] of Object.entries(s.strengths)) m.strengths[dbm] = (m.strengths[dbm] ?? 0) + count;
+      for (const [rat, count] of Object.entries(s.techs)) m.techs[rat] = (m.techs[rat] ?? 0) + count;
+      m.emergencyOnlySeen ||= s.emergencyOnlySeen;
+      m.n += s.n;
+    }
+  }
+  return merged;
 }
 
 /** The best and the lower median of a histogram of dBm values; null when it is empty. */
@@ -122,12 +155,12 @@ function commonTech(techs: Record<string, number>): string | null {
   return ranked[0]?.[0] ?? null;
 }
 
-function toPublic(h3: string, cell: CellState): PublicCell {
+function toPublic(h3: string, cell: Bucket): PublicCell {
   const carriers: Record<string, PublicCarrier> = {};
   for (const [plmn, s] of Object.entries(cell.carriers)) {
     carriers[plmn] = { ...bestAndMedian(s.strengths), tech: commonTech(s.techs), n: s.n, emergencyOnlySeen: s.emergencyOnlySeen };
   }
-  return { h3, carriers, lastSeen: new Date(cell.lastMs).toISOString().slice(0, 7) };
+  return { h3, carriers, lastSeen: monthOf(cell.lastMs) };
 }
 
 /**
@@ -135,7 +168,8 @@ function toPublic(h3: string, cell: CellState): PublicCell {
  * the rule of card 20261113a7do. A cell backed by two or more installs that was never held is
  * updated every day. Any other cell changes only in the batch on the 1st of the month (UTC): a
  * single-install cell once its first sample is at least [LONE_CELL_AGE_MS] old, a held cell that
- * has since gained a second install at once. Returns the new private state, with `held` set for
+ * has since gained a second install at once. A batch publishes such a cell from its samples before
+ * the batch's month only, so a lone visit shows as no more than its month. Returns the new private state, with `held` set for
  * cells that wait, and the new public cells; neither input is changed.
  */
 export function publish(
@@ -146,15 +180,21 @@ export function publish(
   const batch = new Date(nowMs).getUTCDate() === 1;
   const nextCells: Record<string, CellState> = {};
   const published: Record<string, PublicCell> = { ...previous };
+  const month = monthOf(nowMs);
   for (const [h3, cell] of Object.entries(cells)) {
-    const shared = cell.installs.length >= 2;
+    const all = merge(Object.values(cell.months));
+    if (!all) continue;
+    const shared = all.installs.length >= 2;
     let held = cell.held || (!shared && !previous[h3]);
-    let update = shared && !held;
-    if (batch && (shared || nowMs - cell.firstMs >= LONE_CELL_AGE_MS)) {
-      update = true;
-      held = false;
+    if (shared && !held) {
+      published[h3] = toPublic(h3, all);
+    } else if (batch) {
+      const before = merge(Object.entries(cell.months).filter(([m]) => m < month).map(([, b]) => b));
+      if (before && (shared || nowMs - before.firstMs >= LONE_CELL_AGE_MS)) {
+        published[h3] = toPublic(h3, before);
+        held = false;
+      }
     }
-    if (update) published[h3] = toPublic(h3, cell);
     nextCells[h3] = { ...cell, held };
   }
   return { cells: nextCells, published };

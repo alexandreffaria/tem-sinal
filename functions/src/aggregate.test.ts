@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cellToParent, latLngToCell } from "h3-js";
+import { cellToParent, greatCircleDistance, latLngToCell } from "h3-js";
 import {
   type CellState, type PublicCell, type StoredSample,
   CELL_RESOLUTION, TILE_RESOLUTION, TRIM_M, accumulate, publish, tiles, trimLengths, trimSession,
@@ -51,6 +51,20 @@ test("a session loses the samples within its trim lengths of either end", () => 
   const cells: Record<string, CellState> = {};
   accumulate(cells, kept);
   for (const end of [...walk.slice(0, 5), ...walk.slice(-3)]) assert.equal(cells[h3At(end.fix.lat)], undefined);
+});
+
+test("a phone left still at either end loses those samples despite GPS jitter", () => {
+  // Three hours still at each end, a fix every 30 s within about 10 m, and a 3 km walk between.
+  const still = (lat: number, from: number) =>
+    Array.from({ length: 360 }, (_, i) => sample(ALICE, lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + (from + i) * 30_000));
+  const end = PLACE.lat + 0.027;
+  const walk = Array.from({ length: 30 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.0009, JAN_10 + (360 + i) * 30_000));
+  const session = [...still(PLACE.lat, 0), ...walk, ...still(end, 390)];
+  const kept = trimSession(session, TRIM_M.max, TRIM_M.max);
+  assert.ok(kept.length > 0);
+  for (const { fix } of kept) {
+    for (const lat of [PLACE.lat, end]) assert.ok(greatCircleDistance([lat, PLACE.lon], [fix.lat, fix.lon], "m") > TRIM_M.max);
+  }
 });
 
 test("mock fixes are dropped and a session shorter than both trims keeps nothing", () => {
@@ -141,4 +155,28 @@ test("public cells are grouped by their region tile", () => {
   const byTile = tiles(published);
   assert.deepEqual(byTile[cellToParent(h3At(PLACE.lat), TILE_RESOLUTION)]?.map((c) => c.h3), [h3At(PLACE.lat)]);
   assert.deepEqual(byTile[cellToParent(h3At(far), TILE_RESOLUTION)]?.map((c) => c.h3), [h3At(far)]);
+});
+
+test("a batch leaves out a lone install's samples from the batch's own month", () => {
+  let cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, JAN_10)]);
+  let published: Record<string, PublicCell>;
+  ({ cells, published } = publish(cells, {}, Date.UTC(2026, 2, 1, 6)));
+  const march = published;
+  accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2026, 3, 1, 2))]);
+  ({ cells, published } = publish(cells, published, Date.UTC(2026, 3, 1, 6)));
+  assert.deepEqual(published, march);
+  ({ published } = publish(cells, published, Date.UTC(2026, 4, 1, 6)));
+  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.n, 2);
+  assert.equal(published[h3At(PLACE.lat)]?.lastSeen, "2026-04");
+});
+
+test("a lone first visit on the 1st waits for the next batch", () => {
+  let cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2026, 2, 1, 2))]);
+  let published: Record<string, PublicCell>;
+  ({ cells, published } = publish(cells, {}, Date.UTC(2026, 2, 1, 6)));
+  assert.deepEqual(published, {});
+  ({ published } = publish(cells, published, Date.UTC(2026, 3, 1, 6)));
+  assert.equal(published[h3At(PLACE.lat)]?.lastSeen, "2026-03");
 });
