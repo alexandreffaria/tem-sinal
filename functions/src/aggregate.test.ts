@@ -280,6 +280,20 @@ test("two publications in one month run the batch only once", () => {
   assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
 });
 
+test("the batch runs across a year boundary", () => {
+  let cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2025, 10, 25, 13))]);
+  let published: Record<string, PublicCell>;
+  let lastBatch: string | null = null;
+  ({ cells, published, lastBatch } = publish(cells, {}, lastBatch, Date.UTC(2025, 11, 1, 6)));
+  assert.equal(lastBatch, "2025-12");
+  assert.deepEqual(published, {});
+  ({ cells, published, lastBatch } = publish(cells, published, lastBatch, Date.UTC(2026, 0, 1, 6)));
+  assert.equal(lastBatch, "2026-01");
+  assert.deepEqual(Object.keys(published), [h3At(PLACE.lat)]);
+  assert.throws(() => publish(cells, published, "2026-01", Date.UTC(2025, 11, 15, 6)), /later than 2025-12/);
+});
+
 test("a publication without a previous batch but with public cells throws", () => {
   const cells: Record<string, CellState> = {};
   accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2025, 11, 20, 13))]);
