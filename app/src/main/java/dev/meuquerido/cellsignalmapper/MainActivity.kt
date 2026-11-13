@@ -155,8 +155,7 @@ class MainActivity : ComponentActivity() {
                             },
                             location = loggerState.location,
                             signalStrength = loggerState.signalStrength,
-                            pendingPoints = pendingPoints,
-                            debugText = ""
+                            pendingPoints = pendingPoints
                         )
                     }
                 }
