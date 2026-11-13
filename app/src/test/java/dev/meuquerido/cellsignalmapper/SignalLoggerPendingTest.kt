@@ -1,5 +1,6 @@
 package dev.meuquerido.cellsignalmapper
 
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -10,6 +11,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
 
 class SignalLoggerPendingTest {
@@ -18,6 +20,30 @@ class SignalLoggerPendingTest {
 
     private val log: File get() = File(dir.root, "log.json")
     private val pending: File get() = File(dir.root, "pending.json")
+    private val rejected: File get() = File(dir.root, "rejected.json")
+    private val gson = Gson()
+
+    private fun sample(id: String) = gson.toJson(
+        SignalLogEntry(
+            id = id,
+            timestamp = 1_000L,
+            latitude = null,
+            longitude = null,
+            signalDbm = -90,
+            carrier = "Test Carrier",
+            mcc = "001",
+            mnc = "01",
+            cellInfo = "test"
+        )
+    )
+
+    /** The non-blank lines in the log and the pending file, read from disk. */
+    private fun fullCount(): Int =
+        listOf(log, pending).filter { it.exists() }.sumOf { f -> f.readLines().count { it.isNotBlank() } }
+
+    private fun assertCountMatchesFiles() = synchronized(SignalLogger) {
+        assertEquals(fullCount(), SignalLogger.pendingCount(log, pending))
+    }
 
     @Test
     fun samplesAppendedDuringAnUploadAreNotDeleted() {
@@ -131,5 +157,70 @@ class SignalLoggerPendingTest {
         SignalLogger.appendLine(log, "sample 1")
 
         assertEquals(1, SignalLogger.countPending(log, pending).getOrThrow())
+    }
+
+    @Test
+    fun countAfterAnAppendDoesNotRereadTheLog() {
+        SignalLogger.appendLine(log, "sample 1")
+        assertEquals(1, SignalLogger.pendingCount(log, pending))
+        log.appendText("written behind the logger's back\n")
+        SignalLogger.appendLine(log, "sample 2")
+
+        assertEquals(2, SignalLogger.pendingCount(log, pending))
+    }
+
+    @Test
+    fun keptCountMatchesTheFilesThroughUploads() {
+        log.writeText("torn line without newline")
+        assertCountMatchesFiles()
+        SignalLogger.appendLine(log, sample("a"))
+        SignalLogger.appendLine(log, "")
+        SignalLogger.appendLine(log, "not a sample")
+        assertCountMatchesFiles()
+
+        SignalLogger.takePending(log, pending)
+        assertCountMatchesFiles()
+        SignalLogger.appendLine(log, sample("b"))
+        assertThrows(TimeoutException::class.java) {
+            uploadPending(pending, rejected, gson) { throw TimeoutException() }
+        }
+        assertCountMatchesFiles()
+
+        SignalLogger.takePending(log, pending)
+        SignalLogger.appendLine(log, sample("c"))
+        uploadPending(pending, rejected, gson) {}
+        assertCountMatchesFiles()
+        assertEquals(1, SignalLogger.pendingCount(log, pending))
+    }
+
+    @Test
+    fun keptCountMatchesTheFilesWhileLoggingRunsDuringUploads() {
+        assertCountMatchesFiles()
+        val writer = thread { repeat(2000) { SignalLogger.appendLine(log, sample("s$it")) } }
+        var attempt = 0
+        while (writer.isAlive) {
+            SignalLogger.takePending(log, pending)?.let { toUpload ->
+                if (attempt++ % 2 == 0) {
+                    runCatching { uploadPending(toUpload, rejected, gson) { throw TimeoutException() } }
+                } else {
+                    uploadPending(toUpload, rejected, gson) {}
+                }
+            }
+            assertCountMatchesFiles()
+        }
+        writer.join()
+
+        assertCountMatchesFiles()
+    }
+
+    @Test
+    fun failedMoveLeavesTheCountMatchingTheFiles() {
+        SignalLogger.appendLine(log, "sample 1")
+        assertCountMatchesFiles()
+        pending.mkdir()
+        assertThrows(IOException::class.java) { SignalLogger.takePending(log, pending) }
+        pending.delete()
+
+        assertCountMatchesFiles()
     }
 }
