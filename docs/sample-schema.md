@@ -9,10 +9,9 @@ otherwise.
 ## Rules that hold for every field
 
 - **One sample per tick that has a location fix.** No fix, no sample. A tick with a fix and no
-  signal is a sample: "no signal here" is the most useful fact for planning. A tick repeats the
-  last sample logged, and is skipped, when the fix moved at most 10 m from that sample's fix and
-  every SIM has the same `serviceState` and the same registered cells (technology and identity)
-  at the same headline strength.
+  signal is a sample: "no signal here" is the most useful fact for planning. Ticks start every
+  5 s, and no tick is skipped as a repeat of the last, so in a session each sample stands for 5 s
+  whatever the service state.
 - **No active subscription, no sample.** Every sample has at least one entry in `sims`, because
   every carrier fact is tied to a subscription.
 - **Unavailable is `null`, never a sentinel.** Android reports a missing int as
@@ -361,8 +360,9 @@ the SIM's PLMN, and published under the install-count rules of card `20261113a7d
 | `emergencyN` | the `EMERGENCY_ONLY` readings, whether their cells are known or not |
 | `noServiceN` | the `OUT_OF_SERVICE` readings whose cells are known |
 
-The three counts don't overlap: each counted reading is in exactly one of them, and their sum is
-the number of readings counted for the carrier in the cell. A carrier missing from `carriers` has
+Each count is a number of 5 s ticks (see **Rules that hold for every field**), so the counts
+compare time spent in each state. The three counts don't overlap: each counted reading is in
+exactly one of them, and their sum is the number of readings counted for the carrier in the cell. A carrier missing from `carriers` has
 no data in that cell. This format states what was measured; how the map labels a carrier from the
 counts is the map's rule.
 

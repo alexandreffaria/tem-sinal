@@ -6,43 +6,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * What a logging tick did. [SUCCESS]: it logged a sample, with or without signal. [DUPLICATE]: it
- * skipped its sample as a repeat of the last one logged. [BAD]: it had no fresh fix or no active
- * subscription, so it had nothing to log.
+ * What a logging tick did. [SUCCESS]: it logged a sample, with or without signal. [BAD]: it had no
+ * fresh fix or no active subscription, so it had nothing to log.
  */
-enum class PingResult { SUCCESS, DUPLICATE, BAD }
+enum class PingResult { SUCCESS, BAD }
 
-/** How far, in metres, the fix must move from the last sample logged for a tick to be new. */
-const val MIN_MOVE_M = 10f
+/** How often, in milliseconds, a logging tick starts. */
+const val TICK_INTERVAL_MS = 5_000L
 
 /**
- * The [PingResult] of a tick that built [sample] (null without a fresh fix or an active
- * subscription), given [previous], the last sample logged, and [distanceM] between two fixes.
- * A sample repeats [previous] when the phone moved at most [MIN_MOVE_M] and every SIM has the same
- * service state and the same registered cells at the same headline strength. Comparing service
- * state keeps an emergency-only spot from being skipped as a repeat of an in-service sample at the
- * same place.
+ * How long to wait after a tick that started at [tickStartMs] and ended at [nowMs] so the next
+ * tick starts [TICK_INTERVAL_MS] after it started; 0 when the tick took longer than that. Both
+ * times are on the elapsed-realtime clock, which never jumps.
  */
-fun tickResult(
-    sample: Sample?,
-    previous: Sample?,
-    distanceM: (Fix, Fix) -> Float,
-): PingResult = when {
-    sample == null -> PingResult.BAD
-    previous != null && distanceM(sample.fix, previous.fix) <= MIN_MOVE_M &&
-        sample.sims.map { it.coverage() } == previous.sims.map { it.coverage() } ->
-        PingResult.DUPLICATE
-    else -> PingResult.SUCCESS
-}
-
-/** What [tickResult] compares for one SIM. */
-private fun SimReading.coverage() = Triple(
-    slot,
-    serviceState,
-    cells?.filter { it.registered }?.map {
-        listOf(it.rat, it.arfcn, it.pci, it.plmn, it.ci, it.tac, it.headlineDbm())
-    },
-)
+fun delayUntilNextTickMs(tickStartMs: Long, nowMs: Long): Long =
+    (TICK_INTERVAL_MS - (nowMs - tickStartMs)).coerceAtLeast(0L)
 
 /** Each SIM's service state in plain words, one line per SIM, such as "SIM 1: No service". */
 fun serviceText(sims: List<SimReading>): String =
