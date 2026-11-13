@@ -1,0 +1,358 @@
+# Sample schema, version 2
+
+What the phone records on each logging tick, field by field, and where each value comes from on
+Android. The Kotlin types are in `app/src/main/java/dev/meuquerido/cellsignalmapper/Sample.kt`;
+their property names are the wire names, in the log file on the phone, in JSON sent to the server
+and in Firestore. `minSdk` is 30 (Android 11), so every API below is available unless a row says
+otherwise.
+
+## Rules that hold for every field
+
+- **One sample per tick that has a location fix.** No fix, no sample (#12). A tick with a fix
+  and no signal is a sample: "no signal here" is the most useful fact for planning.
+- **No active subscription, no sample.** Every sample has at least one entry in `sims`, because
+  every carrier fact is tied to a subscription.
+- **Unavailable is `null`, never a sentinel.** Android reports a missing int as
+  `CellInfo.UNAVAILABLE` (`Integer.MAX_VALUE`, API 29), a missing long as
+  `CellInfo.UNAVAILABLE_LONG` (`Long.MAX_VALUE`, API 29), a missing string as `null` or `""`, and
+  some values only behind a `has...()` check. All of these become `null`. So does any value outside
+  the range in the tables below: phones do report out-of-range values (`0`, `-1`, all bits set).
+  `-999`, `99` and `Integer.MAX_VALUE` never appear in a sample.
+- **A field that is `null` may be left out.** Gson omits nulls; Firestore stores them. Readers treat
+  a missing field and `null` alike.
+- **Every change to this schema is a new `schemaVersion`.** That includes adding a nullable field
+  or an enum value, because the server rejects fields and values it doesn't know (#15).
+- **Enums are written as their names** (`"LTE"`, `"EMERGENCY_ONLY"`). No property name starts with
+  `is`, so Gson (which uses field names) and Firestore (which uses getter names) write the same
+  name.
+
+## Sample
+
+| Field | Type | Unit | Null | Source (API level) |
+|---|---|---|---|---|
+| `schemaVersion` | Int | | never | the constant `SAMPLE_SCHEMA_VERSION`, `2` |
+| `id` | String | | never | `java.util.UUID.randomUUID()`, a random (version 4) UUID, new for every sample |
+| `installId` | String | | never | the install id, see below |
+| `sessionId` | String | | never | the session id, see below |
+| `timeMs` | Long | ms since the Unix epoch, UTC | never | `System.currentTimeMillis()` when the sample was built |
+| `elapsedRealtimeMs` | Long | ms since boot | never | `SystemClock.elapsedRealtime()` (1) when the sample was built |
+| `fix` | Fix | | never | see **Fix** |
+| `sims` | List of SimReading | | never, at least one | one per active subscription, see **SimReading** |
+
+The random `id` replaces the old id derived from carrier, position and dBm, which made two people's
+identical readings overwrite each other. The server accepts a sample id once (#15), so uploading
+the same sample twice is harmless.
+
+### Install id
+
+A pseudonymous id for this installation of the app, so the server can count how many installs back
+a map cell (the lone-contributor rule of card `20261113a7do`) and throttle uploads per install
+(#15).
+
+- **Generated** on first use as `UUID.randomUUID().toString()` (a version 4 UUID from a
+  cryptographically strong generator), the way Android's identifier guide recommends for an
+  app-scoped id ("Use a Firebase installation ID (FID) or a privately stored GUID").
+- **Stored** in a file in `Context.getNoBackupFilesDir()` (API 21). The app has `allowBackup`
+  on, and Auto Backup copies `filesDir` and shared preferences to the user's Google account; a
+  restored id would make a second phone count as the same install. Files in `noBackupFilesDir` are
+  never backed up.
+- **Lifetime:** until the app's data is cleared or the app is uninstalled. It is never rotated:
+  a new id every month would make one person count as several installs and publish their solo cells
+  as if two people had logged them, defeating the monthly rule.
+- **Not the Android ID** (`Settings.Secure.ANDROID_ID`). On Android 8 and later it is "unique to
+  each combination of app-signing key, user, and device" and changes only "if a factory reset is
+  performed on the device or if an APK signing key changes". It survives uninstalling and clearing
+  data, so the user has no way to break the link between their old and new samples short of a
+  factory reset. The same goes for anything else tied to the hardware or the SIM (IMEI, IMSI,
+  ICCID, phone number, MAC), which an app can't read anyway, and for the Advertising ID, which Play
+  allows only for ads. The Firebase installation ID would also work, but it is shared with every
+  Firebase SDK in the app; our own id keeps the link between samples under our control.
+
+### Session id
+
+A random UUID (version 4) made when `LoggerService` starts (`onCreate`) and kept in memory only. It
+ends when the service stops; a service the system restarts gets a new one. Every sample of one
+logging session shares it, so the aggregation job can drop the randomised start and end of each
+session before aggregating (card `20261113a7do`). A session can be uploaded in several batches and
+reach the server days late, so the job treats a session as finished only once it has had no new
+sample for a while; that is the job's rule to set (#16).
+
+## Fix
+
+From the `android.location.Location` that the fused location provider delivered, the most recent
+one no older than `MAX_FIX_AGE_MILLIS` (`LocationFix.kt`). Permission: `ACCESS_FINE_LOCATION`, with
+the service's foreground type `location`.
+
+| Field | Type | Unit | Null | Source (API level) |
+|---|---|---|---|---|
+| `lat` | Double | degrees, WGS84 | never | `getLatitude()` (1), rounded to 5 decimals (about 1.1 m) by `roundCoordinate` |
+| `lon` | Double | degrees, WGS84 | never | `getLongitude()` (1), rounded the same way |
+| `accuracyM` | Float | m, 68 % radius | when `hasAccuracy()` (1) is false | `getAccuracy()` (1) |
+| `altitudeM` | Double | m above the WGS84 ellipsoid | when `hasAltitude()` (1) is false | `getAltitude()` (1) |
+| `verticalAccuracyM` | Float | m, 68 % | when `hasVerticalAccuracy()` (26) is false | `getVerticalAccuracyMeters()` (26) |
+| `timeMs` | Long | ms since the Unix epoch, UTC | never | `getTime()` (1) |
+| `elapsedRealtimeMs` | Long | ms since boot | never | `getElapsedRealtimeNanos()` (17) / 1 000 000 |
+| `mock` | Boolean | | never | `isFromMockProvider()` (18, deprecated in 31) on API 30, `isMock()` (31) on 31+ |
+
+Altitude is ellipsoidal, not above sea level; Brazil's geoid separation is up to about 30 m, so the
+server converts with a geoid model if it ever shows heights. `Location.getMslAltitudeMeters()`
+exists only from API 34, so it isn't recorded. `getTime()` comes from the satellite clock for GPS
+fixes but may be the phone's clock for others, and the phone's clock can jump; order samples within
+a session by `elapsedRealtimeMs`, never by `timeMs`. `mock` lets the server drop fixes from a mock
+location app.
+
+## SimReading
+
+One per active subscription in `SubscriptionManager.getActiveSubscriptionInfoList()` (22,
+`READ_PHONE_STATE`), read through `TelephonyManager.createForSubscriptionId(subId)` (24), which
+pins every call below to that subscription.
+
+| Field | Type | Unit | Null | Source (API level, permission) |
+|---|---|---|---|---|
+| `slot` | Int | 0-based SIM slot | when `INVALID_SIM_SLOT_INDEX` | `SubscriptionInfo.getSimSlotIndex()` (22, `READ_PHONE_STATE`) |
+| `simPlmn` | String | MCC + MNC, 5 or 6 digits | when the SIM isn't ready (`""`) | `TelephonyManager.getSimOperator()` (1, none) |
+| `registeredPlmn` | String | MCC + MNC | when not registered | `ServiceState.getOperatorNumeric()` (1, needs a location permission or it is `null`) |
+| `operatorName` | String | | when not registered | `ServiceState.getOperatorAlphaLong()` (1, same) |
+| `serviceState` | ServiceStatus | | when `getServiceState()` returns `null` | see **Service state** |
+| `overrideNetworkType` | OverrideNetworkType | | until the first display info arrives | see **5G NSA** |
+| `cells` | List of CellReading | | when the modem didn't answer the request (timeout or `onError`) | `requestCellInfoUpdate()` (29, `ACCESS_FINE_LOCATION`), see **CellReading** |
+
+`simPlmn` is the carrier the SIM belongs to; `registeredPlmn` is the network it is using, which
+differs when roaming (national roaming and RAN sharing are common in rural Brazil). Carrier names
+are mapped from PLMNs on the server; the app keeps no name table. `cells` empty means the modem
+answered and saw no cell; `cells` null means nothing is known, which the server must not read as
+"no signal".
+
+The subscription id (`SubscriptionInfo.getSubscriptionId()`), the SIM's display name (which the
+user can edit), the phone number and the ICCID are never recorded.
+
+### Service state
+
+`TelephonyManager.getServiceState()` (26) on the subscription's `TelephonyManager`, read on every
+tick. Permission: `READ_PHONE_STATE` and `ACCESS_COARSE_LOCATION` (fine includes coarse). It can
+return `null` when the subscription is inactive; then `serviceState` is `null`. The same object
+also arrives through a listener, `PhoneStateListener.LISTEN_SERVICE_STATE` on API 30 and
+`TelephonyCallback.ServiceStateListener` (31) on 31+, but reading it each tick needs no listener on
+any level.
+
+`ServiceState.getState()` (1) is the voice registration state. Android's public constants include
+`STATE_EMERGENCY_ONLY`, but AOSP reports a phone that can only make emergency calls as
+`STATE_OUT_OF_SERVICE` and keeps the emergency flag in a hidden field. From API 30 the public way
+to see it is `ServiceState.getNetworkRegistrationInfoList()` (30): AOSP's cellular network service
+lists only `NetworkRegistrationInfo.SERVICE_TYPE_EMERGENCY` (30) in `getAvailableServices()` (30)
+when the phone is in emergency-only state. So `serviceState` is, in this order:
+
+| Value | When |
+|---|---|
+| `POWER_OFF` | `getState() == STATE_POWER_OFF` (the radio is off, airplane mode) |
+| `IN_SERVICE` | `getState() == STATE_IN_SERVICE`, or any cellular (`TRANSPORT_TYPE_WWAN`) `NetworkRegistrationInfo` is registered: `isRegistered()` (30, deprecated in 34) on API 30-33, `isNetworkRegistered()` (34) on 34+ |
+| `EMERGENCY_ONLY` | `getState() == STATE_EMERGENCY_ONLY`, or any cellular `NetworkRegistrationInfo` lists `SERVICE_TYPE_EMERGENCY` in `getAvailableServices()` |
+| `OUT_OF_SERVICE` | otherwise |
+
+The emergency-only rule relies on AOSP behaviour that the reference docs don't state, and needs a
+check on a real phone with a SIM whose carrier has no coverage (#47).
+
+### 5G NSA
+
+In 5G NSA (EN-DC), the phone is registered on an LTE cell (the anchor) and adds an NR cell as a
+secondary for data. A sample records that as:
+
+1. `overrideNetworkType` on the SimReading, from `TelephonyDisplayInfo.getOverrideNetworkType()`
+   (30): `NONE`, `LTE_CA`, `LTE_ADVANCED_PRO`, `NR_NSA` or `NR_ADVANCED`. API 30 has no getter, so
+   the logger keeps the latest value from a listener per subscription:
+   `PhoneStateListener.LISTEN_DISPLAY_INFO_CHANGED` (30, deprecated in 31, needs `READ_PHONE_STATE`
+   on Android 11) on API 30, `TelephonyCallback.DisplayInfoListener` (31, no permission) on 31+.
+   `OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE` (30, deprecated in 31 in favour of `NR_ADVANCED`, 31) is
+   written as `NR_ADVANCED`. This is the value Android uses for the "5G" icon, which the docs call
+   "for market branding or visualization purposes only"; the cells below are the measurement.
+2. The LTE anchor as a CellReading with `rat` `LTE`, `registered` true and `connection`
+   `PRIMARY_SERVING`.
+3. The NR leg as a CellReading with `rat` `NR` and `connection` `SECONDARY_SERVING`, from the
+   `CellInfoNr` in the `requestCellInfoUpdate()` result when there is one (`source` `CELL_INFO`;
+   its identity is often only ARFCN and PCI). Many phones report no `CellInfoNr` in NSA; then, when
+   `TelephonyManager.getSignalStrength()` (28, no permission) on that subscription has a
+   `CellSignalStrengthNr` (29) with any SS value, the NR leg is a CellReading with `source`
+   `SIGNAL_STRENGTH`, `registered` false, every identity field null and only the SS values.
+
+5G SA has no anchor: the NR cell itself is `registered`, `PRIMARY_SERVING`, from `CELL_INFO`.
+
+## CellReading
+
+One per cell in the `requestCellInfoUpdate()` result for the subscription (registered, serving and
+neighbour cells), plus the NSA leg above. `requestCellInfoUpdate()` (29) asks the modem for fresh
+values "from the current subscription"; `getAllCellInfo()` (17) returns a cached list from every
+radio at once, which can't be told apart per SIM, so it isn't used. Both need
+`ACCESS_FINE_LOCATION`. Cells of other technologies (`CellInfoCdma`, deprecated in 36, and
+`CellInfoTdscdma`) are not recorded; neither is used in Brazil.
+
+| Field | Type | Unit | Null | Source (API level) |
+|---|---|---|---|---|
+| `source` | CellSource | | never | `CELL_INFO` or `SIGNAL_STRENGTH` (see **5G NSA**) |
+| `rat` | Rat | | never | the `CellInfo` subclass: `CellInfoGsm` (17) `GSM`, `CellInfoWcdma` (18) `WCDMA`, `CellInfoLte` (17) `LTE`, `CellInfoNr` (29) `NR` |
+| `registered` | Boolean | | never | `CellInfo.isRegistered()` (17); false for `SIGNAL_STRENGTH` |
+| `connection` | CellConnection | | for `CONNECTION_UNKNOWN` | `CellInfo.getCellConnectionStatus()` (28): `PRIMARY_SERVING`, `SECONDARY_SERVING`, `NONE` |
+| `timestampMs` | Long | ms since boot | for `SIGNAL_STRENGTH` | `CellInfo.getTimestampMillis()` (30), when the modem measured it |
+| `arfcn` | Int | channel number | when unavailable | GSM `getArfcn()` (24) 0..65535; WCDMA `getUarfcn()` (24) 0..65535; LTE `getEarfcn()` (24) 0..262143; NR `getNrarfcn()` (29) 0..3279165 |
+| `pci` | Int | | when unavailable | GSM `getBsic()` (24) 0..63; WCDMA `getPsc()` (18) 0..511; LTE `getPci()` (17) 0..503; NR `getPci()` (29) 0..1007 |
+| `plmn` | String | MCC + MNC | when either is unknown (usual for neighbours) | `getMccString()` + `getMncString()` of the `CellIdentity` (28; 29 for NR) |
+| `ci` | Long | | when unavailable | GSM `getCid()` (17) 0..65535; WCDMA `getCid()` (18) 0..268435455; LTE `getCi()` (17) 0..268435455; NR `getNci()` (29) 0..68719476735 (`UNAVAILABLE_LONG` when unknown) |
+| `tac` | Int | | when unavailable | GSM and WCDMA `getLac()` (17, 18) 0..65535; LTE `getTac()` (17) 0..65535; NR `getTac()` (29) 0..16777215 |
+| `rsrp` | Int | dBm | when unavailable, or not LTE/NR | LTE `CellSignalStrengthLte.getRsrp()` (26) -140..-43; NR `CellSignalStrengthNr.getSsRsrp()` (29) -156..-31 |
+| `rsrq` | Int | dB | same | LTE `getRsrq()` (26) -34..3 (the reference page gives no range; this is 3GPP TS 36.133's extended range); NR `getSsRsrq()` (29) -43..20 |
+| `sinr` | Int | dB | same | LTE `getRssnr()` (26) -20..30; NR `getSsSinr()` (29) -23..40 |
+| `rssi` | Int | dBm | when unavailable, or not GSM/LTE | GSM `CellSignalStrengthGsm.getRssi()` (30) -113..-51; LTE `getRssi()` (29) -113..-51 |
+| `rscp` | Int | dBm | when unavailable, or not WCDMA | `CellSignalStrengthWcdma.getDbm()` (18), the RSCP, -120..-24 |
+| `ecno` | Int | dB | same | `CellSignalStrengthWcdma.getEcNo()` (30) -24..1 |
+
+Strengths come from each cell's own `CellInfo.getCellSignalStrength()` (30), never from
+`SignalStrength.getCellSignalStrengths().firstOrNull()`, which on NSA is often the LTE anchor and
+isn't tied to the logged cell. The NR CSI values (`getCsiRsrp()` etc.) and timing advance are not
+recorded: SS values are measured on every NR cell, and timing advance gives the distance to the
+tower, which says more about the person than about coverage.
+
+The headline strength for a cell, for the map's best and median, is `rsrp` for LTE and NR, `rscp`
+for WCDMA and `rssi` for GSM.
+
+## Permissions
+
+| Permission | Needed for |
+|---|---|
+| `ACCESS_FINE_LOCATION` | the fix; `requestCellInfoUpdate()` (it throws `SecurityException` with only approximate location, which Android 12+ lets the user pick); cell identity inside `ServiceState` |
+| `ACCESS_COARSE_LOCATION` (held with fine) | `getServiceState()`; `registeredPlmn` and `operatorName` are `null` without a location permission |
+| `READ_PHONE_STATE` | `getActiveSubscriptionInfoList()`, `getSimSlotIndex()`, `getServiceState()`, the display info listener on API 30 |
+| none | `getSimOperator()`, `getSignalStrength()`, the display info listener on 31+, the install and session ids |
+
+The manifest already declares all of them. The logger checks them before it starts (#9).
+
+## Privacy
+
+Card `20261113a7do` fixes what the public map shows: H3 resolution 11 cells with, per carrier, the
+best and median strength, the network type, whether emergency-only service was seen, the sample
+count and the month last seen. Raw samples stay private; session starts and ends are dropped
+before aggregation; single-install cells are published in monthly batches.
+
+**Personal data.** A sample as a whole is personal data under LGPD art. 5 I: an exact position and
+time, linked by `installId` and `sessionId` to every other sample from the same person, is a trace
+of where they live and go. Pseudonymous ids are still personal data, since they link a person's
+samples. The fields that make it so are `fix` (position and both times), the sample's `timeMs` and
+`elapsedRealtimeMs`, every cell's `timestampMs`, `installId`, `sessionId`, and the cell identities
+(`ci`, `tac`, `pci` with `arfcn`), which locate a phone to a tower and a sector even without a fix.
+Carrier facts (`simPlmn`, `registeredPlmn`, `serviceState`, strengths) are not personal on their
+own but are part of the sample.
+
+**Never read, so never leaves the phone:** IMEI, IMSI, ICCID, phone number, serial number, MAC,
+Android ID, Advertising ID, the subscription id, the SIM's display name, the user's accounts.
+`elapsedRealtimeMs` is time since boot; it leaves the phone only inside samples, for ordering.
+
+**On the phone,** samples sit in app-private storage until uploaded; a failed upload keeps them.
+They are never printed to the log, and fixtures and tests use made-up places.
+
+**The server must never publish** a raw sample or any field of one: no coordinates, no
+`installId`, `sessionId` or sample `id`, no exact time (`timeMs`, `elapsedRealtimeMs`,
+`timestampMs`; the public files carry the month only), no cell identity. The install id is used
+only to count distinct installs per map cell and to throttle uploads, and stays on the private
+side. Public files hold only the aggregates the card lists.
+
+How long the server keeps raw samples is the owner's decision (card `20261113bmjv`).
+
+## Example
+
+A made-up sample (an invented place, not a real reading) from a dual-SIM phone: SIM 1 on Vivo in
+5G NSA with no NR cell info, SIM 2 out of service. Nulls are left out, as Gson writes it.
+
+```json
+{
+  "schemaVersion": 2,
+  "id": "6f1c0a52-3b7e-4c1d-9a8e-2d5b7c9e4f10",
+  "installId": "0b9d2e44-8f3a-4c6b-b1d7-5e2a9c8f7d36",
+  "sessionId": "c3a7e915-2d4b-4f8a-9e6c-1b0d5a7f3e28",
+  "timeMs": 1767261600000,
+  "elapsedRealtimeMs": 86400000,
+  "fix": {
+    "lat": -15.5, "lon": -47.5, "accuracyM": 4.5, "altitudeM": 1100.0,
+    "verticalAccuracyM": 6.0, "timeMs": 1767261599000, "elapsedRealtimeMs": 86399000, "mock": false
+  },
+  "sims": [
+    {
+      "slot": 0, "simPlmn": "72406", "registeredPlmn": "72406", "operatorName": "VIVO",
+      "serviceState": "IN_SERVICE", "overrideNetworkType": "NR_NSA",
+      "cells": [
+        {"source": "CELL_INFO", "rat": "LTE", "registered": true, "connection": "PRIMARY_SERVING",
+         "timestampMs": 86399500, "arfcn": 1650, "pci": 101, "plmn": "72406", "ci": 12345678,
+         "tac": 4321, "rsrp": -98, "rsrq": -11, "sinr": 7, "rssi": -67},
+        {"source": "CELL_INFO", "rat": "LTE", "registered": false, "connection": "NONE",
+         "timestampMs": 86399500, "arfcn": 1650, "pci": 205, "rsrp": -109, "rsrq": -15},
+        {"source": "SIGNAL_STRENGTH", "rat": "NR", "registered": false,
+         "connection": "SECONDARY_SERVING", "rsrp": -102, "rsrq": -12, "sinr": 4}
+      ]
+    },
+    {"slot": 1, "simPlmn": "72402", "serviceState": "OUT_OF_SERVICE", "cells": []}
+  ]
+}
+```
+
+## Sources
+
+Android reference, developer.android.com:
+
+- [CellInfo](https://developer.android.com/reference/android/telephony/CellInfo): `UNAVAILABLE`
+  "indicates that the integer field is unreported" (29); `isRegistered()` (17);
+  `getCellConnectionStatus()` (28); `getTimestampMillis()` (30), "in the elapsedRealtime() time
+  base"; `getCellIdentity()`, `getCellSignalStrength()` (30).
+- [CellIdentityLte](https://developer.android.com/reference/android/telephony/CellIdentityLte),
+  [CellIdentityNr](https://developer.android.com/reference/android/telephony/CellIdentityNr),
+  [CellIdentityGsm](https://developer.android.com/reference/android/telephony/CellIdentityGsm),
+  [CellIdentityWcdma](https://developer.android.com/reference/android/telephony/CellIdentityWcdma):
+  ranges and levels in the CellReading table; `getNci()` returns "The 36-bit NR Cell Identity in
+  range [0, 68719476735] or UNAVAILABLE_LONG if unknown".
+- [CellSignalStrengthLte](https://developer.android.com/reference/android/telephony/CellSignalStrengthLte):
+  `getRsrp()` "Range: -140 dBm to -43 dBm", `getRssnr()` "Range: -20 dB to +30 dB" (26),
+  `getRssi()` "[-113, -51]" (29).
+- [CellSignalStrengthNr](https://developer.android.com/reference/android/telephony/CellSignalStrengthNr):
+  `getSsRsrp()` "-156 dBm to -31 dBm", `getSsRsrq()` "-43 dB to 20 dB", `getSsSinr()` "-23 dB to
+  40 dB" (29).
+- [CellSignalStrengthGsm](https://developer.android.com/reference/android/telephony/CellSignalStrengthGsm):
+  `getRssi()` "the RSSI in dBm (-113, -51) or UNAVAILABLE" (30).
+- [CellSignalStrengthWcdma](https://developer.android.com/reference/android/telephony/CellSignalStrengthWcdma):
+  `getDbm()` "Get the RSCP as dBm value -120..-24dBm" (18); `getEcNo()` "[-24, 1]" (30).
+- [TelephonyManager](https://developer.android.com/reference/android/telephony/TelephonyManager):
+  `requestCellInfoUpdate()` (29) "Requests all available cell information from the current
+  subscription", requires `ACCESS_FINE_LOCATION`; `getAllCellInfo()` (17) "from all radios on the
+  device"; `getServiceState()` (26) requires `READ_PHONE_STATE` "and ACCESS_COARSE_LOCATION";
+  `getSignalStrength()` (28); `getSimOperator()` (1) "5 or 6 decimal digits";
+  `createForSubscriptionId()` (24).
+- [ServiceState](https://developer.android.com/reference/android/telephony/ServiceState):
+  `STATE_*` constants (1); `getOperatorNumeric()`, `getOperatorAlphaLong()` "return null if the
+  caller does not hold neither ACCESS_FINE_LOCATION nor ACCESS_COARSE_LOCATION";
+  `getNetworkRegistrationInfoList()` (30).
+- [NetworkRegistrationInfo](https://developer.android.com/reference/android/telephony/NetworkRegistrationInfo):
+  class (30); `getAvailableServices()`, `SERVICE_TYPE_EMERGENCY` (30); `isRegistered()` (30,
+  deprecated in 34); `isNetworkRegistered()` (34).
+- [TelephonyCallback.ServiceStateListener](https://developer.android.com/reference/android/telephony/TelephonyCallback.ServiceStateListener)
+  (31); [TelephonyCallback.DisplayInfoListener](https://developer.android.com/reference/android/telephony/TelephonyCallback.DisplayInfoListener)
+  (31); [PhoneStateListener](https://developer.android.com/reference/android/telephony/PhoneStateListener):
+  `LISTEN_DISPLAY_INFO_CHANGED` (30, deprecated in 31) needs `READ_PHONE_STATE` "for apps compiled
+  on the Android 11 SDK".
+- [TelephonyDisplayInfo](https://developer.android.com/reference/android/telephony/TelephonyDisplayInfo):
+  `getOverrideNetworkType()` (30), "for market branding or visualization purposes only";
+  `OVERRIDE_NETWORK_TYPE_NR_NSA` (30); `NR_ADVANCED` (31); `NR_NSA_MMWAVE` deprecated in 31.
+- [SubscriptionManager](https://developer.android.com/reference/android/telephony/SubscriptionManager):
+  `getActiveSubscriptionInfoList()` (22), requires `READ_PHONE_STATE`;
+  [SubscriptionInfo](https://developer.android.com/reference/android/telephony/SubscriptionInfo):
+  `getSimSlotIndex()` (22), "maybe INVALID_SIM_SLOT_INDEX if unknown".
+- [Location](https://developer.android.com/reference/android/location/Location): `getAccuracy()`
+  "at the 68th percentile confidence level"; `getAltitude()` "above the WGS84 reference
+  ellipsoid"; `getVerticalAccuracyMeters()` (26); `getMslAltitudeMeters()` (34); `getTime()` "this
+  time should not be used to order or compare locations"; `isMock()` (31), `isFromMockProvider()`
+  (18, deprecated in 31).
+- [Best practices for unique identifiers](https://developer.android.com/identity/user-data-ids):
+  "Use a Firebase installation ID (FID) or a privately stored GUID whenever possible".
+- [Settings.Secure.ANDROID_ID](https://developer.android.com/reference/android/provider/Settings.Secure#ANDROID_ID):
+  "unique to each combination of app-signing key, user, and device ... may change if a factory
+  reset is performed on the device or if an APK signing key changes".
+- [Context.getNoBackupFilesDir()](https://developer.android.com/reference/android/content/Context#getNoBackupFilesDir())
+  and [Auto Backup](https://developer.android.com/identity/data/autobackup).
+
+AOSP: the emergency-only mapping follows `CellularNetworkService.getAvailableServices()` in
+`frameworks/opt/telephony`, which returns only `SERVICE_TYPE_EMERGENCY` when the modem reports
+emergency-only.
