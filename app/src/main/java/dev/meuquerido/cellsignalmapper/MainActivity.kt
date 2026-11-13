@@ -139,7 +139,9 @@ class MainActivity : ComponentActivity() {
                             location = loggerState.location,
                             signalStrength = loggerState.signalStrength,
                             service = loggerState.service,
-                            pendingPoints = loggerState.pendingCount
+                            pendingPoints = loggerState.pendingCount,
+                            hint = loggerState.hint,
+                            onDismissHint = { LoggerState.dismissHint() }
                         )
                     }
                     val pingResult = loggerState.pingResult?.name ?: ""
