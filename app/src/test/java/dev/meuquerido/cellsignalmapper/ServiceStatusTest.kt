@@ -10,24 +10,35 @@ import android.telephony.ServiceState.STATE_EMERGENCY_ONLY
 import android.telephony.ServiceState.STATE_IN_SERVICE
 import android.telephony.ServiceState.STATE_OUT_OF_SERVICE
 import android.telephony.ServiceState.STATE_POWER_OFF
+import android.telephony.TelephonyManager.NETWORK_TYPE_IWLAN
+import android.telephony.TelephonyManager.NETWORK_TYPE_LTE
+import android.telephony.TelephonyManager.NETWORK_TYPE_UNKNOWN
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /** Made-up service states, mapped by the **Service state** rule in `docs/sample-schema.md`. */
 class ServiceStatusTest {
     private val homeVoice = NetworkRegistration(
-        TRANSPORT_TYPE_WWAN, registered = true,
+        TRANSPORT_TYPE_WWAN, NETWORK_TYPE_LTE, registered = true,
         availableServices = listOf(SERVICE_TYPE_VOICE, SERVICE_TYPE_SMS, SERVICE_TYPE_EMERGENCY),
     )
     private val cellularEmergencyOnly = NetworkRegistration(
-        TRANSPORT_TYPE_WWAN, registered = false, availableServices = listOf(SERVICE_TYPE_EMERGENCY),
+        TRANSPORT_TYPE_WWAN, NETWORK_TYPE_LTE, registered = false,
+        availableServices = listOf(SERVICE_TYPE_EMERGENCY),
     )
     private val cellularNone = NetworkRegistration(
-        TRANSPORT_TYPE_WWAN, registered = false, availableServices = emptyList(),
+        TRANSPORT_TYPE_WWAN, NETWORK_TYPE_UNKNOWN, registered = false,
+        availableServices = emptyList(),
     )
     private val wifiCalling = NetworkRegistration(
-        TRANSPORT_TYPE_WLAN, registered = true,
+        TRANSPORT_TYPE_WLAN, NETWORK_TYPE_IWLAN, registered = true,
         availableServices = listOf(SERVICE_TYPE_VOICE, SERVICE_TYPE_EMERGENCY),
+    )
+
+    /** Wi-Fi calling as legacy-mode IWLAN reports it: the cellular PS entry, registered home. */
+    private val legacyIwlanData = NetworkRegistration(
+        TRANSPORT_TYPE_WWAN, NETWORK_TYPE_IWLAN, registered = true,
+        availableServices = listOf(SERVICE_TYPE_DATA),
     )
 
     private fun status(state: Int, registrations: List<NetworkRegistration>) =
@@ -79,7 +90,8 @@ class ServiceStatusTest {
     @Test
     fun roamingDataOnlyRegistrationIsInService() {
         val roamingData = NetworkRegistration(
-            TRANSPORT_TYPE_WWAN, registered = true, availableServices = listOf(SERVICE_TYPE_DATA),
+            TRANSPORT_TYPE_WWAN, NETWORK_TYPE_LTE, registered = true,
+            availableServices = listOf(SERVICE_TYPE_DATA),
         )
 
         assertEquals(
@@ -129,6 +141,33 @@ class ServiceStatusTest {
         assertEquals(
             ServiceStatus.EMERGENCY_ONLY,
             status(STATE_IN_SERVICE, listOf(cellularNone, cellularEmergencyOnly, wifiCalling)),
+        )
+    }
+
+    @Test
+    fun legacyIwlanCellularEntryDoesNotCountAsCellService() {
+        assertEquals(
+            ServiceStatus.OUT_OF_SERVICE,
+            status(STATE_IN_SERVICE, listOf(cellularNone, legacyIwlanData)),
+        )
+    }
+
+    @Test
+    fun airplaneModeWithLegacyIwlanCellularEntryIsPowerOff() {
+        assertEquals(
+            ServiceStatus.POWER_OFF,
+            serviceStatus(
+                STATE_IN_SERVICE, listOf(cellularNone, legacyIwlanData), airplaneModeOn = true,
+            ),
+        )
+    }
+
+    @Test
+    fun registeredLteCellularEntryIsInService() {
+        val lteData = legacyIwlanData.copy(accessNetworkTechnology = NETWORK_TYPE_LTE)
+
+        assertEquals(
+            ServiceStatus.IN_SERVICE, status(STATE_IN_SERVICE, listOf(cellularNone, lteData)),
         )
     }
 }
