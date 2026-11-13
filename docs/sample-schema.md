@@ -345,7 +345,7 @@ Besides that, the SDKs send (firebase-auth 22.3.0, firebase-firestore 24.10.0, f
   (`device-brand`), `Build.DEVICE` (`device-model`, a device code), `Build.PRODUCT`
   (`device-name`, a product code, not the name the user gave the phone), the API level
   (`fire-android`), the store that installed the app (`android-installer`), the form factor
-  (`android-platform`: phone, tv, watch, auto or embedded), the app's target and min SDK, and the
+  (`android-platform`: empty on a phone; `tv`, `watch`, `auto` or `embedded` otherwise), the app's target and min SDK, and the
   Kotlin and SDK versions; also `x-firebase-gmpid`, the Firebase app id, and
   `x-firebase-client-log-type`, a heartbeat code, when one is due.
 - **Auth, on every request:** `Accept-Language`, built from `Locale.getDefault()` (the phone's
