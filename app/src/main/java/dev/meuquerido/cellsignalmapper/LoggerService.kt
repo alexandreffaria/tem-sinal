@@ -144,6 +144,7 @@ class LoggerService : Service() {
         locationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
     }
 
+    @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     private fun startLoggingLoop() {
         coroutineScope.launch {
             while (isActive) {
