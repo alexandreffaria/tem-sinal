@@ -11,6 +11,7 @@ import android.telephony.CellInfoWcdma
 import android.telephony.CellSignalStrengthNr
 import android.telephony.NetworkRegistrationInfo
 import android.telephony.ServiceState
+import android.telephony.TelephonyManager
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -151,6 +152,8 @@ fun simReading(
 data class NetworkRegistration(
     /** `getTransportType()`: `AccessNetworkConstants.TRANSPORT_TYPE_WWAN` for cellular. */
     val transportType: Int,
+    /** `getAccessNetworkTechnology()`, a `TelephonyManager.NETWORK_TYPE_*` value. */
+    val accessNetworkTechnology: Int,
     /** Registered on its home or a roaming network. */
     val registered: Boolean,
     /** `getAvailableServices()`, `NetworkRegistrationInfo.SERVICE_TYPE_*` values. */
@@ -160,8 +163,9 @@ data class NetworkRegistration(
 /**
  * The service state of a subscription by the rule in `docs/sample-schema.md`, from its
  * `ServiceState.getState()` [state], its [registrations] and whether airplane mode is on
- * ([airplaneModeOn]). Cellular service is decided from the cellular (`TRANSPORT_TYPE_WWAN`)
- * registrations, because Android raises [state] to `STATE_IN_SERVICE` when voice can go over
+ * ([airplaneModeOn]). Cellular service is decided from the cellular registrations
+ * (`TRANSPORT_TYPE_WWAN` on a technology other than `NETWORK_TYPE_IWLAN`, which legacy-mode IWLAN
+ * reports Wi-Fi calling as), because Android raises [state] to `STATE_IN_SERVICE` when voice can go over
  * Wi-Fi calling, also with the radio off; [state] counts as in service only when [registrations]
  * has no cellular entry at all, and airplane mode counts as radio off unless a cellular network is
  * registered. A registered cellular network counts as [ServiceStatus.IN_SERVICE] even when
@@ -175,7 +179,8 @@ fun serviceStatus(
     airplaneModeOn: Boolean,
 ): ServiceStatus {
     val cellular = registrations.filter {
-        it.transportType == AccessNetworkConstants.TRANSPORT_TYPE_WWAN
+        it.transportType == AccessNetworkConstants.TRANSPORT_TYPE_WWAN &&
+            it.accessNetworkTechnology != TelephonyManager.NETWORK_TYPE_IWLAN
     }
     val registered = cellular.any { it.registered }
     val emergency = NetworkRegistrationInfo.SERVICE_TYPE_EMERGENCY
@@ -197,6 +202,7 @@ fun ServiceState.toServiceStatus(airplaneModeOn: Boolean): ServiceStatus = servi
 
 private fun NetworkRegistrationInfo.toNetworkRegistration() = NetworkRegistration(
     transportType = transportType,
+    accessNetworkTechnology = accessNetworkTechnology,
     registered = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
         isNetworkRegistered
     } else {
