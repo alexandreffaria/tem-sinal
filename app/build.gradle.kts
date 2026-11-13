@@ -20,15 +20,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = rootProject.file("release-key.jks")
-            storePassword = "REMOVED"
-            keyAlias = "release"
-            keyPassword = "REMOVED"
-        }
-    }
-
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
@@ -36,7 +27,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release") // ✅ THIS IS ESSENTIAL
         }
     }
 
@@ -53,7 +43,7 @@ android {
 }
 
 play {
-    serviceAccountCredentials.set(file("play-account.json"))
+    serviceAccountCredentials.set(rootProject.file("play-account.json"))
     track.set("plz")
 }
 
