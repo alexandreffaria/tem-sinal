@@ -147,11 +147,35 @@ test("a stay is cut out unless the phone first moves away from the end for DEPAR
   };
   const atCrag = (metres: number) =>
     trimSession(session(metres), TRIM_M.max, TRIM_M.max).filter((s) => s.fix.lat === PLACE.lat + metres / 111_195).length;
-  // The start's ten-minute stay takes in the walk's first 200 m and cuts 800 + 200 + 100 m around it;
-  // DEPARTURE_FIXES at 2 m/s take the walk 600 m further; the crag's ten-minute stay starts 200 m short of it.
+  // The start's first fixes cut 800 m; its ten-minute stay, which takes in the walk's first 200 m, and
+  // the walk on to 400 m don't move. DEPARTURE_FIXES at 2 m/s take the walk from 800 m to 1400 m;
+  // the crag's ten-minute stay starts 200 m short of it.
   assert.deepEqual([DEPARTURE_FIXES, STAYS[1]], [60, { fixes: 120, radiusM: 200 }]);
-  assert.equal(atCrag(1800), 0);
-  assert.equal(atCrag(1900), 1440);
+  assert.equal(atCrag(1600), 0);
+  assert.equal(atCrag(1700), 1440);
+});
+
+test("rests every ten minutes on the walk from an end don't chain its cut to the crag", () => {
+  // A minute still, a walk north at 1.2 m/s (6 m a fix) resting 3 minutes after every 10 minutes of
+  // walking, two hours at a crag [metres] away, the same walk back, a minute still. Still fixes
+  // jitter about 4 m. Each trim keeps the whole crag from the distance listed with it to 5 km.
+  const session = (metres: number) => {
+    const leg: number[] = [];
+    for (let m = 6, walked = 1; m < metres; m += 6, walked++) leg.push(...Array<number>(walked % 120 === 0 ? 37 : 1).fill(m));
+    const ms = [...Array<number>(12).fill(0), ...leg, ...Array<number>(1440).fill(metres), ...leg.map((m) => metres - m), ...Array<number>(12).fill(0)];
+    const samples = ms.map((m, i) => {
+      const still = m === ms[i - 1] || m === ms[i + 1];
+      return sample(ALICE, PLACE.lat + (m + (still ? 4 * Math.sin(i * 1.7) : 0)) / 111_195, JAN_10 + i * 5_000);
+    });
+    return { samples, crag: new Set(samples.filter((_, i) => ms[i] === metres)) };
+  };
+  const keptAtCrag = (metres: number, trimM: number) => {
+    const { samples, crag } = session(metres);
+    return trimSession(samples, trimM, trimM).filter((s) => crag.has(s)).length;
+  };
+  for (const [trimM, metres] of [[TRIM_M.min, 860], [550, 1320], [TRIM_M.max, 1940]] as const) {
+    for (const crag of [metres, metres + 70, metres + 360, 5_000]) assert.equal(keptAtCrag(crag, trimM), 1440, `${trimM} ${crag}`);
+  }
 });
 
 /** A tick every 5 s; the listed latitude i is a fix held for [held](i) ticks, three unless given. */
