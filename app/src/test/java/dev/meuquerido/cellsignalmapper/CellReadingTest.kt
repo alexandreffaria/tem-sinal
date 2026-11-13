@@ -184,6 +184,20 @@ class CellReadingTest {
         assertNull(cellsWithNrLeg(null, leg))
     }
 
+    @Test
+    fun noNrLegWithoutARegisteredLteAnchor() {
+        val leg = nrSignalStrengthLeg(ssRsrp = -102, ssRsrq = -12, ssSinr = 4)
+        assertEquals(emptyList<CellReading>(), cellsWithNrLeg(emptyList(), leg))
+
+        val lteNeighbour = cellReading(
+            Rat.LTE, registered = false, connectionStatus = CellInfo.CONNECTION_NONE,
+            timestampMs = 1_000L,
+            arfcn = 1650, pci = 205, mcc = null, mnc = null,
+            ci = CellInfo.UNAVAILABLE_LONG, tac = CellInfo.UNAVAILABLE, rsrp = -109,
+        )
+        assertEquals(listOf(lteNeighbour), cellsWithNrLeg(listOf(lteNeighbour), leg))
+    }
+
     @Suppress("DEPRECATION") // NR_NSA_MMWAVE is what API 30 reports for mmWave.
     @Test
     fun overrideNetworkTypeWritesMmWaveAsNrAdvanced() {
