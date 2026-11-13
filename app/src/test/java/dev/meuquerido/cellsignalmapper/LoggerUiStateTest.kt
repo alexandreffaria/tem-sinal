@@ -109,4 +109,19 @@ class LoggerUiStateTest {
         assertEquals(emptyList<UiText>(), stopped.service)
         assertEquals(stopped, stopped.withSample(3.0, 4.0, sims, PingResult.SUCCESS))
     }
+
+    @Test
+    fun indoorHintShowsWhileLoggingAndClearsOnStop() {
+        val hinted = LoggerUiState().serviceStarted().withIndoorHint()
+
+        assertEquals(UiText(R.string.indoor_hint), hinted.hint)
+        assertNull(hinted.serviceStopped().hint)
+    }
+
+    @Test
+    fun indoorHintAfterStopIsIgnored() {
+        val stopped = LoggerUiState().serviceStarted().serviceStopped()
+
+        assertEquals(stopped, stopped.withIndoorHint())
+    }
 }

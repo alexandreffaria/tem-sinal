@@ -183,6 +183,8 @@ class LoggerService : Service() {
                 return@launch
             }
 
+            // The accuracy of each of the session's first ticks, for startLooksIndoor.
+            val startAccuracies = mutableListOf<Float?>()
             while (isActive) {
                 val tickStartMs = SystemClock.elapsedRealtime()
                 val location = latestLocation?.takeIf {
@@ -219,6 +221,12 @@ class LoggerService : Service() {
                 }
 
                 LoggerState.sample(location?.latitude, location?.longitude, sims, pingResult)
+                // Advice only: the hint is decided after the tick's sample was written and changes
+                // nothing that is logged.
+                if (startAccuracies.size < START_TICKS) {
+                    startAccuracies += location?.takeIf { it.hasAccuracy() }?.accuracy
+                    if (startLooksIndoor(startAccuracies)) LoggerState.indoorHint()
+                }
 
                 delay(delayUntilNextTickMs(tickStartMs, SystemClock.elapsedRealtime()))
             }

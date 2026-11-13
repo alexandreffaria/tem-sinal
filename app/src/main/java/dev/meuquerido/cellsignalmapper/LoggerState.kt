@@ -58,12 +58,21 @@ data class LoggerUiState(
     val pingResult: PingResult? = null,
     val sampleCount: Int = 0,
     val pendingCount: Int = 0,
+    /** Advice shown below the button, such as [R.string.indoor_hint]; null shows nothing. */
+    val hint: UiText? = null,
 ) {
     fun serviceStarted(): LoggerUiState =
         copy(isLogging = true, location = null, signalStrength = null, service = emptyList())
 
     fun serviceStopped(): LoggerUiState =
-        copy(isLogging = false, location = null, signalStrength = null, service = emptyList())
+        copy(isLogging = false, location = null, signalStrength = null, service = emptyList(), hint = null)
+
+    /**
+     * Suggests logging on the trail, after a start that [startLooksIndoor]. Ignored after the
+     * service stopped, so a session's hint never outlives it.
+     */
+    fun withIndoorHint(): LoggerUiState =
+        if (isLogging) copy(hint = UiText(R.string.indoor_hint)) else this
 
     /**
      * Shows a tick's position (null when it had no fresh fix), the headline strength of the first
@@ -106,4 +115,8 @@ object LoggerState {
         mutableState.update { it.withSample(lat, lon, sims, pingResult) }
 
     fun pendingCount(count: Int) = mutableState.update { it.copy(pendingCount = count) }
+
+    fun indoorHint() = mutableState.update { it.withIndoorHint() }
+
+    fun dismissHint() = mutableState.update { it.copy(hint = null) }
 }
