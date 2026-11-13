@@ -16,11 +16,15 @@ export const LONE_CELL_AGE_MS = 30 * 86_400_000;
 /** How many fixes a resting place is drawn from: a minute at the app's 5 s interval. */
 export const ANCHOR_FIXES = 12;
 
-/** How many consecutive fixes make a stay when they lie within [STAY_M] of the first: three minutes at the app's 5 s interval. */
-export const STAY_FIXES = 36;
-
-/** The radius in metres of a stay around its first fix. */
-export const STAY_M = 50;
+/**
+ * The two kinds of stay: this many consecutive fixes within this radius in metres of the first.
+ * Three minutes within 50 m is a phone at rest under open sky; ten minutes within 200 m is one at
+ * rest indoors, whose fixes can be 100 m off. A walk slower than 0.33 m/s also reads as the second.
+ */
+export const STAYS = [
+  { fixes: 36, radiusM: 50 },
+  { fixes: 120, radiusM: 200 },
+] as const;
 
 /** How many fixes outside the cut it takes for the phone to have left an end's resting places: five minutes at the app's 5 s interval. */
 export const DEPARTURE_FIXES = 60;
@@ -85,14 +89,16 @@ type Anchor = { fix: StoredSample["fix"]; radiusM: number };
  * Which of [samples], ordered from one end of a session inwards, lie beyond that end's cut of
  * [trimM] metres. A place the phone may rest at starts at the end's first fix, at each fix after a
  * step longer than [trimM] or faster than [MAX_SPEED_MPS] (the fixes before it may be wrong), and
- * at each stay. The first two cut [trimM] around each of the [ANCHOR_FIXES] fixes from where they
- * start. A stay cuts [trimM] + 2 [STAY_M] around its first fix, which covers [trimM] around every
- * point within [STAY_M] of any of its fixes. The phone has left the end once [DEPARTURE_FIXES]
+ * at each stay of either kind in [STAYS]. The first two cut [trimM] around each of the
+ * [ANCHOR_FIXES] fixes from where they start. A stay of radius r cuts [trimM] + s + r / 2 around
+ * its first fix, s being its fixes' largest distance from that fix, which covers [trimM] around
+ * every point within r / 2 of any of its fixes. The phone has left the end once [DEPARTURE_FIXES]
  * fixes have moved: lain in no stay and outside the cut of the places of the first two kinds that
  * started by then. Every place that starts before that is one of the end's resting places, and a
- * sample is beyond the cut if it lies outside every resting place's cut. So [STAY_FIXES]
- * consecutive fixes within [STAY_M] / 2 of where the phone rests cut that place out, whatever wrong
- * fixes come before or among them, unless [DEPARTURE_FIXES] of those wrong fixes move.
+ * sample is beyond the cut if it lies outside every resting place's cut. So ten minutes of
+ * consecutive fixes within 100 m of where the phone rests (or three minutes within 25 m) cut that place
+ * out, whatever wrong fixes come before or among them, unless [DEPARTURE_FIXES] of those wrong
+ * fixes move.
  */
 function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   const fixes = samples.map((s) => s.fix);
@@ -105,16 +111,23 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
       places.push({ from: i, stay: false, anchors: fixes.slice(i, i + ANCHOR_FIXES).map((fix) => ({ fix, radiusM: trimM })) });
     }
   });
-  let next = 0;
-  fixes.forEach((first, i) => {
-    if (i < next) return;
-    let j = i + 1;
-    for (let fix = fixes[j]; fix && metresApart(first, fix) <= STAY_M; fix = fixes[++j]);
-    if (j - i < STAY_FIXES) return;
-    places.push({ from: i, stay: true, anchors: [{ fix: first, radiusM: trimM + 2 * STAY_M }] });
-    inStay.fill(true, i, j);
-    next = j;
-  });
+  for (const stay of STAYS) {
+    let next = 0;
+    fixes.forEach((first, i) => {
+      if (i < next) return;
+      let j = i + 1;
+      let spreadM = 0;
+      for (let fix = fixes[j]; fix; fix = fixes[++j]) {
+        const metres = metresApart(first, fix);
+        if (metres > stay.radiusM) break;
+        spreadM = Math.max(spreadM, metres);
+      }
+      if (j - i < stay.fixes) return;
+      places.push({ from: i, stay: true, anchors: [{ fix: first, radiusM: trimM + spreadM + stay.radiusM / 2 }] });
+      inStay.fill(true, i, j);
+      next = j;
+    });
+  }
   places.sort((a, b) => a.from - b.from);
   const beyond = fixes.map(() => true);
   const moving = fixes.map((_, i) => !inStay[i]);
