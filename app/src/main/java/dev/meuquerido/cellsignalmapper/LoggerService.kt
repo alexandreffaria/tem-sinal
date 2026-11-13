@@ -214,13 +214,24 @@ class LoggerService : Service() {
             null
         }
         val cells = awaitCallback<List<CellInfo>>(CELL_INFO_TIMEOUT_MS) { callback ->
-            manager.requestCellInfoUpdate(
-                Executor(Runnable::run),
-                object : TelephonyManager.CellInfoCallback() {
-                    override fun onCellInfo(cellInfo: List<CellInfo>) = callback(cellInfo)
-                    override fun onError(errorCode: Int, detail: Throwable?) = callback(null)
-                },
-            )
+            // The subscription can go inactive after it was listed (IllegalArgumentException) and
+            // the telephony service can be unavailable (IllegalStateException); either leaves this
+            // SIM's cells unknown for the tick. SecurityException propagates.
+            try {
+                manager.requestCellInfoUpdate(
+                    Executor(Runnable::run),
+                    object : TelephonyManager.CellInfoCallback() {
+                        override fun onCellInfo(cellInfo: List<CellInfo>) = callback(cellInfo)
+                        override fun onError(errorCode: Int, detail: Throwable?) = callback(null)
+                    },
+                )
+            } catch (e: IllegalArgumentException) {
+                Log.w("LoggerService", "Subscription went inactive; no cells this tick", e)
+                callback(null)
+            } catch (e: IllegalStateException) {
+                Log.w("LoggerService", "Telephony service unavailable; no cells this tick", e)
+                callback(null)
+            }
         }
         return simReading(
             slotIndex = subscription.simSlotIndex,
