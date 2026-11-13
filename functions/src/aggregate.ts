@@ -191,9 +191,15 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   const beyond = fixes.map(() => true);
   let resting = 0;
   let away = 0;
+  // The largest radius cut so far around each pair of coordinates: an anchor at the same coordinates
+  // with a radius no larger cuts no fix that cut has not.
+  const cutRadiusM = new Map<string, number>();
   for (let i = 0; i < fixes.length && away < DEPARTURE_FIXES; i++) {
     for (let place = places[resting]; place && place.from <= i; place = places[++resting]) {
       for (const { fix, radiusM } of place.anchors) {
+        const at = `${fix.lat},${fix.lon}`;
+        if ((cutRadiusM.get(at) ?? -1) >= radiusM) continue;
+        cutRadiusM.set(at, radiusM);
         const outside = (entry: Entry) => metresApart(fix, entry.fix) > radiusM;
         const [x = 0, y = 0, z = 0] = cubeOf(fix);
         for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
