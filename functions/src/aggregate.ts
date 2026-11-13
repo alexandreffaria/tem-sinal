@@ -32,6 +32,9 @@ export const DEPARTURE_FIXES = 60;
 /** A speed in m/s, 180 km/h, above any road's limit in Brazil: a step between two fixes faster than this means one of them is wrong. */
 export const MAX_SPEED_MPS = 50;
 
+/** How near, in metres, an anchor lies to the reference whose distances it reuses; see [beyondEnd]. */
+const REFERENCE_M = 50;
+
 /** The fields of a stored sample (docs/sample-schema.md) that aggregation reads. */
 export type StoredSample = {
   installId: string;
@@ -170,45 +173,62 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   }
   places.sort((a, b) => a.from - b.from);
   // Fixes in cubes of the unit sphere's space whose side is at least the widest cut's straight-line
-  // length, so a cut reaches only fixes in its own cube and the 26 next to it. A fix leaves its cube
-  // once cut, so no cut tests it again.
+  // length plus REFERENCE_M, so every fix within that many metres of a point lies in the point's
+  // cube or the 26 next to it. 6 300 km is below the Earth's radius in h3-js, 6 371 km, which only
+  // widens the cubes. A fix leaves its cube once cut.
   let widestM = 0;
   for (const place of places) for (const { radiusM } of place.anchors) widestM = Math.max(widestM, radiusM);
-  // 6 300 km is below the Earth's radius in h3-js, 6 371 km, which only widens the cubes.
-  const side = widestM / 6_300_000;
-  const cubeOf = ({ lat, lon }: StoredSample["fix"]) => {
+  const cubeOf = ({ lat, lon }: StoredSample["fix"], side: number) => {
     const [φ, λ] = [(lat * Math.PI) / 180, (lon * Math.PI) / 180];
     return [Math.cos(φ) * Math.cos(λ), Math.cos(φ) * Math.sin(λ), Math.sin(φ)].map((c) => Math.floor(c / side));
   };
+  const side = (widestM + REFERENCE_M) / 6_300_000;
   type Entry = { k: number; fix: StoredSample["fix"] };
   const cubes = new Map<string, Entry[]>();
   fixes.forEach((fix, k) => {
-    const key = cubeOf(fix).join();
+    const key = cubeOf(fix, side).join();
     const cube = cubes.get(key) ?? [];
     cube.push({ k, fix });
     cubes.set(key, cube);
   });
+  // The first anchor to cut in each small cube, whose side is REFERENCE_M / (2 * 6 371 km), is its
+  // reference: it tests every uncut fix in its 27 cubes and keeps those it leaves, by distance from
+  // it. Any later anchor in the small cube lies less than REFERENCE_M from the reference, so every
+  // fix within its radius lies in the reference's 27 cubes and, by the triangle inequality, no
+  // farther from the reference than their distance apart plus that radius. It tests only those
+  // fixes; 1 m more covers rounding in distances of a few kilometres many times over.
+  const references = new Map<string, { fix: StoredSample["fix"]; left: { metres: number; entry: Entry }[] }>();
   const beyond = fixes.map(() => true);
   let resting = 0;
   let away = 0;
-  // The largest radius cut so far around each pair of coordinates: an anchor at the same coordinates
-  // with a radius no larger cuts no fix that cut has not.
-  const cutRadiusM = new Map<string, number>();
   for (let i = 0; i < fixes.length && away < DEPARTURE_FIXES; i++) {
     for (let place = places[resting]; place && place.from <= i; place = places[++resting]) {
       for (const { fix, radiusM } of place.anchors) {
-        const at = `${fix.lat},${fix.lon}`;
-        if ((cutRadiusM.get(at) ?? -1) >= radiusM) continue;
-        cutRadiusM.set(at, radiusM);
-        const outside = (entry: Entry) => metresApart(fix, entry.fix) > radiusM;
-        const [x = 0, y = 0, z = 0] = cubeOf(fix);
+        const at = cubeOf(fix, REFERENCE_M / (2 * 6_371_000)).join();
+        const reference = references.get(at);
+        if (reference) {
+          const boundM = metresApart(reference.fix, fix) + radiusM + 1;
+          for (const { metres, entry } of reference.left) {
+            if (metres > boundM) break;
+            if (beyond[entry.k] && metresApart(fix, entry.fix) <= radiusM) beyond[entry.k] = false;
+          }
+          continue;
+        }
+        const left: { metres: number; entry: Entry }[] = [];
+        const [x = 0, y = 0, z = 0] = cubeOf(fix, side);
         for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
           const key = [x + dx, y + dy, z + dz].join();
           const cube = cubes.get(key);
           if (!cube) continue;
-          for (const entry of cube) if (!outside(entry)) beyond[entry.k] = false;
+          for (const entry of cube) {
+            if (!beyond[entry.k]) continue;
+            const metres = metresApart(fix, entry.fix);
+            if (metres > radiusM) left.push({ metres, entry });
+            else beyond[entry.k] = false;
+          }
           cubes.set(key, cube.filter(({ k }) => beyond[k]));
         }
+        references.set(at, { fix, left: left.sort((a, b) => a.metres - b.metres) });
       }
     }
     if (beyond[i] && !inStay[i] && !repeat[i]) away++;
