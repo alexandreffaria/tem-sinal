@@ -33,5 +33,6 @@ Settled decisions: `docs/decisions.md`.
 
 ## Checks
 
-`./gradlew lintDebug testDebugUnitTest assembleDebug`, run by CI on every pull request. There is
+`./gradlew lintDebug testDebugUnitTest assembleDebug`, and for `functions/` `npm ci && npm run lint
+&& npm run typecheck && npm test`, run by CI on every pull request. There is
 no Android SDK on the owner's workstation; read the CI run.

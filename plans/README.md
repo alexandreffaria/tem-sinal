@@ -90,6 +90,7 @@ SDK on the owner's workstation, so CI is where they run (`gh pr checks <n> --wat
 
 ```sh
 ./gradlew lintDebug testDebugUnitTest assembleDebug
+cd functions && npm ci && npm run lint && npm run typecheck && npm test
 ```
 
 CI also fails a pull request that adds a keystore, a service-account key, an app bundle, a log
@@ -140,7 +141,7 @@ check, never `--admin`. GitHub can't enforce any of this on this repo's plan, so
 because sessions follow it.
 
 **A merge to `main` publishes to Google Play** (`.github/workflows/android-publish.yml`, except
-for changes that only touch docs, plans and decision cards). Merge one pull request at a time and
+for changes that only touch docs, plans, decision cards and `functions/`). Merge one pull request at a time and
 wait for its deploy run (`gh run list --branch main`) before the next. If the deploy fails because
 of the change, fix forward or revert in a new pull request. A deploy that fails for a reason
 outside the change (Play access, signing secrets) doesn't block merging; note it on the owner's
