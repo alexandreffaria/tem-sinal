@@ -26,13 +26,22 @@ class LoggerUiStateTest {
     )
 
     @Test
+    fun beforeLoggingShowsWaitingForReadings() {
+        val state = LoggerUiState()
+
+        assertEquals(UiText(R.string.getting_location), state.location)
+        assertEquals(UiText(R.string.getting_signal_strength), state.signalStrength)
+        assertEquals(emptyList<UiText>(), state.service)
+    }
+
+    @Test
     fun startingClearsReadingsAndMarksLogging() {
         val state = LoggerUiState().serviceStarted()
 
         assertTrue(state.isLogging)
-        assertEquals("", state.location)
-        assertEquals("", state.signalStrength)
-        assertEquals("", state.service)
+        assertNull(state.location)
+        assertNull(state.signalStrength)
+        assertEquals(emptyList<UiText>(), state.service)
         assertNull(state.pingResult)
     }
 
@@ -43,9 +52,12 @@ class LoggerUiStateTest {
             .withSample(-10.5, 20.25, sims, PingResult.SUCCESS)
             .withSample(-10.5, 20.25, sims, PingResult.SUCCESS)
 
-        assertEquals("Lat: -10.5, Lon: 20.25", state.location)
-        assertEquals("Signal Strength: -85 dBm", state.signalStrength)
-        assertEquals("SIM 1: In service", state.service)
+        assertEquals(UiText(R.string.location, listOf("-10.5", "20.25")), state.location)
+        assertEquals(UiText(R.string.signal_strength_dbm, listOf(-85)), state.signalStrength)
+        assertEquals(
+            listOf(UiText(R.string.sim_slot_service, listOf(1, UiText(R.string.in_service)))),
+            state.service,
+        )
         assertEquals(PingResult.SUCCESS, state.pingResult)
         assertEquals(2, state.sampleCount)
     }
@@ -55,9 +67,9 @@ class LoggerUiStateTest {
         val state = LoggerUiState().serviceStarted()
             .withSample(null, null, emptyList(), PingResult.BAD)
 
-        assertEquals("Lat: null, Lon: null", state.location)
-        assertEquals("Signal Strength: unknown", state.signalStrength)
-        assertEquals("No active SIM", state.service)
+        assertEquals(UiText(R.string.location, listOf("null", "null")), state.location)
+        assertEquals(UiText(R.string.signal_strength_unknown), state.signalStrength)
+        assertEquals(listOf(UiText(R.string.no_active_sim)), state.service)
     }
 
     @Test
@@ -73,11 +85,13 @@ class LoggerUiStateTest {
         )
 
         assertEquals(
-            "SIM 1: In service\n" +
-                "SIM 2: Emergency calls only\n" +
-                "SIM 3: No service\n" +
-                "SIM 4: No service (radio off)\n" +
-                "SIM: Service unknown",
+            listOf(
+                UiText(R.string.sim_slot_service, listOf(1, UiText(R.string.in_service))),
+                UiText(R.string.sim_slot_service, listOf(2, UiText(R.string.emergency_calls_only))),
+                UiText(R.string.sim_slot_service, listOf(3, UiText(R.string.no_service))),
+                UiText(R.string.sim_slot_service, listOf(4, UiText(R.string.no_service_radio_off))),
+                UiText(R.string.sim_service, listOf(UiText(R.string.service_unknown))),
+            ),
             text,
         )
     }
@@ -90,9 +104,9 @@ class LoggerUiStateTest {
             .serviceStopped()
 
         assertFalse(stopped.isLogging)
-        assertEquals("", stopped.location)
-        assertEquals("", stopped.signalStrength)
-        assertEquals("", stopped.service)
+        assertNull(stopped.location)
+        assertNull(stopped.signalStrength)
+        assertEquals(emptyList<UiText>(), stopped.service)
         assertEquals(stopped, stopped.withSample(3.0, 4.0, sims, PingResult.SUCCESS))
     }
 }
