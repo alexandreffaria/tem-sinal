@@ -22,6 +22,7 @@ fun LoggerButton(
     modifier: Modifier = Modifier,
     location: String = "",
     signalStrength: String = "",
+    service: String = "",
     pendingPoints: Int = 0
 ) {
     Column(
@@ -50,6 +51,7 @@ fun LoggerButton(
         Spacer(modifier = Modifier.height(32.dp))
         Text(location)
         Text(signalStrength)
+        Text(service)
 
 
         Spacer(modifier = Modifier.height(100.dp))

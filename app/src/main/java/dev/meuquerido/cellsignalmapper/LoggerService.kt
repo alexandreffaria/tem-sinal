@@ -52,9 +52,8 @@ class LoggerService : Service() {
         }
     }
 
-    private var lastLat: Double? = null
-    private var lastLon: Double? = null
-    private var lastSignal: Int? = null
+    /** The last sample logged, which the next tick's sample is compared with. */
+    private var lastSample: Sample? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -147,8 +146,6 @@ class LoggerService : Service() {
                         SystemClock.elapsedRealtime()
                     )
                 }
-                val lat = location?.latitude
-                val lon = location?.longitude
 
                 val sims = try {
                     readSims()
@@ -157,37 +154,27 @@ class LoggerService : Service() {
                     stopSelf()
                     break
                 }
-                val signalDbm = sims.flatMap { it.cells.orEmpty() }
-                    .filter { it.registered }
-                    .firstNotNullOfOrNull { it.headlineDbm() }
-
-                val pingResult = when {
-                    lat == null || lon == null || signalDbm == null -> PingResult.BAD
-                    lastLat == null || lastLon == null -> PingResult.SUCCESS
-                    !hasMoved(lat, lon, lastLat!!, lastLon!!, 10f)
-                            && signalDbm == lastSignal -> {
-                        Log.d("LoggerService", "Skipped — no move AND no signal change")
-                        PingResult.DUPLICATE
-                    }
-                    else -> PingResult.SUCCESS
-                }
-
-                if (pingResult == PingResult.SUCCESS && location != null) {
-                    lastLat = lat
-                    lastLon = lon
-                    lastSignal = signalDbm
-
+                // A tick with a fix and no signal still gives a sample: no signal is what the map
+                // is for.
+                val sample = location?.let {
                     sample(
                         installId = installId,
                         sessionId = sessionId,
                         timeMs = System.currentTimeMillis(),
                         elapsedRealtimeMs = SystemClock.elapsedRealtime(),
-                        fix = location.toFix(),
+                        fix = it.toFix(),
                         sims = sims,
-                    )?.let { SignalLogger.logEntry(this@LoggerService, it) }
+                    )
+                }
+                val pingResult = tickResult(sample, lastSample, ::distanceM)
+                if (sample != null && pingResult == PingResult.SUCCESS) {
+                    lastSample = sample
+                    SignalLogger.logEntry(this@LoggerService, sample)
+                } else if (pingResult == PingResult.DUPLICATE) {
+                    Log.d("LoggerService", "Skipped: not moved and nothing changed")
                 }
 
-                LoggerState.sample(lat, lon, signalDbm, pingResult)
+                LoggerState.sample(location?.latitude, location?.longitude, sims, pingResult)
 
                 delay(5000)
             }
@@ -243,6 +230,7 @@ class LoggerService : Service() {
             simOperator = manager.simOperator,
             operatorNumeric = serviceState?.operatorNumeric,
             operatorAlphaLong = serviceState?.operatorAlphaLong,
+            serviceState = serviceState?.toServiceStatus(),
             cells = cells?.mapNotNull { it.toCellReading() },
         )
     }
@@ -261,10 +249,10 @@ class LoggerService : Service() {
     @Suppress("DEPRECATION") // isMock replaces it from API 31.
     private fun Location.isFromMockProviderBelowS(): Boolean = isFromMockProvider
 
-    private fun hasMoved(lat1: Double, lon1: Double, lat2: Double, lon2: Double, thresholdMeters: Float): Boolean {
+    private fun distanceM(a: Fix, b: Fix): Float {
         val result = FloatArray(1)
-        Location.distanceBetween(lat1, lon1, lat2, lon2, result)
-        return result[0] > thresholdMeters
+        Location.distanceBetween(a.lat, a.lon, b.lat, b.lon, result)
+        return result[0]
     }
 
     private companion object {

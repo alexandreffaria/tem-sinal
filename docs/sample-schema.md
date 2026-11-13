@@ -8,8 +8,11 @@ otherwise.
 
 ## Rules that hold for every field
 
-- **One sample per tick that has a location fix.** No fix, no sample (#12). A tick with a fix
-  and no signal is a sample: "no signal here" is the most useful fact for planning.
+- **One sample per tick that has a location fix.** No fix, no sample. A tick with a fix and no
+  signal is a sample: "no signal here" is the most useful fact for planning. A tick repeats the
+  last sample logged, and is skipped, when the fix moved at most 10 m from that sample's fix and
+  every SIM has the same `serviceState` and the same registered cells (technology and identity)
+  at the same headline strength.
 - **No active subscription, no sample.** Every sample has at least one entry in `sims`, because
   every carrier fact is tied to a subscription.
 - **Unavailable is `null`, never a sentinel.** Android reports a missing int as

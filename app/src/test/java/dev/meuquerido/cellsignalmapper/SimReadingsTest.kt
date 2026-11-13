@@ -48,11 +48,13 @@ class SimReadingsTest {
             listOf(
                 simReading(
                     slotIndex = 0, simOperator = "00101", operatorNumeric = "00101",
-                    operatorAlphaLong = "Network One", cells = answered,
+                    operatorAlphaLong = "Network One", serviceState = ServiceStatus.IN_SERVICE,
+                    cells = answered,
                 ),
                 simReading(
                     slotIndex = 1, simOperator = "00102", operatorNumeric = null,
-                    operatorAlphaLong = null, cells = silent,
+                    operatorAlphaLong = null, serviceState = ServiceStatus.OUT_OF_SERVICE,
+                    cells = silent,
                 ),
             ),
         )
@@ -75,7 +77,8 @@ class SimReadingsTest {
         val sims = listOf(
             simReading(
                 slotIndex = 0, simOperator = "00101", operatorNumeric = "00101",
-                operatorAlphaLong = null, cells = emptyList(),
+                operatorAlphaLong = null, serviceState = ServiceStatus.IN_SERVICE,
+                cells = emptyList(),
             ),
         )
 

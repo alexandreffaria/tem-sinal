@@ -1,5 +1,7 @@
 package dev.meuquerido.cellsignalmapper
 
+import android.os.Build
+import android.telephony.AccessNetworkConstants
 import android.telephony.CellIdentityNr
 import android.telephony.CellInfo
 import android.telephony.CellInfoGsm
@@ -7,6 +9,8 @@ import android.telephony.CellInfoLte
 import android.telephony.CellInfoNr
 import android.telephony.CellInfoWcdma
 import android.telephony.CellSignalStrengthNr
+import android.telephony.NetworkRegistrationInfo
+import android.telephony.ServiceState
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -130,6 +134,7 @@ fun simReading(
     simOperator: String?,
     operatorNumeric: String?,
     operatorAlphaLong: String?,
+    serviceState: ServiceStatus?,
     cells: List<CellReading>?,
 ): SimReading =
     SimReading(
@@ -137,10 +142,59 @@ fun simReading(
         simPlmn = simOperator?.ifEmpty { null },
         registeredPlmn = operatorNumeric?.ifEmpty { null },
         operatorName = operatorAlphaLong?.ifEmpty { null },
-        serviceState = null,
+        serviceState = serviceState,
         overrideNetworkType = null,
         cells = cells,
     )
+
+/** What [serviceStatus] reads from one `NetworkRegistrationInfo` of a `ServiceState`. */
+data class NetworkRegistration(
+    /** `getTransportType()`: `AccessNetworkConstants.TRANSPORT_TYPE_WWAN` for cellular. */
+    val transportType: Int,
+    /** Registered on its home or a roaming network. */
+    val registered: Boolean,
+    /** `getAvailableServices()`, `NetworkRegistrationInfo.SERVICE_TYPE_*` values. */
+    val availableServices: List<Int>,
+)
+
+/**
+ * The service state of a subscription from its `ServiceState.getState()` [state] and its
+ * [registrations], by the rule in `docs/sample-schema.md`: Android reports emergency-only as
+ * `STATE_OUT_OF_SERVICE`, so a cellular registration that offers only `SERVICE_TYPE_EMERGENCY`
+ * also counts as [ServiceStatus.EMERGENCY_ONLY]. A registered cellular network counts as
+ * [ServiceStatus.IN_SERVICE] even when voice ([state]) isn't, as on a data-only registration.
+ */
+fun serviceStatus(state: Int, registrations: List<NetworkRegistration>): ServiceStatus {
+    val cellular = registrations.filter {
+        it.transportType == AccessNetworkConstants.TRANSPORT_TYPE_WWAN
+    }
+    val emergency = NetworkRegistrationInfo.SERVICE_TYPE_EMERGENCY
+    return when {
+        state == ServiceState.STATE_POWER_OFF -> ServiceStatus.POWER_OFF
+        state == ServiceState.STATE_IN_SERVICE || cellular.any { it.registered } ->
+            ServiceStatus.IN_SERVICE
+        state == ServiceState.STATE_EMERGENCY_ONLY ||
+            cellular.any { emergency in it.availableServices } -> ServiceStatus.EMERGENCY_ONLY
+        else -> ServiceStatus.OUT_OF_SERVICE
+    }
+}
+
+/** This subscription's [ServiceStatus], by [serviceStatus]. */
+fun ServiceState.toServiceStatus(): ServiceStatus =
+    serviceStatus(state, networkRegistrationInfoList.map { it.toNetworkRegistration() })
+
+private fun NetworkRegistrationInfo.toNetworkRegistration() = NetworkRegistration(
+    transportType = transportType,
+    registered = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        isNetworkRegistered
+    } else {
+        isRegisteredBelowU()
+    },
+    availableServices = availableServices,
+)
+
+@Suppress("DEPRECATION") // isNetworkRegistered replaces it from API 34.
+private fun NetworkRegistrationInfo.isRegisteredBelowU(): Boolean = isRegistered
 
 /**
  * The value [request] passes to its callback within [timeoutMs], or null when it passes null or
