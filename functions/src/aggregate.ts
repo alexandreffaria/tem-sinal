@@ -100,7 +100,13 @@ export function trimLengths(random: () => number = Math.random): { startM: numbe
   return { startM: draw(), endM: draw() };
 }
 
-const metresApart = (a: StoredSample["fix"], b: StoredSample["fix"]) => greatCircleDistance([a.lat, a.lon], [b.lat, b.lon], "m");
+/** How many distances between fixes this process has computed: a measure of the trim's work that doesn't depend on the machine. */
+export let distancesComputed = 0;
+
+const metresApart = (a: StoredSample["fix"], b: StoredSample["fix"]) => {
+  distancesComputed++;
+  return greatCircleDistance([a.lat, a.lon], [b.lat, b.lon], "m");
+};
 
 type Anchor = { fix: StoredSample["fix"]; radiusM: number };
 
