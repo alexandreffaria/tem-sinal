@@ -96,8 +96,8 @@ the service's foreground type `location`.
 | `elapsedRealtimeMs` | Long | ms since boot | never | `getElapsedRealtimeNanos()` (17) / 1 000 000 |
 | `mock` | Boolean | | never | `isFromMockProvider()` (18, deprecated in 31) on API 30, `isMock()` (31) on 31+ |
 
-Altitude is ellipsoidal, not above sea level; Brazil's geoid separation is up to about 30 m, so the
-server converts with a geoid model if it ever shows heights. `Location.getMslAltitudeMeters()`
+Altitude is ellipsoidal, not above sea level; Brazil's geoid separation is up to about 30 m. The
+public map shows no altitude (card `2026111304re`), so the server never converts it. `Location.getMslAltitudeMeters()`
 exists only from API 34, so it isn't recorded. `getTime()` comes from the satellite clock for GPS
 fixes but may be the phone's clock for others, and the phone's clock can jump; order samples within
 a session by `elapsedRealtimeMs`, never by `timeMs`. `mock` lets the server drop fixes from a mock
