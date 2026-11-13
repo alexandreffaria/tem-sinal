@@ -109,4 +109,29 @@ class CellReadingTest {
         assertEquals(ServiceStatus.IN_SERVICE, sim.serviceState)
         assertEquals(emptyList<CellReading>(), sim.cells)
     }
+
+    @Test
+    fun plmnIsKeptOnlyWhenFiveOrSixDigits() {
+        assertEquals("72406", plmnOrNull("72406"))
+        assertEquals("724031", plmnOrNull("724031"))
+        for (bad in listOf("7240", "7240611", "724ab", " 72406", "", null)) {
+            assertNull(bad, plmnOrNull(bad))
+        }
+    }
+
+    @Test
+    fun simAndCellPlmnsThatAreNotFiveOrSixDigitsAreNull() {
+        val sim = simReading(
+            slotIndex = 0, simOperator = "7240", operatorNumeric = "724ab",
+            operatorAlphaLong = null, serviceState = null, cells = null,
+        )
+        assertNull(sim.simPlmn)
+        assertNull(sim.registeredPlmn)
+
+        assertEquals("72406", plmnOf("724", "06"))
+        assertEquals("724031", plmnOf("724", "031"))
+        assertNull(plmnOf("724", "0611"))
+        assertNull(plmnOf("72", "06"))
+        assertNull(plmnOf("724", " 6"))
+    }
 }

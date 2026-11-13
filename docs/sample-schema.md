@@ -113,8 +113,8 @@ pins every call below to that subscription.
 | Field | Type | Unit | Null | Source (API level, permission) |
 |---|---|---|---|---|
 | `slot` | Int | 0-based SIM slot | when `INVALID_SIM_SLOT_INDEX` | `SubscriptionInfo.getSimSlotIndex()` (22, `READ_PHONE_STATE`) |
-| `simPlmn` | String | MCC + MNC, 5 or 6 digits | when the SIM isn't ready (`""`) | `TelephonyManager.getSimOperator()` (1, none) |
-| `registeredPlmn` | String | MCC + MNC | when not registered | `ServiceState.getOperatorNumeric()` (1, needs a location permission or it is `null`) |
+| `simPlmn` | String | MCC + MNC, 5 or 6 digits | when the SIM isn't ready (`""`); a value that isn't 5 or 6 digits is null | `TelephonyManager.getSimOperator()` (1, none) |
+| `registeredPlmn` | String | MCC + MNC, 5 or 6 digits | when not registered; a value that isn't 5 or 6 digits is null | `ServiceState.getOperatorNumeric()` (1, needs a location permission or it is `null`) |
 | `operatorName` | String | | when not registered | `ServiceState.getOperatorAlphaLong()` (1, same) |
 | `serviceState` | ServiceStatus | | when `getServiceState()` returns `null` | see **Service state** |
 | `overrideNetworkType` | OverrideNetworkType | | until the first display info arrives | see **5G NSA** |
@@ -153,6 +153,16 @@ the cellular (`TRANSPORT_TYPE_WWAN`) entries of that list, and Wi-Fi (`TRANSPORT
 never count. AOSP always lists a cellular entry for each domain (`ServiceState.init()`), so a list
 without one comes only from a phone that doesn't fill it; then `getState()` is all there is.
 
+On phones whose IWLAN runs in legacy mode, Wi-Fi calling also shows up as a cellular entry.
+`AccessNetworksManager.isInLegacyMode()` is true when `ro.telephony.iwlan_operation_mode` is
+`legacy`, or unset with IRadio HAL 1.3 or older (phones that launched on Android 9 or earlier and
+were upgraded to 11-13). There the modem reports IWLAN as the technology of the cellular data
+registration: `ServiceStateTracker.processIwlanRegistrationInfo` leaves a `TRANSPORT_TYPE_WWAN`,
+`DOMAIN_PS` entry with `getAccessNetworkTechnology()` (30) `== TelephonyManager.NETWORK_TYPE_IWLAN`
+registered home, and adds one itself when the radio is off. So the cellular entries are the
+`TRANSPORT_TYPE_WWAN` ones whose technology is not `NETWORK_TYPE_IWLAN`; below, "cellular" means
+those, for registration, for emergency and for whether the list has a cellular entry.
+
 Android's public constants include `STATE_EMERGENCY_ONLY`, but AOSP reports a phone that can only
 make emergency calls as `STATE_OUT_OF_SERVICE` and keeps the emergency flag in a hidden field. The
 public way to see it is the same list: AOSP's cellular network service lists only
@@ -177,7 +187,7 @@ So `serviceState` is, in this order:
 | Value | When |
 |---|---|
 | `POWER_OFF` | `getState() == STATE_POWER_OFF`, or airplane mode is on (`AIRPLANE_MODE_ON` is not 0) and no cellular `NetworkRegistrationInfo` is registered |
-| `IN_SERVICE` | any cellular (`TRANSPORT_TYPE_WWAN`) `NetworkRegistrationInfo` is registered: `isRegistered()` (30, deprecated in 34) on API 30-33, `isNetworkRegistered()` (34) on 34+; or the list has no cellular entry and `getState() == STATE_IN_SERVICE` |
+| `IN_SERVICE` | any cellular (`TRANSPORT_TYPE_WWAN`, not `NETWORK_TYPE_IWLAN`) `NetworkRegistrationInfo` is registered: `isRegistered()` (30, deprecated in 34) on API 30-33, `isNetworkRegistered()` (34) on 34+; or the list has no cellular entry and `getState() == STATE_IN_SERVICE` |
 | `EMERGENCY_ONLY` | `getState() == STATE_EMERGENCY_ONLY`, or any cellular `NetworkRegistrationInfo` lists `SERVICE_TYPE_EMERGENCY` in `getAvailableServices()` |
 | `OUT_OF_SERVICE` | otherwise, including a `getState()` of `STATE_IN_SERVICE` that no cellular registration backs |
 
@@ -194,7 +204,10 @@ AOSP sources, in `android.googlesource.com/platform`:
   `android11-release`.
 - `frameworks/opt/telephony`, `src/java/com/android/internal/telephony/ServiceStateTracker.java`:
   `combinePsRegistrationStates`, `pollStateInternal`,
-  `handlePollStateInternalForRadioOffOrUnavailable`.
+  `handlePollStateInternalForRadioOffOrUnavailable`, and `processIwlanRegistrationInfo` on
+  `android11-release` to `android13-release`.
+- `frameworks/opt/telephony`, `src/java/com/android/internal/telephony/data/AccessNetworksManager.java`
+  (`.../dataconnection/AccessNetworksManager.java` before Android 13): `isInLegacyMode`.
 - `frameworks/base`, `telephony/java/android/telephony/ServiceState.java`: `init()`,
   `setOutOfService(boolean)`.
 - `packages/services/Telephony`, `src/com/android/phone/PhoneGlobals.java`:
@@ -245,7 +258,7 @@ radio at once, which can't be told apart per SIM, so it isn't used. Both need
 | `timestampMs` | Long | ms since boot | for `SIGNAL_STRENGTH` | `CellInfo.getTimestampMillis()` (30), when the modem measured it |
 | `arfcn` | Int | channel number | when unavailable | GSM `getArfcn()` (24) 0..65535; WCDMA `getUarfcn()` (24) 0..65535; LTE `getEarfcn()` (24) 0..262143; NR `getNrarfcn()` (29) 0..3279165 |
 | `pci` | Int | | when unavailable | GSM `getBsic()` (24) 0..63; WCDMA `getPsc()` (18) 0..511; LTE `getPci()` (17) 0..503; NR `getPci()` (29) 0..1007 |
-| `plmn` | String | MCC + MNC | when either is unknown (usual for neighbours) | `getMccString()` + `getMncString()` of the `CellIdentity` (28; 29 for NR) |
+| `plmn` | String | MCC + MNC, 5 or 6 digits | when either is unknown (usual for neighbours); a value that isn't 5 or 6 digits is null | `getMccString()` + `getMncString()` of the `CellIdentity` (28; 29 for NR) |
 | `ci` | Long | | when unavailable | GSM `getCid()` (17) 0..65535; WCDMA `getCid()` (18) 0..268435455; LTE `getCi()` (17) 0..268435455; NR `getNci()` (29) 0..68719476735 (`UNAVAILABLE_LONG` when unknown) |
 | `tac` | Int | | when unavailable | GSM and WCDMA `getLac()` (17, 18) 0..65535; LTE `getTac()` (17) 0..65535; NR `getTac()` (29) 0..16777215 |
 | `rsrp` | Int | dBm | when unavailable, or not LTE/NR | LTE `CellSignalStrengthLte.getRsrp()` (26) -140..-43; NR `CellSignalStrengthNr.getSsRsrp()` (29) -156..-31 |
