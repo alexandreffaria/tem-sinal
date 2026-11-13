@@ -45,6 +45,25 @@ data class ListenerChanges(val add: Set<Int>, val remove: Set<Int>)
 fun listenerChanges(activeIds: Set<Int>, registeredIds: Set<Int>): ListenerChanges =
     ListenerChanges(add = activeIds - registeredIds, remove = registeredIds - activeIds)
 
+/**
+ * Puts [value] in [values] for [subscriptionId] only while the registration [ownRegistration]
+ * returns is still that subscription's entry in [registrations]; [ownRegistration] is called only
+ * when there is an entry. Both are read under the lock on [registrations], so a callback that
+ * runs after its registration was removed writes nothing.
+ */
+fun <T> recordWhileRegistered(
+    registrations: Map<Int, T>,
+    subscriptionId: Int,
+    ownRegistration: () -> T,
+    values: MutableMap<Int, Int>,
+    value: Int,
+) {
+    synchronized(registrations) {
+        val current = registrations[subscriptionId] ?: return
+        if (current === ownRegistration()) values[subscriptionId] = value
+    }
+}
+
 class LoggerService : Service() {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
@@ -286,15 +305,24 @@ class LoggerService : Service() {
             }
             changes.add.forEach { subscriptionId ->
                 val manager = telephonyManager.createForSubscriptionId(subscriptionId)
+                // Set before this block releases the lock that record reads it under.
+                lateinit var unregister: () -> Unit
                 val record = { info: TelephonyDisplayInfo ->
-                    overrideNetworkTypes[subscriptionId] = info.overrideNetworkType
+                    recordWhileRegistered(
+                        displayInfoListeners,
+                        subscriptionId,
+                        { unregister },
+                        overrideNetworkTypes,
+                        info.overrideNetworkType,
+                    )
                 }
-                displayInfoListeners[subscriptionId] =
+                unregister =
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         listenForDisplayInfoFromS(manager, record)
                     } else {
                         listenForDisplayInfoBelowS(manager, record)
                     }
+                displayInfoListeners[subscriptionId] = unregister
             }
         }
     }
