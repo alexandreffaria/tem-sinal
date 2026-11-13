@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 private val sharingParagraphs = listOf(
     UiText(R.string.sharing_recording, listOf(UiText(R.string.log), UiText(R.string.stop))),
     UiText(R.string.sharing_sample),
-    UiText(R.string.sharing_server, listOf(UiText(R.string.send_my_data))),
+    UiText(R.string.sharing_server),
     UiText(R.string.sharing_firebase),
     UiText(R.string.sharing_personal),
     UiText(R.string.sharing_map),
