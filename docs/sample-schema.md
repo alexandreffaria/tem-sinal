@@ -234,9 +234,13 @@ secondary for data. A sample records that as:
 3. The NR leg as a CellReading with `rat` `NR` and `connection` `SECONDARY_SERVING`, from the
    `CellInfoNr` in the `requestCellInfoUpdate()` result when there is one (`source` `CELL_INFO`;
    its identity is often only ARFCN and PCI). Many phones report no `CellInfoNr` in NSA; then, when
+   the cells include a registered LTE cell (the anchor) and
    `TelephonyManager.getSignalStrength()` (28, no permission) on that subscription has a
    `CellSignalStrengthNr` (29) with any SS value, the NR leg is a CellReading with `source`
    `SIGNAL_STRENGTH`, `registered` false, every identity field null and only the SS values.
+   Without an anchor there is no leg: an empty `cells` stays "no cell", and an SA registration
+   whose modem reports no `CellInfoNr` isn't written as an NSA secondary. `getSignalStrength()` is
+   read at a different moment from the cell list, so it can't stand for a cell on its own.
 
 5G SA has no anchor: the NR cell itself is `registered`, `PRIMARY_SERVING`, from `CELL_INFO`.
 
