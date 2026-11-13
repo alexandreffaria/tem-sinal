@@ -153,11 +153,20 @@ fun nrSignalStrengthLeg(ssRsrp: Int, ssRsrq: Int, ssSinr: Int): CellReading? {
 }
 
 /**
- * [cells] with [nrLeg] added when [cells] has no NR cell, since a `CellInfoNr` already is the NR
- * leg. Null [cells] (the modem didn't answer) stays null.
+ * [cells] with [nrLeg] added when [cells] has a registered LTE cell (the NSA anchor) and no NR
+ * cell, since a `CellInfoNr` already is the NR leg. Without an anchor the leg would be an NR cell
+ * the modem's cell list doesn't support: an empty list stays "no cell", and an SA registration
+ * isn't written as an NSA secondary. Null [cells] (the modem didn't answer) stays null.
  */
 fun cellsWithNrLeg(cells: List<CellReading>?, nrLeg: CellReading?): List<CellReading>? =
-    if (cells == null || nrLeg == null || cells.any { it.rat == Rat.NR }) cells else cells + nrLeg
+    if (
+        cells == null || nrLeg == null ||
+        cells.none { it.rat == Rat.LTE && it.registered } || cells.any { it.rat == Rat.NR }
+    ) {
+        cells
+    } else {
+        cells + nrLeg
+    }
 
 /**
  * `TelephonyDisplayInfo.getOverrideNetworkType()` as an [OverrideNetworkType], with
