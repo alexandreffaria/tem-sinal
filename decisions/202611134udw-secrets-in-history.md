@@ -50,6 +50,7 @@ options:
 resolution:
   choice: rewrite
   resolved_at: 2026-11-13T00:21:56Z
+applied_at: 2026-11-13T02:32:33Z
 ---
 
 ## Context

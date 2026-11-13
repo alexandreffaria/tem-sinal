@@ -51,6 +51,7 @@ options:
 resolution:
   choice: lite
   resolved_at: 2026-11-13T00:20:48Z
+applied_at: 2026-11-13T02:32:31Z
 ---
 
 ## Context
