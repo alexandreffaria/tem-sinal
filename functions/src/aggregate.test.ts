@@ -154,6 +154,28 @@ test("a stay is cut out unless the phone first moves away from the end for DEPAR
   assert.equal(atCrag(1700), 1440);
 });
 
+// A tick every 5 s; each listed latitude is a fix that the next two ticks repeat.
+const repeatedFixes = (lats: number[]) => lats.flatMap((lat) => [lat, lat, lat]).map((lat, i) => sample(ALICE, lat, JAN_10 + i * 5_000));
+/** [count] latitudes [metres] apart along a meridian, after [from]. */
+const steps = (from: number, count: number, metres: number) => Array.from({ length: count }, (_, i) => from + ((i + 1) * metres) / 111_195);
+
+test("wrong fixes repeated over three ticks don't bring an end's departure sooner", () => {
+  const hour = (lat: number) => Array.from({ length: 240 }, (_, i) => lat + 0.00009 * Math.sin(i * 1.7));
+  const end = PLACE.lat + 0.1;
+  // Forty wrong fixes drift 200 m apart, 120 samples, then an hour still at home, a drive, and the same mirrored.
+  const session = repeatedFixes([
+    ...steps(PLACE.lat - 0.1, 40, 200), ...hour(PLACE.lat), ...steps(PLACE.lat, 499, 200), ...hour(end), ...steps(end + 0.1, 40, -200).toReversed(),
+  ]);
+  for (const trimM of [TRIM_M.min, TRIM_M.max]) assertClear(trimSession(session, trimM, trimM), [PLACE.lat, end], trimM, `${trimM}`);
+});
+
+test("an end's first fixes repeated over three ticks still cut ANCHOR_FIXES distinct fixes", () => {
+  const end = PLACE.lat + 0.1;
+  // Four wrong fixes glide to the phone at 200 m a fix, and it drives off at the same pace; the same mirrored.
+  const session = repeatedFixes([...steps(PLACE.lat, 4, -200).toReversed(), PLACE.lat, ...steps(PLACE.lat, 499, 200), end, ...steps(end, 4, 200)]);
+  for (const trimM of [TRIM_M.min, TRIM_M.max]) assertClear(trimSession(session, trimM, trimM), [PLACE.lat, end], trimM, `${trimM}`);
+});
+
 test("a step faster than any phone moves after an end's cut doesn't restart it", () => {
   const fixes = walk(401);
   // One fix 1 km off in the middle: two steps longer than either trim, both after the cuts.

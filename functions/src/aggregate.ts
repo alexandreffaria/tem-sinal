@@ -13,7 +13,7 @@ export const TRIM_M = { min: 300, max: 800 } as const;
 /** How old a single-install cell's first sample must be before a monthly batch publishes it. */
 export const LONE_CELL_AGE_MS = 30 * 86_400_000;
 
-/** How many fixes a resting place is drawn from: a minute at the app's 5 s interval. */
+/** How many distinct fixes a resting place is drawn from: a minute at the app's 5 s interval. */
 export const ANCHOR_FIXES = 12;
 
 /**
@@ -26,7 +26,7 @@ export const STAYS = [
   { fixes: 120, radiusM: 200 },
 ] as const;
 
-/** How many fixes outside the cut it takes for the phone to have left an end's resting places: five minutes at the app's 5 s interval. */
+/** How many distinct fixes outside the cut it takes for the phone to have left an end's resting places: five minutes at the app's 5 s interval. */
 export const DEPARTURE_FIXES = 60;
 
 /** A speed in m/s, 180 km/h, above any road's limit in Brazil: a step between two fixes faster than this means one of them is wrong. */
@@ -124,16 +124,27 @@ type Anchor = { fix: StoredSample["fix"]; radiusM: number };
  * consecutive fixes within 100 m of where the phone rests (or three minutes within 25 m) cut that place
  * out, whatever wrong fixes come before or among them, unless [DEPARTURE_FIXES] of those wrong
  * fixes move.
+ *
+ * Consecutive samples can carry the same fix. A sample whose fix has the coordinates of the one
+ * before it counts once, with it, towards [ANCHOR_FIXES] and [DEPARTURE_FIXES], so a repeated wrong
+ * fix neither narrows the first two kinds' cut nor brings departure sooner. Stays and the speed
+ * check count samples and their tick times: a repeat only lengthens a run within a stay's radius
+ * and shortens the time of the step after it, so it can only add places and cuts.
  */
 function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   const fixes = samples.map((s) => s.fix);
+  const repeat = fixes.map((fix, i) => fix.lat === fixes[i - 1]?.lat && fix.lon === fixes[i - 1]?.lon);
   const places: { from: number; stay: boolean; anchors: Anchor[] }[] = [];
   const inStay = fixes.map(() => false);
   samples.forEach((s, i) => {
     const before = samples[i - 1];
     const metres = before ? metresApart(before.fix, s.fix) : Infinity;
     if (metres > trimM || metres > (MAX_SPEED_MPS * Math.abs(s.elapsedRealtimeMs - (before?.elapsedRealtimeMs ?? 0))) / 1000) {
-      places.push({ from: i, stay: false, anchors: fixes.slice(i, i + ANCHOR_FIXES).map((fix) => ({ fix, radiusM: trimM })) });
+      const anchors: Anchor[] = [];
+      for (let k = i, fix = fixes[k]; fix && anchors.length < ANCHOR_FIXES; fix = fixes[++k]) {
+        if (k === i || !repeat[k]) anchors.push({ fix, radiusM: trimM });
+      }
+      places.push({ from: i, stay: false, anchors });
     }
   });
   for (const stay of STAYS) {
@@ -194,7 +205,7 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
         }
       }
     }
-    if (moving[i]) away++;
+    if (moving[i] && !repeat[i]) away++;
   }
   return beyond;
 }
