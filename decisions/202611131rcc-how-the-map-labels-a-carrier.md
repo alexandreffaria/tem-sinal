@@ -77,6 +77,7 @@ options:
 resolution:
   choice: reliable
   resolved_at: 2026-11-13T17:13:07Z
+applied_at: 2026-11-13T17:17:09Z
 ---
 
 ## Context
