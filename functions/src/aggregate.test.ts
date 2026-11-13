@@ -221,21 +221,24 @@ test("a 14 h session that never leaves its start costs a bounded number of dista
 
 test("a session that flaps between two places costs a bounded number of distances per fix", () => {
   // 4 000 fixes alternating between PLACE and a point 1.2 km south: each jump starts a place, so the
-  // start never departs and has about 48 000 anchors, on two spots. Then a walk 1.7 km north and a
-  // rest there; at the longest trim the cuts around the start and the rest meet.
+  // start never departs and has about 48 000 anchors near two spots, at the same two coordinates or,
+  // jittered, each up to 10 m off. Then a walk 1.7 km north and a rest there; at the longest trim
+  // the cuts around the start and the rest meet.
   const rest = PLACE.lat + 1_700 / 111_195;
-  const lats = [
-    ...Array.from({ length: 4_000 }, (_, i) => (i % 2 === 0 ? PLACE.lat : PLACE.lat - 0.011)),
-    ...Array.from({ length: 300 }, (_, i) => PLACE.lat + ((i + 1) * 1_700) / 300 / 111_195),
-    ...Array.from({ length: 4_000 }, (_, i) => rest + 0.00009 * Math.sin(i * 1.7)),
-  ];
-  const session = lats.map((lat, i) => sample(ALICE, lat, JAN_10 + i * 5_000));
-  for (const trimM of [TRIM_M.min, TRIM_M.max]) {
-    const before = distancesComputed;
-    const kept = trimSession(session, trimM, trimM);
-    if (trimM === TRIM_M.min) assertClear(kept, [PLACE.lat, PLACE.lat - 0.011, rest], trimM);
-    else assert.deepEqual(kept, []);
-    assert.ok(distancesComputed - before < 100 * session.length, `${trimM}: ${distancesComputed - before}`);
+  for (const jitter of [0, 0.00009]) {
+    const lats = [
+      ...Array.from({ length: 4_000 }, (_, i) => (i % 2 === 0 ? PLACE.lat : PLACE.lat - 0.011) + jitter * Math.sin(i * 1.7)),
+      ...Array.from({ length: 300 }, (_, i) => PLACE.lat + ((i + 1) * 1_700) / 300 / 111_195),
+      ...Array.from({ length: 4_000 }, (_, i) => rest + 0.00009 * Math.sin(i * 1.7)),
+    ];
+    const session = lats.map((lat, i) => sample(ALICE, lat, JAN_10 + i * 5_000));
+    for (const trimM of [TRIM_M.min, TRIM_M.max]) {
+      const before = distancesComputed;
+      const kept = trimSession(session, trimM, trimM);
+      if (trimM === TRIM_M.min) assertClear(kept, [PLACE.lat, PLACE.lat - 0.011, rest], trimM - jitter * 111_195, `${jitter} ${trimM}`);
+      else assert.deepEqual(kept, [], `${jitter} ${trimM}`);
+      assert.ok(distancesComputed - before < 100 * session.length, `${jitter} ${trimM}: ${distancesComputed - before}`);
+    }
   }
 });
 
