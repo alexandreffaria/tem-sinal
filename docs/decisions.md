@@ -2,6 +2,41 @@
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-13: The map labels a carrier by the best state 90% of readings reached
+
+For each carrier in each cell, the public map shows signal, emergency calls only or no signal,
+worked out on the map page from the published counts (`serviceN`, `emergencyN`, `noServiceN`):
+
+```
+total = serviceN + emergencyN + noServiceN
+serviceN ≥ 0.9 × total               → signal
+serviceN + emergencyN ≥ 0.9 × total  → emergency calls only
+otherwise                            → no signal
+```
+
+A phone in service can also make emergency calls, so in-service readings count towards emergency
+calls only. Signal and emergency calls only each hold for at least 9 readings in 10, and a few
+stray readings don't relabel a well-measured spot: 199 / 0 / 1 is signal, 120 / 80 / 0 is
+emergency calls only, 1 / 200 / 0 is emergency calls only, 85 / 0 / 15 and 34 / 33 / 33 are no
+signal (signal / emergency only / no service). Tapping a cell shows the three counts. Issue #17.
+
+The rule weighs the counts against each other, so it relies on the counts being fair across
+states. The fixes that make them so have merged: every tick logs a sample at a fixed rate (#136,
+merged as #145), and readings whose cells are unknown are counted in every state (#130 as #139,
+#141 as #144), as designed in #131 (merged as #137).
+
+**Why not the others.** *Majority* (the state most readings saw) shows 34 / 33 / 33 as signal
+although two readings in three had no normal service. *Worst seen* shows a spot that worked 199
+times out of 200 as no signal, so the busiest spots would look worst. *Shares* (three shares per
+cell, no label) is hard to read at a glance on a phone and leaves the safety judgement to each
+reader.
+
+**Left open.** The 90% is a guess; it is to be tuned once there is real data. Since the map page
+works the label out, changing it changes neither the server nor the published files. How few
+readings is too few to label a cell is a separate question.
+
+Card: `202611131rcc` (choice: reliable).
+
 ## 2026-11-13: One sample per tick, ticks at a fixed rate
 
 The public counts (`serviceN`, `emergencyN`, `noServiceN`) count samples, so they are fair across
