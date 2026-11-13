@@ -17,8 +17,11 @@ jobs:
 
       - name: Check added, copied and renamed files
         run: |
-          added=$(git diff --name-only --find-renames --find-copies --diff-filter=ACR "origin/${{ github.base_ref }}...HEAD")
-          bad=$(printf '%s\n' "$added" | grep -E '\.(jks|keystore|p12|b64|pem|p8|key|aab|apk|log)$|play-account\.json$|(^|/)\.env' || true)
+          # -z prints paths raw and NUL-terminated, so no name is quoted or split.
+          # git diff runs as its own command so that a git failure fails the step.
+          list=$(mktemp)
+          git diff -z --name-only --find-renames --find-copies --diff-filter=ACR "origin/${{ github.base_ref }}...HEAD" > "$list"
+          bad=$(grep -ziE '\.(jks|keystore|p12|b64|pem|p8|key|aab|apk|log)$|play-account\.json$|(^|/)\.env' "$list" | tr '\0' '\n' || true)
           if [ -n "$bad" ]; then
             echo "These files must not be committed:"
             echo "$bad"
