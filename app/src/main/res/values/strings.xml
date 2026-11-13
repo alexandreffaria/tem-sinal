@@ -13,6 +13,7 @@
     <string name="getting_location">Getting Location…</string>
     <string name="getting_signal_strength">Getting Signal Strength…</string>
     <string name="location">Lat: %1$s, Lon: %2$s</string>
+    <string name="no_location_fix">No location fix</string>
     <string name="signal_strength_dbm">Signal Strength: %1$d dBm</string>
     <string name="signal_strength_unknown">Signal Strength: unknown</string>
 

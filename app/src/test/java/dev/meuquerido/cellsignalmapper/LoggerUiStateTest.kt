@@ -67,7 +67,7 @@ class LoggerUiStateTest {
         val state = LoggerUiState().serviceStarted()
             .withSample(null, null, emptyList(), PingResult.BAD)
 
-        assertEquals(UiText(R.string.location, listOf("null", "null")), state.location)
+        assertEquals(UiText(R.string.no_location_fix), state.location)
         assertEquals(UiText(R.string.signal_strength_unknown), state.signalStrength)
         assertEquals(listOf(UiText(R.string.no_active_sim)), state.service)
     }

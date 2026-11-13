@@ -12,6 +12,7 @@
     <string name="getting_location">Obtendo localização…</string>
     <string name="getting_signal_strength">Obtendo intensidade do sinal…</string>
     <string name="location">Lat: %1$s, Long: %2$s</string>
+    <string name="no_location_fix">Sem localização (GPS)</string>
     <string name="signal_strength_dbm">Intensidade do sinal: %1$d dBm</string>
     <string name="signal_strength_unknown">Intensidade do sinal: desconhecida</string>
 
