@@ -3,10 +3,12 @@ package dev.meuquerido.cellsignalmapper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import kotlin.concurrent.thread
 
 class SignalLoggerPendingTest {
@@ -39,6 +41,24 @@ class SignalLoggerPendingTest {
 
         assertEquals(listOf("sample 1", "sample 2"), toUpload.readLines())
         assertFalse(log.exists())
+    }
+
+    @Test
+    fun failedMoveThrowsAndKeepsTheLog() {
+        SignalLogger.appendLine(log, "sample 1")
+        val unreachable = File(dir.root, "missing-dir/pending.json")
+
+        assertThrows(IllegalStateException::class.java) { SignalLogger.takePending(log, unreachable) }
+        assertEquals(listOf("sample 1"), log.readLines())
+    }
+
+    @Test
+    fun failedAppendToPendingThrowsAndKeepsTheLog() {
+        SignalLogger.appendLine(log, "sample 1")
+        pending.mkdir()
+
+        assertThrows(IOException::class.java) { SignalLogger.takePending(log, pending) }
+        assertEquals(listOf("sample 1"), log.readLines())
     }
 
     @Test

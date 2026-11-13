@@ -41,18 +41,19 @@ object FirebaseUploader {
         }
     }
 
+    /** Returns false, keeping the log and the pending file, if moving, reading or any batch fails. */
     private fun upload(context: Context): Boolean {
-        val pending = SignalLogger.takePending(
-            SignalLogger.getLogFile(context),
-            SignalLogger.getPendingFile(context)
-        )
-        if (pending == null) {
-            Log.d("FirebaseUploader", "Nothing to upload.")
-            return false
-        }
-
-        val collection = db.collection("signal_logs")
         try {
+            val pending = SignalLogger.takePending(
+                SignalLogger.getLogFile(context),
+                SignalLogger.getPendingFile(context)
+            )
+            if (pending == null) {
+                Log.d("FirebaseUploader", "Nothing to upload.")
+                return false
+            }
+
+            val collection = db.collection("signal_logs")
             for (lines in uploadBatches(pending.readLines().filter { it.isNotBlank() })) {
                 val batch = db.batch()
                 lines.forEach { line ->
@@ -65,13 +66,13 @@ object FirebaseUploader {
                 }
                 Tasks.await(batch.commit())
             }
+            Log.d("FirebaseUploader", "Upload successful, deleting pending file.")
+            pending.delete()
+            return true
         } catch (e: Exception) {
             Log.e("FirebaseUploader", "Upload failed", e)
             return false
         }
-        Log.d("FirebaseUploader", "Upload successful, deleting pending file.")
-        pending.delete()
-        return true
     }
 
     /** Samples not uploaded yet: the log plus a pending file left by a failed upload. */
