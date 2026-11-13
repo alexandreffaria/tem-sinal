@@ -28,7 +28,6 @@ fun LoggerButton(
     modifier: Modifier = Modifier,
     location: String = "",
     signalStrength: String = "",
-    cellInfo: List<String> = emptyList(),
     pendingPoints: Int = 0,
     debugText: String
 ) {
@@ -62,9 +61,6 @@ fun LoggerButton(
         Spacer(modifier = Modifier.height(32.dp))
         Text(location)
         Text(signalStrength)
-        cellInfo.forEach {
-            Text(it)
-        }
 
 
         Box(
