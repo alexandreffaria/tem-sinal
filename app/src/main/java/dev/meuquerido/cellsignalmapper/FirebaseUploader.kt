@@ -6,6 +6,8 @@ import android.util.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.gson.Gson
+import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +41,24 @@ fun parseLog(lines: List<String>, gson: Gson): ParsedLog {
     return ParsedLog(samples, rejected)
 }
 
+/**
+ * How long one batch commit may wait for the server. Firestore completes a commit only when the
+ * server acknowledges it, so offline the wait would otherwise last until the network returns.
+ */
+const val COMMIT_TIMEOUT_SECONDS = 30L
+
+/**
+ * Commits the samples in [pending] batch by batch with [commit], then moves the lines that are not
+ * a sample to [rejected] and deletes [pending]. If [commit] throws, for example on a timeout, the
+ * exception propagates and both files are left as they were.
+ */
+fun uploadPending(pending: File, rejected: File, gson: Gson, commit: (List<SignalLogEntry>) -> Unit): ParsedLog {
+    val log = parseLog(pending.readLines(), gson)
+    uploadBatches(log.samples).forEach(commit)
+    SignalLogger.keepRejected(pending, rejected, log.rejected)
+    return log
+}
+
 object FirebaseUploader {
     @SuppressLint("StaticFieldLeak")
     private val db = FirebaseFirestore.getInstance()
@@ -49,8 +69,10 @@ object FirebaseUploader {
     /**
      * Uploads every logged sample off the main thread, one upload at a time, and calls
      * [onComplete] on the main thread. The pending file is deleted only after every batch was
-     * committed; a failed upload keeps it for the next attempt, and samples logged meanwhile stay
-     * in the log. Re-uploading a batch is harmless because each document id is the sample's id.
+     * committed; a failed or timed-out upload keeps it for the next attempt, and samples logged
+     * meanwhile stay in the log. Re-uploading a batch is harmless because each document id is the
+     * sample's id, so a timed-out write that Firestore still delivers later only rewrites the same
+     * documents.
      */
     fun uploadLogFile(context: Context, onComplete: (Boolean) -> Unit) {
         val appContext = context.applicationContext
@@ -61,7 +83,8 @@ object FirebaseUploader {
     }
 
     /**
-     * Returns false, keeping the log and the pending file, if moving, reading or any batch fails.
+     * Returns false, keeping the log and the pending file, if moving, reading or any batch fails or
+     * is not acknowledged within [COMMIT_TIMEOUT_SECONDS].
      * Lines that are not a sample are moved to the rejected file instead of being deleted.
      */
     private fun upload(context: Context): Boolean {
@@ -76,17 +99,15 @@ object FirebaseUploader {
             }
 
             val collection = db.collection("signal_logs")
-            val log = parseLog(pending.readLines(), gson)
-            for (samples in uploadBatches(log.samples)) {
+            val log = uploadPending(pending, SignalLogger.getRejectedFile(context), gson) { samples ->
                 val batch = db.batch()
                 samples.forEach { batch.set(collection.document(it.id), it) }
-                Tasks.await(batch.commit())
+                Tasks.await(batch.commit(), COMMIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             }
             if (log.rejected.isNotEmpty()) {
                 Log.w("FirebaseUploader", "Kept ${log.rejected.size} unparseable lines in the rejected file.")
             }
-            Log.d("FirebaseUploader", "Upload successful, deleting pending file.")
-            SignalLogger.keepRejected(pending, SignalLogger.getRejectedFile(context), log.rejected)
+            Log.d("FirebaseUploader", "Upload successful, pending file deleted.")
             return true
         } catch (e: Exception) {
             Log.e("FirebaseUploader", "Upload failed", e)
