@@ -117,14 +117,14 @@ class MainActivity : ComponentActivity() {
 
         FirebaseApp.initializeApp(this)
         FirebaseAuth.getInstance().signInAnonymously()
-            .addOnSuccessListener { Log.d("Auth", "Signed in anonymously") }
+            .addOnSuccessListener {
+                Log.d("Auth", "Signed in anonymously")
+                FirebaseUploader.uploadLogFile(this) {
+                    Log.d("MainActivity", "Retry upload on start: $it")
+                    pendingPoints = FirebaseUploader.getPendingLogCount(this)
+                }
+            }
             .addOnFailureListener { Log.e("Auth", "Failed to sign in anonymously", it) }
-
-        FirebaseUploader.uploadLogFile(this){
-            Log.d(
-                "MainActivity", "Retry upload on start: $it"
-            )
-        }
 
         registerReceiver(logUpdateReceiver, IntentFilter("dev.meuquerido.cellsignalmapper.LOG_UPDATE"))
 
