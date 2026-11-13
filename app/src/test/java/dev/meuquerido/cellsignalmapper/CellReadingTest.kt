@@ -1,6 +1,7 @@
 package dev.meuquerido.cellsignalmapper
 
 import android.telephony.CellInfo
+import android.telephony.TelephonyDisplayInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -83,7 +84,7 @@ class CellReadingTest {
     fun simWithInvalidSlotAndNoOperatorHasNulls() {
         val sim = simReading(
             slotIndex = -1, simOperator = "", operatorNumeric = "", operatorAlphaLong = null,
-            serviceState = null, cells = null,
+            serviceState = null, overrideNetworkType = null, cells = null,
         )
 
         assertNull(sim.slot)
@@ -99,7 +100,7 @@ class CellReadingTest {
         val sim = simReading(
             slotIndex = 1, simOperator = "00101", operatorNumeric = "00102",
             operatorAlphaLong = "Other Network", serviceState = ServiceStatus.IN_SERVICE,
-            cells = emptyList(),
+            overrideNetworkType = null, cells = emptyList(),
         )
 
         assertEquals(1, sim.slot)
@@ -123,7 +124,7 @@ class CellReadingTest {
     fun simAndCellPlmnsThatAreNotFiveOrSixDigitsAreNull() {
         val sim = simReading(
             slotIndex = 0, simOperator = "7240", operatorNumeric = "724ab",
-            operatorAlphaLong = null, serviceState = null, cells = null,
+            operatorAlphaLong = null, serviceState = null, overrideNetworkType = null, cells = null,
         )
         assertNull(sim.simPlmn)
         assertNull(sim.registeredPlmn)
@@ -133,5 +134,78 @@ class CellReadingTest {
         assertNull(plmnOf("724", "0611"))
         assertNull(plmnOf("72", "06"))
         assertNull(plmnOf("724", " 6"))
+    }
+
+    private val lteAnchor = cellReading(
+        Rat.LTE, registered = true, connectionStatus = CellInfo.CONNECTION_PRIMARY_SERVING,
+        timestampMs = 1_000L,
+        arfcn = 1650, pci = 101, mcc = "001", mnc = "01", ci = 1234L, tac = 42, rsrp = -98,
+    )
+
+    @Test
+    fun nsaWithoutCellInfoNrGetsTheNrLegFromSignalStrength() {
+        val leg = nrSignalStrengthLeg(ssRsrp = -102, ssRsrq = CellInfo.UNAVAILABLE, ssSinr = 41)
+
+        val expected = CellReading(
+            source = CellSource.SIGNAL_STRENGTH, rat = Rat.NR, registered = false,
+            connection = CellConnection.SECONDARY_SERVING, timestampMs = null,
+            arfcn = null, pci = null, plmn = null, ci = null, tac = null,
+            rsrp = -102, rsrq = null, sinr = null, rssi = null, rscp = null, ecno = null,
+        )
+        assertEquals(expected, leg)
+        assertEquals(listOf(lteAnchor, expected), cellsWithNrLeg(listOf(lteAnchor), leg))
+    }
+
+    @Test
+    fun nsaWithCellInfoNrGetsNoSecondNrLeg() {
+        val cellInfoNr = cellReading(
+            Rat.NR, registered = false, connectionStatus = CellInfo.CONNECTION_SECONDARY_SERVING,
+            timestampMs = 1_000L,
+            arfcn = 640_000, pci = 500, mcc = null, mnc = null,
+            ci = CellInfo.UNAVAILABLE_LONG, tac = CellInfo.UNAVAILABLE, rsrp = -100,
+        )
+        val leg = nrSignalStrengthLeg(ssRsrp = -102, ssRsrq = -12, ssSinr = 4)
+
+        val cells = listOf(lteAnchor, cellInfoNr)
+        assertEquals(cells, cellsWithNrLeg(cells, leg))
+    }
+
+    @Test
+    fun noNrLegWithoutAnSsValueOrWithoutCellInfo() {
+        assertNull(
+            nrSignalStrengthLeg(
+                ssRsrp = CellInfo.UNAVAILABLE, ssRsrq = CellInfo.UNAVAILABLE,
+                ssSinr = CellInfo.UNAVAILABLE,
+            ),
+        )
+        assertEquals(listOf(lteAnchor), cellsWithNrLeg(listOf(lteAnchor), null))
+
+        val leg = nrSignalStrengthLeg(ssRsrp = -102, ssRsrq = -12, ssSinr = 4)
+        assertNull(cellsWithNrLeg(null, leg))
+    }
+
+    @Suppress("DEPRECATION") // NR_NSA_MMWAVE is what API 30 reports for mmWave.
+    @Test
+    fun overrideNetworkTypeWritesMmWaveAsNrAdvanced() {
+        assertEquals(
+            OverrideNetworkType.NR_ADVANCED,
+            overrideNetworkTypeOf(TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE),
+        )
+        assertEquals(
+            OverrideNetworkType.NR_ADVANCED,
+            overrideNetworkTypeOf(TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED),
+        )
+        assertEquals(
+            OverrideNetworkType.NR_NSA,
+            overrideNetworkTypeOf(TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA),
+        )
+        assertNull(overrideNetworkTypeOf(99))
+
+        val sim = simReading(
+            slotIndex = 0, simOperator = "00101", operatorNumeric = "00101",
+            operatorAlphaLong = null, serviceState = ServiceStatus.IN_SERVICE,
+            overrideNetworkType = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_CA, cells = null,
+        )
+        assertEquals(OverrideNetworkType.LTE_CA, sim.overrideNetworkType)
     }
 }

@@ -11,6 +11,7 @@ import android.telephony.CellInfoWcdma
 import android.telephony.CellSignalStrengthNr
 import android.telephony.NetworkRegistrationInfo
 import android.telephony.ServiceState
+import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -121,6 +122,59 @@ fun cellReading(
     )
 }
 
+/**
+ * The NR leg of 5G NSA as `SignalStrength` reports it: a [CellSource.SIGNAL_STRENGTH] reading
+ * from the raw `CellSignalStrengthNr` SS values, with no identity, or null when none of them is
+ * in range.
+ */
+fun nrSignalStrengthLeg(ssRsrp: Int, ssRsrq: Int, ssSinr: Int): CellReading? {
+    val rsrp = ssRsrp.within(NR_RANGES.rsrp)
+    val rsrq = ssRsrq.within(NR_RANGES.rsrq)
+    val sinr = ssSinr.within(NR_RANGES.sinr)
+    if (rsrp == null && rsrq == null && sinr == null) return null
+    return CellReading(
+        source = CellSource.SIGNAL_STRENGTH,
+        rat = Rat.NR,
+        registered = false,
+        connection = CellConnection.SECONDARY_SERVING,
+        timestampMs = null,
+        arfcn = null,
+        pci = null,
+        plmn = null,
+        ci = null,
+        tac = null,
+        rsrp = rsrp,
+        rsrq = rsrq,
+        sinr = sinr,
+        rssi = null,
+        rscp = null,
+        ecno = null,
+    )
+}
+
+/**
+ * [cells] with [nrLeg] added when [cells] has no NR cell, since a `CellInfoNr` already is the NR
+ * leg. Null [cells] (the modem didn't answer) stays null.
+ */
+fun cellsWithNrLeg(cells: List<CellReading>?, nrLeg: CellReading?): List<CellReading>? =
+    if (cells == null || nrLeg == null || cells.any { it.rat == Rat.NR }) cells else cells + nrLeg
+
+/**
+ * `TelephonyDisplayInfo.getOverrideNetworkType()` as an [OverrideNetworkType], with
+ * `OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE` as [OverrideNetworkType.NR_ADVANCED]; null for a value
+ * this app doesn't know.
+ */
+@Suppress("DEPRECATION") // NR_NSA_MMWAVE is what API 30 reports for mmWave.
+fun overrideNetworkTypeOf(value: Int): OverrideNetworkType? = when (value) {
+    TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE -> OverrideNetworkType.NONE
+    TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_CA -> OverrideNetworkType.LTE_CA
+    TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO -> OverrideNetworkType.LTE_ADVANCED_PRO
+    TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA -> OverrideNetworkType.NR_NSA
+    TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE,
+    TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED -> OverrideNetworkType.NR_ADVANCED
+    else -> null
+}
+
 /** The strength the map ranks cells by: RSRP for LTE and NR, RSCP for WCDMA, RSSI for GSM. */
 fun CellReading.headlineDbm(): Int? = when (rat) {
     Rat.LTE, Rat.NR -> rsrp
@@ -132,7 +186,9 @@ fun CellReading.headlineDbm(): Int? = when (rat) {
  * A [SimReading] from raw values: [slotIndex] is null or negative (`INVALID_SIM_SLOT_INDEX`) when
  * unknown, [simOperator] is empty while the SIM isn't ready, and [operatorNumeric] and
  * [operatorAlphaLong] are the subscription's `ServiceState` values, null or empty when it isn't
- * registered. A PLMN that [plmnOrNull] rejects is null.
+ * registered. A PLMN that [plmnOrNull] rejects is null. [overrideNetworkType] is the latest
+ * `TelephonyDisplayInfo.getOverrideNetworkType()`, null until one arrives; it maps by
+ * [overrideNetworkTypeOf].
  */
 fun simReading(
     slotIndex: Int?,
@@ -140,6 +196,7 @@ fun simReading(
     operatorNumeric: String?,
     operatorAlphaLong: String?,
     serviceState: ServiceStatus?,
+    overrideNetworkType: Int?,
     cells: List<CellReading>?,
 ): SimReading =
     SimReading(
@@ -148,7 +205,7 @@ fun simReading(
         registeredPlmn = plmnOrNull(operatorNumeric),
         operatorName = operatorAlphaLong?.ifEmpty { null },
         serviceState = serviceState,
-        overrideNetworkType = null,
+        overrideNetworkType = overrideNetworkType?.let(::overrideNetworkTypeOf),
         cells = cells,
     )
 
