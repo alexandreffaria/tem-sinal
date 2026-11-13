@@ -2,6 +2,31 @@
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-13: The code goes public in a new repo, as Tem Sinal
+
+The code moves to a new public repo, `alexandreffaria/tem-sinal`, built from a cleaned copy of
+this history: `git filter-repo` drops the Play service account, the release keystore (raw and
+base64), the release bundle and `firebase-debug.log`, blanks the keystore passwords in
+`app/build.gradle.kts`, and rewrites every author and committer email to the owner's GitHub
+noreply address. The open issues move there; this repo stays private, as an archive with its pull
+requests and reviews. The new repo is made public only after a fresh clone of it is searched for
+every dropped path, the password text and the old email, with nothing found; then branch
+protection goes on, and the checks run on GitHub-hosted runners, which are free for public repos.
+
+Before any of it, a throwaway public repo checks that GitHub starts jobs on a public repo while
+this account's billing is blocked; if it doesn't, going public doesn't bring CI back, and the
+owner decides again.
+
+The app is renamed Tem Sinal ("is there signal?"): its display name, the Play listing, the docs.
+The application id `dev.meuquerido.cellsignalmapper` stays, since Play can't change it.
+
+This replaces the in-place history rewrite (card `202611134udw`, issue #4) and the self-hosted
+runners (card `20261113tc78`, issue #95): a public repo must never run pull-request code on the
+owner's machine. Key rotation (#2) is still needed, but doesn't block going public, since the keys
+never reach the new repo.
+
+Card: `20261113b81p` (choice: fresh; the owner left the new name to the agents).
+
 ## 2026-11-13: No altitude on the map
 
 The public map shows signal only, as settled: no altitude from the phones' readings and none from
