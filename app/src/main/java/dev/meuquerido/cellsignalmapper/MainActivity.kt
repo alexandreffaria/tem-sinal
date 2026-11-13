@@ -1,8 +1,6 @@
 package dev.meuquerido.cellsignalmapper
 
 import android.Manifest
-import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,7 +11,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -30,8 +29,6 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.Context
 import androidx.compose.runtime.mutableIntStateOf
 
 
@@ -39,17 +36,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var telephonyManager: TelephonyManager
 
-    private var isLogging by mutableStateOf(false)
-
-    private val locationText = mutableStateOf("Getting Location...")
-    private val signalStrengthText = mutableStateOf("Getting Signal Strength...")
-    private val cellInfoText = mutableStateOf(listOf("Getting tower info..."))
-
     private var pendingPoints by mutableIntStateOf(0)
-
-    private val lastPingResult = mutableStateOf("")
-    private val pingAnimationKey = mutableIntStateOf(0)
-    private val debugText = mutableStateOf("")
 
     private val PERMISSIONS_REQUEST_CODE = 1001
     private val REQUIRED_PERMISSIONS = arrayOf(
@@ -57,21 +44,6 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.ACCESS_COARSE_LOCATION,
         Manifest.permission.READ_PHONE_STATE
     )
-
-    private val logUpdateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            intent?.let {
-                locationText.value = it.getStringExtra("location") ?: ""
-                signalStrengthText.value = it.getStringExtra("signal") ?: ""
-                cellInfoText.value = listOf(it.getStringExtra("cell") ?: "")
-                pendingPoints = FirebaseUploader.getPendingLogCount(applicationContext)
-                lastPingResult.value = it.getStringExtra("pingResult") ?: ""
-                pingAnimationKey.intValue++
-                debugText.value = it.getStringExtra("debug") ?: ""
-            }
-        }
-    }
-
 
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
@@ -88,24 +60,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleLogging() {
-        if (!isLogging) {
-            val serviceIntent = Intent(this, LoggerService::class.java)
-            startForegroundService(serviceIntent)
-            isLogging = true
+        val serviceIntent = Intent(this, LoggerService::class.java)
+        if (LoggerState.state.value.isLogging) {
+            stopService(serviceIntent)
         } else {
-            val stopIntent = Intent(this, LoggerService::class.java)
-            stopService(stopIntent)
-            isLogging = false
+            startForegroundService(serviceIntent)
         }
-
-        locationText.value = ""
-        signalStrengthText.value = ""
-        cellInfoText.value = emptyList()
     }
 
 
 
-    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,14 +90,18 @@ class MainActivity : ComponentActivity() {
             }
             .addOnFailureListener { Log.e("Auth", "Failed to sign in anonymously", it) }
 
-        registerReceiver(logUpdateReceiver, IntentFilter("dev.meuquerido.cellsignalmapper.LOG_UPDATE"))
-
 
         pendingPoints = FirebaseUploader.getPendingLogCount(this)
 
 
         setContent {
             CellSignalMapperTheme {
+                val loggerState by LoggerState.state.collectAsState()
+                LaunchedEffect(loggerState.sampleCount) {
+                    if (loggerState.sampleCount > 0) {
+                        pendingPoints = FirebaseUploader.getPendingLogCount(this@MainActivity)
+                    }
+                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(
                         modifier = Modifier
@@ -142,12 +110,15 @@ class MainActivity : ComponentActivity() {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        PingVisualizer(result = lastPingResult.value, animationKey = pingAnimationKey.value)
+                        PingVisualizer(
+                            result = loggerState.pingResult?.name ?: "",
+                            animationKey = loggerState.sampleCount
+                        )
 
                         Spacer(modifier = Modifier.height(24.dp))
 
                         LoggerButton(
-                            isLogging = isLogging,
+                            isLogging = loggerState.isLogging,
                             onToggle = { toggleLogging() },
                             onUpload = {
                                 FirebaseUploader.uploadLogFile(this@MainActivity) {
@@ -155,11 +126,10 @@ class MainActivity : ComponentActivity() {
                                     pendingPoints = FirebaseUploader.getPendingLogCount(this@MainActivity)
                                 }
                             },
-                            location = locationText.value,
-                            signalStrength = signalStrengthText.value,
-                            cellInfo = cellInfoText.value,
+                            location = loggerState.location,
+                            signalStrength = loggerState.signalStrength,
                             pendingPoints = pendingPoints,
-                            debugText = debugText.value
+                            debugText = ""
                         )
                     }
                 }

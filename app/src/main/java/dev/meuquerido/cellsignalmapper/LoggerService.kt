@@ -28,8 +28,6 @@ import java.util.UUID
 
 class LoggerService : Service() {
 
-    enum class PingResult { SUCCESS, DUPLICATE, BAD }
-
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private lateinit var telephonyManager: TelephonyManager
 
@@ -67,6 +65,7 @@ class LoggerService : Service() {
         }
 
         startForegroundService()
+        LoggerState.serviceStarted()
         startLoggingLoop()
     }
 
@@ -207,13 +206,7 @@ class LoggerService : Service() {
                     Log.d("LoggerService", "Skipped — Not user carrier (SIM $simMcc$simMnc vs Tower $mcc$mnc)")
                 }
 
-                val intent = Intent("dev.meuquerido.cellsignalmapper.LOG_UPDATE").apply {
-                    putExtra("location", "Lat: $lat, Lon: $lon")
-                    putExtra("signal", "Signal Strength: $signalDbm dBm")
-                    putExtra("pingResult", pingResult.name)
-                    putExtra("debug", "")
-                }
-                sendBroadcast(intent)
+                LoggerState.sample(lat, lon, signalDbm, pingResult)
 
                 delay(5000)
             }
@@ -234,6 +227,7 @@ class LoggerService : Service() {
             telephonyManager.unregisterTelephonyCallback(telephonyCallback)
         }
         coroutineScope.cancel()
+        LoggerState.serviceStopped()
         super.onDestroy()
     }
 }
