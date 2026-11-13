@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -41,8 +42,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var telephonyManager: TelephonyManager
 
-    /** Shown instead of starting logging when a permission it needs is denied; null otherwise. */
-    private var permissionMessage by mutableStateOf<String?>(null)
+    /** The message shown instead of starting logging when a permission is denied; null otherwise. */
+    private var permissionMessage by mutableStateOf<Int?>(null)
 
     /** Set when the LOG button asked for permissions, so logging starts once they are granted. */
     private var startLoggingWhenGranted = false
@@ -123,7 +124,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val controls = @Composable { sideBySide: Boolean ->
                         permissionMessage?.let {
-                            Text(it, modifier = Modifier.padding(horizontal = 16.dp))
+                            Text(stringResource(it), modifier = Modifier.padding(horizontal = 16.dp))
                         }
 
                         LoggerButton(

@@ -15,6 +15,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
 /**
@@ -30,9 +32,9 @@ fun LoggerButton(
     onUpload: () -> Unit,
     modifier: Modifier = Modifier,
     sideBySide: Boolean = false,
-    location: String = "",
-    signalStrength: String = "",
-    service: String = "",
+    location: UiText? = null,
+    signalStrength: UiText? = null,
+    service: List<UiText> = emptyList(),
     pendingPoints: Int = 0
 ) {
     val scrolling = modifier
@@ -73,25 +75,31 @@ private fun LoggingControls(
     onUpload: () -> Unit,
     pendingPoints: Int
 ) {
-    Text("$pendingPoints pending points stored")
+    Text(
+        if (pendingPoints == 0) {
+            stringResource(R.string.no_pending_points)
+        } else {
+            pluralStringResource(R.plurals.pending_points, pendingPoints, pendingPoints)
+        }
+    )
     Spacer(modifier = Modifier.height(50.dp))
     Button(
         onClick = onToggle,
         modifier = Modifier.size(200.dp)
     ) {
-        Text(if (isLogging) "STOP" else "LOG")
+        Text(stringResource(if (isLogging) R.string.stop else R.string.log))
     }
     if (pendingPoints > 0) {
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = onUpload) {
-            Text("Send my data")
+            Text(stringResource(R.string.send_my_data))
         }
     }
 }
 
 @Composable
-private fun SignalLines(location: String, signalStrength: String, service: String) {
-    Text(location)
-    Text(signalStrength)
-    Text(service)
+private fun SignalLines(location: UiText?, signalStrength: UiText?, service: List<UiText>) {
+    Text(location?.resolve() ?: "")
+    Text(signalStrength?.resolve() ?: "")
+    Text(service.map { it.resolve() }.joinToString("\n"))
 }

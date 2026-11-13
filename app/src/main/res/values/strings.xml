@@ -1,3 +1,35 @@
 <resources>
-    <string name="app_name">CellSignalMapper</string>
+    <string name="app_name" translatable="false">CellSignalMapper</string>
+
+    <string name="log">LOG</string>
+    <string name="stop">STOP</string>
+    <string name="send_my_data">Send my data</string>
+    <string name="no_pending_points">No pending points stored</string>
+    <plurals name="pending_points">
+        <item quantity="one">%d pending point stored</item>
+        <item quantity="other">%d pending points stored</item>
+    </plurals>
+
+    <string name="getting_location">Getting Location…</string>
+    <string name="getting_signal_strength">Getting Signal Strength…</string>
+    <string name="location">Lat: %1$s, Lon: %2$s</string>
+    <string name="signal_strength_dbm">Signal Strength: %1$d dBm</string>
+    <string name="signal_strength_unknown">Signal Strength: unknown</string>
+
+    <string name="no_active_sim">No active SIM</string>
+    <string name="sim_slot_service">SIM %1$d: %2$s</string>
+    <string name="sim_service">SIM: %1$s</string>
+    <string name="in_service">In service</string>
+    <string name="emergency_calls_only">Emergency calls only</string>
+    <string name="no_service">No service</string>
+    <string name="no_service_radio_off">No service (radio off)</string>
+    <string name="service_unknown">Service unknown</string>
+
+    <string name="needs_precise_location">Logging needs precise location. Allow precise location for this app in Settings.</string>
+    <string name="needs_location">Logging needs location access. Allow location for this app in Settings.</string>
+    <string name="needs_phone">Logging needs phone access to read your SIM. Allow Phone for this app in Settings.</string>
+
+    <string name="notification_title">Signal logging active</string>
+    <string name="notification_text">Tracking location and signal strength</string>
+    <string name="notification_channel">Logger Service</string>
 </resources>

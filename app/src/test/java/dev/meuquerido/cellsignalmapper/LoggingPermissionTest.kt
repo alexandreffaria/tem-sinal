@@ -1,8 +1,7 @@
 package dev.meuquerido.cellsignalmapper
 
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LoggingPermissionTest {
@@ -18,13 +17,13 @@ class LoggingPermissionTest {
         val message =
             loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = true, phoneStateGranted = true)
 
-        assertNotNull(message)
-        assertTrue(message!!.contains("precise location"))
+        assertEquals(R.string.needs_precise_location, message)
     }
 
     @Test
     fun noLocationBlocksLogging() {
-        assertNotNull(
+        assertEquals(
+            R.string.needs_location,
             loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = false, phoneStateGranted = true),
         )
     }
@@ -34,8 +33,7 @@ class LoggingPermissionTest {
         val message =
             loggingDeniedMessage(fineLocationGranted = true, coarseLocationGranted = true, phoneStateGranted = false)
 
-        assertNotNull(message)
-        assertTrue(message!!.contains("phone access"))
+        assertEquals(R.string.needs_phone, message)
     }
 
     @Test
@@ -43,7 +41,6 @@ class LoggingPermissionTest {
         val message =
             loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = false, phoneStateGranted = false)
 
-        assertNotNull(message)
-        assertTrue(message!!.contains("location access"))
+        assertEquals(R.string.needs_location, message)
     }
 }
