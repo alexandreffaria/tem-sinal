@@ -158,20 +158,31 @@ data class NetworkRegistration(
 )
 
 /**
- * The service state of a subscription from its `ServiceState.getState()` [state] and its
- * [registrations], by the rule in `docs/sample-schema.md`: Android reports emergency-only as
- * `STATE_OUT_OF_SERVICE`, so a cellular registration that offers only `SERVICE_TYPE_EMERGENCY`
- * also counts as [ServiceStatus.EMERGENCY_ONLY]. A registered cellular network counts as
- * [ServiceStatus.IN_SERVICE] even when voice ([state]) isn't, as on a data-only registration.
+ * The service state of a subscription by the rule in `docs/sample-schema.md`, from its
+ * `ServiceState.getState()` [state], its [registrations] and whether airplane mode is on
+ * ([airplaneModeOn]). Cellular service is decided from the cellular (`TRANSPORT_TYPE_WWAN`)
+ * registrations, because Android raises [state] to `STATE_IN_SERVICE` when voice can go over
+ * Wi-Fi calling, also with the radio off; [state] counts as in service only when [registrations]
+ * has no cellular entry at all, and airplane mode counts as radio off unless a cellular network is
+ * registered. A registered cellular network counts as [ServiceStatus.IN_SERVICE] even when
+ * voice isn't, as on a data-only registration. Android reports emergency-only as
+ * `STATE_OUT_OF_SERVICE`, so a cellular registration that offers `SERVICE_TYPE_EMERGENCY` counts
+ * as [ServiceStatus.EMERGENCY_ONLY].
  */
-fun serviceStatus(state: Int, registrations: List<NetworkRegistration>): ServiceStatus {
+fun serviceStatus(
+    state: Int,
+    registrations: List<NetworkRegistration>,
+    airplaneModeOn: Boolean,
+): ServiceStatus {
     val cellular = registrations.filter {
         it.transportType == AccessNetworkConstants.TRANSPORT_TYPE_WWAN
     }
+    val registered = cellular.any { it.registered }
     val emergency = NetworkRegistrationInfo.SERVICE_TYPE_EMERGENCY
     return when {
-        state == ServiceState.STATE_POWER_OFF -> ServiceStatus.POWER_OFF
-        state == ServiceState.STATE_IN_SERVICE || cellular.any { it.registered } ->
+        state == ServiceState.STATE_POWER_OFF || (airplaneModeOn && !registered) ->
+            ServiceStatus.POWER_OFF
+        registered || (cellular.isEmpty() && state == ServiceState.STATE_IN_SERVICE) ->
             ServiceStatus.IN_SERVICE
         state == ServiceState.STATE_EMERGENCY_ONLY ||
             cellular.any { emergency in it.availableServices } -> ServiceStatus.EMERGENCY_ONLY
@@ -180,8 +191,9 @@ fun serviceStatus(state: Int, registrations: List<NetworkRegistration>): Service
 }
 
 /** This subscription's [ServiceStatus], by [serviceStatus]. */
-fun ServiceState.toServiceStatus(): ServiceStatus =
-    serviceStatus(state, networkRegistrationInfoList.map { it.toNetworkRegistration() })
+fun ServiceState.toServiceStatus(airplaneModeOn: Boolean): ServiceStatus = serviceStatus(
+    state, networkRegistrationInfoList.map { it.toNetworkRegistration() }, airplaneModeOn,
+)
 
 private fun NetworkRegistrationInfo.toNetworkRegistration() = NetworkRegistration(
     transportType = transportType,

@@ -85,16 +85,22 @@ A session that starts work:
 
 ## Checks
 
-GitHub Actions runs these on every pull request (`.github/workflows/ci.yml`). There is no Android
-SDK on the owner's workstation, so CI is where they run (`gh pr checks <n> --watch`).
+One command runs every check, from the root of a checkout of the branch:
 
 ```sh
-./gradlew lintDebug testDebugUnitTest assembleDebug
-cd functions && npm ci && npm run lint && npm run typecheck && npm test
+scripts/check.sh
 ```
 
-CI also fails a pull request that adds a keystore, a service-account key, an app bundle, a log
-file or an `.env` file.
+It fails a branch that adds a keystore, a service-account key, an app bundle, a log file or an
+`.env` file, then runs `./gradlew lintDebug testDebugUnitTest assembleDebug` and, in `functions/`,
+`npm ci && npm run lint && npm run typecheck && npm test`. It needs Node and npm on the `PATH`. The
+first run installs JDK 17 and the Android SDK in your home folder (about 1 GB, no root); a full
+run takes a few minutes. Run one at a time: two Gradle builds at once slow this machine down.
+
+The checks run on this machine, not on GitHub: the account has no GitHub Actions minutes, so the
+`CI` workflow (which runs the same script) doesn't start. The author runs the script before
+opening the pull request and after every push; the session that merges runs it again on the
+pull request's latest commit.
 
 ## The pull request
 
@@ -104,7 +110,7 @@ Title: `I-<number> <issue title>`. Description:
 Closes #<number>
 What changed: <three lines at most>
 What was deleted: <files, functions, lines>
-Checks: <CI run link and result>
+Checks: <the last line of scripts/check.sh, naming the commit>
 Not done: <or "nothing"; anything left is filed as a new issue>
 Filed: <issue numbers, or "nothing">
 ```
@@ -124,7 +130,7 @@ owner never has to.
 3. If the review is ready to merge, the reviewer merges (see "Merging") and the loop is done.
 4. If it has blocking findings, the author fixes them in one round of commits, then starts another
    fresh session for the **confirmation**, which checks only that the blocking findings are fixed
-   and CI is green, then merges.
+   and the checks pass, then merges.
 5. If the confirmation still finds something blocking, it doesn't merge: it comments, labels the
    issue `needs-owner`, and the author files a president card if a decision is behind it.
 
@@ -132,20 +138,23 @@ owner never has to.
 
 The reviewer (or the confirming session) merges when:
 
-1. CI is green on the latest commit.
+1. `scripts/check.sh` passes on the pull request's latest commit, run by the merging session.
 2. Nothing blocking is left, and every follow-up is filed.
-3. It has no conflict with `main`. After a rebase, CI runs again first.
+3. It has no conflict with `main`. After a rebase, the checks run again first.
 
 Then `gh pr merge <n> --merge --delete-branch`. Never push to `main`, never merge past a failing
 check, never `--admin`. GitHub can't enforce any of this on this repo's plan, so it holds only
 because sessions follow it.
 
 **A merge to `main` publishes to Google Play** (`.github/workflows/android-publish.yml`, except
-for changes that only touch docs, plans, decision cards and `functions/`). Merge one pull request at a time and
+for changes that only touch docs, plans and decision cards). Merge one pull request at a time and
 wait for its deploy run (`gh run list --branch main`) before the next. If the deploy fails because
 of the change, fix forward or revert in a new pull request. A deploy that fails for a reason
 outside the change (Play access, signing secrets) doesn't block merging; note it on the owner's
 issue for it.
+
+While the account has no GitHub Actions minutes, the deploy doesn't start either, so a merge
+publishes nothing; don't wait for a deploy run.
 
 ## Filing work
 

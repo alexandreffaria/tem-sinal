@@ -67,6 +67,7 @@ options:
 resolution:
   choice: ninety-days
   resolved_at: 2026-11-13T02:32:50Z
+applied_at: 2026-11-13T02:46:01Z
 ---
 
 ## Context

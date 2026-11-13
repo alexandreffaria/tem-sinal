@@ -138,19 +138,67 @@ also arrives through a listener, `PhoneStateListener.LISTEN_SERVICE_STATE` on AP
 `TelephonyCallback.ServiceStateListener` (31) on 31+, but reading it each tick needs no listener on
 any level.
 
-`ServiceState.getState()` (1) is the voice registration state. Android's public constants include
-`STATE_EMERGENCY_ONLY`, but AOSP reports a phone that can only make emergency calls as
-`STATE_OUT_OF_SERVICE` and keeps the emergency flag in a hidden field. From API 30 the public way
-to see it is `ServiceState.getNetworkRegistrationInfoList()` (30): AOSP's cellular network service
-lists only `NetworkRegistrationInfo.SERVICE_TYPE_EMERGENCY` (30) in `getAvailableServices()` (30)
-when the phone is in emergency-only state. So `serviceState` is, in this order:
+`serviceState` records whether a cellular network is reachable. Wi-Fi calling doesn't count: a
+hut with Wi-Fi and no coverage is out of service.
+
+`ServiceState.getState()` (1) is not the cellular voice registration state alone. AOSP's
+`GsmCdmaPhone.getServiceState()` passes it through `mergeVoiceServiceStates` (`mergeServiceStates`
+on Android 11, without the Telecom check): when cellular voice isn't in service, it raises the state
+to `STATE_IN_SERVICE` if Telecom reports a phone account with voice calling (a carrier's Wi-Fi
+calling app), or if IMS voice is registered and the data registration state is in service, which
+`ServiceStateTracker.combinePsRegistrationStates` sets when the IWLAN registration is home and an
+APN is on IWLAN, the Wi-Fi calling case. The merge copies everything else from the cellular state,
+including `ServiceState.getNetworkRegistrationInfoList()` (30). So cellular service is decided from
+the cellular (`TRANSPORT_TYPE_WWAN`) entries of that list, and Wi-Fi (`TRANSPORT_TYPE_WLAN`) entries
+never count. AOSP always lists a cellular entry for each domain (`ServiceState.init()`), so a list
+without one comes only from a phone that doesn't fill it; then `getState()` is all there is.
+
+Android's public constants include `STATE_EMERGENCY_ONLY`, but AOSP reports a phone that can only
+make emergency calls as `STATE_OUT_OF_SERVICE` and keeps the emergency flag in a hidden field. The
+public way to see it is the same list: AOSP's cellular network service lists only
+`NetworkRegistrationInfo.SERVICE_TYPE_EMERGENCY` (30) in `getAvailableServices()` (30) when the
+phone is in emergency-only state.
+
+`getState() == STATE_POWER_OFF` means the radio is off: the merge only raises the state to in
+service. The reverse doesn't hold with Wi-Fi calling. With the radio off,
+`ServiceStateTracker.handlePollStateInternalForRadioOffOrUnavailable` sets `STATE_POWER_OFF` and
+keeps the IWLAN registration, but `pollStateInternal` then still polls the modem when data is on
+IWLAN, so the cellular voice state can come back out of service and the merge can raise it to in
+service. The cellular entries can't tell either: radio off leaves them `REGISTRATION_STATE_UNKNOWN`,
+which apps can't tell from not registered (the getters for it are system APIs), and the modem can
+answer the poll with not registered. Airplane mode is a signal the merge doesn't change:
+`Settings.Global.AIRPLANE_MODE_ON` (17), readable with no permission, read on every tick. Airplane
+mode turns the cellular radio off (`PhoneGlobals.handleAirplaneModeChange`), unless the phone's
+`Settings.Global.AIRPLANE_MODE_RADIOS` leaves the cellular radio out, so a registered cellular
+network wins over it.
+
+So `serviceState` is, in this order:
 
 | Value | When |
 |---|---|
-| `POWER_OFF` | `getState() == STATE_POWER_OFF` (the radio is off, airplane mode) |
-| `IN_SERVICE` | `getState() == STATE_IN_SERVICE`, or any cellular (`TRANSPORT_TYPE_WWAN`) `NetworkRegistrationInfo` is registered: `isRegistered()` (30, deprecated in 34) on API 30-33, `isNetworkRegistered()` (34) on 34+ |
+| `POWER_OFF` | `getState() == STATE_POWER_OFF`, or airplane mode is on (`AIRPLANE_MODE_ON` is not 0) and no cellular `NetworkRegistrationInfo` is registered |
+| `IN_SERVICE` | any cellular (`TRANSPORT_TYPE_WWAN`) `NetworkRegistrationInfo` is registered: `isRegistered()` (30, deprecated in 34) on API 30-33, `isNetworkRegistered()` (34) on 34+; or the list has no cellular entry and `getState() == STATE_IN_SERVICE` |
 | `EMERGENCY_ONLY` | `getState() == STATE_EMERGENCY_ONLY`, or any cellular `NetworkRegistrationInfo` lists `SERVICE_TYPE_EMERGENCY` in `getAvailableServices()` |
-| `OUT_OF_SERVICE` | otherwise |
+| `OUT_OF_SERVICE` | otherwise, including a `getState()` of `STATE_IN_SERVICE` that no cellular registration backs |
+
+With Wi-Fi calling at a spot without coverage, a sample is `OUT_OF_SERVICE`, or `EMERGENCY_ONLY`
+when a cell offers emergency calls. In airplane mode with Wi-Fi calling it is `POWER_OFF`. With the
+cellular radio off for another reason and Wi-Fi calling registered, it is `POWER_OFF` when
+`getState()` says so and `OUT_OF_SERVICE` otherwise, since nothing public tells that apart from no
+coverage.
+
+AOSP sources, in `android.googlesource.com/platform`:
+
+- `frameworks/opt/telephony`, `src/java/com/android/internal/telephony/GsmCdmaPhone.java`:
+  `getServiceState()` and `mergeVoiceServiceStates` on `main`, `mergeServiceStates` on
+  `android11-release`.
+- `frameworks/opt/telephony`, `src/java/com/android/internal/telephony/ServiceStateTracker.java`:
+  `combinePsRegistrationStates`, `pollStateInternal`,
+  `handlePollStateInternalForRadioOffOrUnavailable`.
+- `frameworks/base`, `telephony/java/android/telephony/ServiceState.java`: `init()`,
+  `setOutOfService(boolean)`.
+- `packages/services/Telephony`, `src/com/android/phone/PhoneGlobals.java`:
+  `handleAirplaneModeChange`.
 
 The emergency-only rule relies on AOSP behaviour that the reference docs don't state, and needs a
 check on a real phone with a SIM whose carrier has no coverage (#47).

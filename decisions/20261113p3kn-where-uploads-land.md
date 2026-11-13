@@ -66,6 +66,7 @@ options:
 resolution:
   choice: firebase-functions
   resolved_at: 2026-11-13T00:47:08Z
+applied_at: 2026-11-13T02:46:02Z
 ---
 
 ## Context

@@ -25,17 +25,55 @@ class ServiceStatusTest {
     private val cellularNone = NetworkRegistration(
         TRANSPORT_TYPE_WWAN, registered = false, availableServices = emptyList(),
     )
+    private val wifiCalling = NetworkRegistration(
+        TRANSPORT_TYPE_WLAN, registered = true,
+        availableServices = listOf(SERVICE_TYPE_VOICE, SERVICE_TYPE_EMERGENCY),
+    )
+
+    private fun status(state: Int, registrations: List<NetworkRegistration>) =
+        serviceStatus(state, registrations, airplaneModeOn = false)
 
     @Test
     fun powerOffWinsOverEverythingElse() {
-        assertEquals(ServiceStatus.POWER_OFF, serviceStatus(STATE_POWER_OFF, listOf(homeVoice)))
-        assertEquals(ServiceStatus.POWER_OFF, serviceStatus(STATE_POWER_OFF, emptyList()))
+        assertEquals(ServiceStatus.POWER_OFF, status(STATE_POWER_OFF, listOf(homeVoice)))
+        assertEquals(ServiceStatus.POWER_OFF, status(STATE_POWER_OFF, emptyList()))
     }
 
     @Test
-    fun inServiceStateIsInService() {
-        assertEquals(ServiceStatus.IN_SERVICE, serviceStatus(STATE_IN_SERVICE, listOf(homeVoice)))
-        assertEquals(ServiceStatus.IN_SERVICE, serviceStatus(STATE_IN_SERVICE, emptyList()))
+    fun airplaneModeIsPowerOffWhateverTheStateSays() {
+        assertEquals(
+            ServiceStatus.POWER_OFF,
+            serviceStatus(STATE_OUT_OF_SERVICE, listOf(cellularNone), airplaneModeOn = true),
+        )
+    }
+
+    @Test
+    fun airplaneModeWithWifiCallingIsPowerOff() {
+        assertEquals(
+            ServiceStatus.POWER_OFF,
+            serviceStatus(
+                STATE_IN_SERVICE, listOf(cellularNone, cellularNone, wifiCalling),
+                airplaneModeOn = true,
+            ),
+        )
+    }
+
+    @Test
+    fun airplaneModeWithARegisteredCellularNetworkIsInService() {
+        assertEquals(
+            ServiceStatus.IN_SERVICE,
+            serviceStatus(STATE_IN_SERVICE, listOf(homeVoice), airplaneModeOn = true),
+        )
+    }
+
+    @Test
+    fun registeredCellularNetworkIsInService() {
+        assertEquals(ServiceStatus.IN_SERVICE, status(STATE_IN_SERVICE, listOf(homeVoice)))
+    }
+
+    @Test
+    fun inServiceStateWithNoCellularRegistrationListedIsInService() {
+        assertEquals(ServiceStatus.IN_SERVICE, status(STATE_IN_SERVICE, emptyList()))
     }
 
     @Test
@@ -46,7 +84,7 @@ class ServiceStatusTest {
 
         assertEquals(
             ServiceStatus.IN_SERVICE,
-            serviceStatus(STATE_OUT_OF_SERVICE, listOf(cellularNone, roamingData)),
+            status(STATE_OUT_OF_SERVICE, listOf(cellularNone, roamingData)),
         )
     }
 
@@ -54,34 +92,43 @@ class ServiceStatusTest {
     fun outOfServiceWithOnlyEmergencyAvailableIsEmergencyOnly() {
         assertEquals(
             ServiceStatus.EMERGENCY_ONLY,
-            serviceStatus(STATE_OUT_OF_SERVICE, listOf(cellularNone, cellularEmergencyOnly)),
+            status(STATE_OUT_OF_SERVICE, listOf(cellularNone, cellularEmergencyOnly)),
         )
     }
 
     @Test
     fun emergencyOnlyStateIsEmergencyOnly() {
-        assertEquals(ServiceStatus.EMERGENCY_ONLY, serviceStatus(STATE_EMERGENCY_ONLY, emptyList()))
+        assertEquals(ServiceStatus.EMERGENCY_ONLY, status(STATE_EMERGENCY_ONLY, emptyList()))
     }
 
     @Test
     fun outOfServiceWithNothingAvailableIsOutOfService() {
         assertEquals(
-            ServiceStatus.OUT_OF_SERVICE,
-            serviceStatus(STATE_OUT_OF_SERVICE, listOf(cellularNone)),
+            ServiceStatus.OUT_OF_SERVICE, status(STATE_OUT_OF_SERVICE, listOf(cellularNone)),
         )
-        assertEquals(ServiceStatus.OUT_OF_SERVICE, serviceStatus(STATE_OUT_OF_SERVICE, emptyList()))
+        assertEquals(ServiceStatus.OUT_OF_SERVICE, status(STATE_OUT_OF_SERVICE, emptyList()))
     }
 
     @Test
     fun wifiCallingRegistrationDoesNotCountAsCellService() {
-        val wifiCalling = NetworkRegistration(
-            TRANSPORT_TYPE_WLAN, registered = true,
-            availableServices = listOf(SERVICE_TYPE_VOICE, SERVICE_TYPE_EMERGENCY),
+        assertEquals(
+            ServiceStatus.OUT_OF_SERVICE, status(STATE_OUT_OF_SERVICE, listOf(wifiCalling)),
         )
+    }
 
+    @Test
+    fun inServiceStateFromWifiCallingWithNoCellularRegistrationIsOutOfService() {
         assertEquals(
             ServiceStatus.OUT_OF_SERVICE,
-            serviceStatus(STATE_OUT_OF_SERVICE, listOf(wifiCalling)),
+            status(STATE_IN_SERVICE, listOf(cellularNone, cellularNone, wifiCalling)),
+        )
+    }
+
+    @Test
+    fun inServiceStateFromWifiCallingWithCellularEmergencyIsEmergencyOnly() {
+        assertEquals(
+            ServiceStatus.EMERGENCY_ONLY,
+            status(STATE_IN_SERVICE, listOf(cellularNone, cellularEmergencyOnly, wifiCalling)),
         )
     }
 }

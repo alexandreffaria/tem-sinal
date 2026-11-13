@@ -8,8 +8,8 @@ from `plans/README.md`) or **follow-up** (filed, not fixed in this pull request)
 round of fixes, one confirmation. The reviewer files every follow-up as a `board` issue before
 posting the review, and the review lists the issue numbers. Follow-ups don't hold the merge.
 
-Items marked **CI** are also enforced by `.github/workflows/ci.yml`; the reviewer still confirms
-the check is green.
+Items marked **CI** are also enforced by `scripts/check.sh`, which the reviewer runs on the pull
+request's latest commit.
 
 ## Shape
 
@@ -51,5 +51,5 @@ the check is green.
 
 17. The change has tests: a bug fix has a JVM test that fails without it, where the logic can run
     on the JVM; a feature has tests for its main path and its edge (empty, zero, limit).
-18. **CI** `lintDebug testDebugUnitTest assembleDebug` is green on the latest commit.
+18. **CI** `scripts/check.sh` passes on the latest commit, run by the reviewer.
 19. The description says what changed and why, in plain words.
