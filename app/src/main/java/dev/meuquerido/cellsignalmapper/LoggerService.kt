@@ -70,9 +70,19 @@ class LoggerService : Service() {
 
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
-        // A location foreground service can't start without fine location; stop instead of
-        // crashing in startForeground.
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        // startForeground comes first: a service started with startForegroundService crashes the
+        // app if it stops without calling it. On Android 14+ it throws SecurityException for a
+        // location service when no location permission is granted.
+        val inForeground = try {
+            startForegroundService()
+            true
+        } catch (e: SecurityException) {
+            Log.w("LoggerService", "Location not granted; cannot run in the foreground", e)
+            false
+        }
+        if (!inForeground ||
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
             Log.w("LoggerService", "Fine location not granted; not logging")
             stopSelf()
             return
@@ -84,7 +94,6 @@ class LoggerService : Service() {
             listenWithPhoneStateListener()
         }
 
-        startForegroundService()
         LoggerState.serviceStarted()
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         startLocationUpdates()
@@ -267,7 +276,9 @@ class LoggerService : Service() {
     override fun onDestroy() {
         stopSignalListener?.invoke()
         stopSignalListener = null
-        locationClient.removeLocationUpdates(locationCallback)
+        if (::locationClient.isInitialized) {
+            locationClient.removeLocationUpdates(locationCallback)
+        }
         coroutineScope.cancel()
         LoggerState.serviceStopped()
         super.onDestroy()
