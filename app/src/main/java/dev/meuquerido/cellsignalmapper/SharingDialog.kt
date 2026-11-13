@@ -13,11 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
-/** What a sample holds, when it leaves the phone, and what is public. */
+/** What a sample holds, when it leaves the phone, what Firebase receives, and what is public. */
 private val sharingParagraphs = listOf(
     UiText(R.string.sharing_recording, listOf(UiText(R.string.log), UiText(R.string.stop))),
     UiText(R.string.sharing_sample),
     UiText(R.string.sharing_server, listOf(UiText(R.string.send_my_data))),
+    UiText(R.string.sharing_firebase),
     UiText(R.string.sharing_personal),
     UiText(R.string.sharing_map),
 )
