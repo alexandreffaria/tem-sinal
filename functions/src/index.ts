@@ -13,17 +13,18 @@ const db = getFirestore();
 const COUNTER_LIFETIME_MS = 2 * 3_600_000;
 
 const firestoreStore: SampleStore = {
-  reserve: (installId, hourStartMs, count, limit) =>
+  reserve: (installId, uid, hourStartMs, count, limit) =>
     db.runTransaction(async (tx) => {
-      const ref = db.collection("upload_counts").doc(`${installId}_${hourStartMs}`);
-      const used = ((await tx.get(ref)).get("count") as number | undefined) ?? 0;
-      if (used + count > limit) return false;
-      tx.set(ref, {
-        installId,
-        hourStartMs,
-        count: used + count,
-        expireAt: new Date(hourStartMs + COUNTER_LIFETIME_MS),
-      });
+      const counters = await Promise.all(
+        [
+          { ref: db.collection("upload_counts").doc(`${installId}_${hourStartMs}`), owner: { installId } },
+          { ref: db.collection("upload_counts").doc(`uid_${uid}_${hourStartMs}`), owner: { uid } },
+        ].map(async (c) => ({ ...c, used: ((await tx.get(c.ref)).get("count") as number | undefined) ?? 0 })),
+      );
+      if (counters.some(({ used }) => used + count > limit)) return false;
+      for (const { ref, owner, used } of counters) {
+        tx.set(ref, { ...owner, hourStartMs, count: used + count, expireAt: new Date(hourStartMs + COUNTER_LIFETIME_MS) });
+      }
       return true;
     }),
   create: (samples) => {
@@ -35,15 +36,18 @@ const firestoreStore: SampleStore = {
   },
 };
 
-/** True when the request carries a valid App Check token and a valid Firebase Auth ID token. */
-async function verified(appCheckToken: string | undefined, authorization: string | undefined): Promise<boolean> {
+/**
+ * The Firebase Auth uid of a request that carries a valid App Check token and a valid Firebase
+ * Auth ID token, or undefined.
+ */
+async function verifiedUid(appCheckToken: string | undefined, authorization: string | undefined): Promise<string | undefined> {
   const idToken = authorization?.match(/^Bearer (.+)$/)?.[1];
-  if (!appCheckToken || !idToken) return false;
+  if (!appCheckToken || !idToken) return undefined;
   try {
-    await Promise.all([getAppCheck().verifyToken(appCheckToken), getAuth().verifyIdToken(idToken)]);
-    return true;
+    const [, decoded] = await Promise.all([getAppCheck().verifyToken(appCheckToken), getAuth().verifyIdToken(idToken)]);
+    return decoded.uid;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -53,10 +57,13 @@ export const v1 = onRequest(async (req, res) => {
     res.status(404).json({ error: "not found" });
   } else if (req.method !== "POST") {
     res.status(405).set("Allow", "POST").json({ error: "use POST" });
-  } else if (!(await verified(req.header("X-Firebase-AppCheck"), req.header("Authorization")))) {
-    res.status(401).json({ error: "missing or invalid App Check or ID token" });
   } else {
-    const { status, body } = await ingest(req.body, firestoreStore, Date.now());
-    res.status(status).json(body);
+    const uid = await verifiedUid(req.header("X-Firebase-AppCheck"), req.header("Authorization"));
+    if (uid === undefined) {
+      res.status(401).json({ error: "missing or invalid App Check or ID token" });
+    } else {
+      const { status, body } = await ingest(req.body, uid, firestoreStore, Date.now());
+      res.status(status).json(body);
+    }
   }
 });
