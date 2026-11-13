@@ -193,7 +193,7 @@ test("a two-install cell is public the next day with per-carrier aggregates only
       h3: h3At(PLACE.lat),
       carriers: {
         "72406": { best: -90, median: -98, tech: "LTE", n: 3, emergencyOnlySeen: false },
-        "72402": { best: null, median: null, tech: null, n: 2, emergencyOnlySeen: true },
+        "72402": { best: null, median: null, tech: null, n: 0, emergencyOnlySeen: true },
       },
       lastSeen: "2026-01",
     },
@@ -272,4 +272,46 @@ test("a lone first visit on the 1st waits for the next batch", () => {
   assert.deepEqual(published, {});
   ({ published } = publish(cells, published, Date.UTC(2026, 3, 1, 6)));
   assert.equal(published[h3At(PLACE.lat)]?.lastSeen, "2026-03");
+});
+
+test("a reading with the radio off or the service state unknown says nothing about coverage", () => {
+  const radioOff = { simPlmn: "72406", serviceState: "POWER_OFF", cells: [] };
+  const unknown = { simPlmn: "72402", serviceState: null, cells: [] };
+  const off = (installId: string, timeMs: number) => sample(installId, PLACE.lat, timeMs, { sims: [radioOff, unknown] });
+  const north = PLACE.lat + 0.01;
+
+  // A cell whose only samples were taken with the radio off or service unknown is not published.
+  const offOnly: Record<string, CellState> = {};
+  accumulate(offOnly, [off(ALICE, JAN_10), off(BRUNO, JAN_10 + 60_000)]);
+  assert.deepEqual(offOnly, {});
+
+  // Next to in-service readings they change none of the cell's figures, and the other SIM still counts.
+  const withOff: Record<string, CellState> = {};
+  const without: Record<string, CellState> = {};
+  const inService = [sample(ALICE, north, JAN_10), sample(BRUNO, north, JAN_10 + 60_000)];
+  accumulate(without, inService);
+  accumulate(withOff, [
+    ...inService,
+    sample(ALICE, north, JAN_10 + 120_000, { sims: [radioOff, { simPlmn: "72402", serviceState: "OUT_OF_SERVICE", cells: [] }] }),
+    sample(BRUNO, north, JAN_10 + 180_000, { sims: [unknown] }),
+  ]);
+  const [published = {}] = publishOn(withOff, [JAN_10 + DAY]);
+  const [expected = {}] = publishOn(without, [JAN_10 + DAY]);
+  assert.deepEqual(published[h3At(north)]?.carriers["72406"], expected[h3At(north)]?.carriers["72406"]);
+  assert.deepEqual(published[h3At(north)]?.carriers["72402"], { best: null, median: null, tech: null, n: 1, emergencyOnlySeen: true });
+});
+
+test("a reading whose cells are unknown is not counted as no signal", () => {
+  const cells: Record<string, CellState> = {};
+  accumulate(cells, [ALICE, BRUNO].map((id, i) =>
+    sample(id, PLACE.lat, JAN_10 + i * 60_000, {
+      sims: [
+        { simPlmn: "72406", serviceState: "OUT_OF_SERVICE", cells: null },
+        { simPlmn: "72402", serviceState: "IN_SERVICE", cells: [{ source: "CELL_INFO", rat: "GSM", registered: true, rssi: -85 }] },
+      ],
+    })));
+  const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
+  assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
+    "72402": { best: -85, median: -85, tech: "GSM", n: 2, emergencyOnlySeen: false },
+  });
 });
