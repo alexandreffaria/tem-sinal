@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+*.jks
+*.jks.b64
+play-account.json
+*.aab
+*.log
