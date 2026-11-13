@@ -11,6 +11,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
 import android.os.IBinder
@@ -68,6 +69,14 @@ class LoggerService : Service() {
         Log.d("LoggerService", "Service created and starting logging loop")
 
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+
+        // A location foreground service can't start without fine location; stop instead of
+        // crashing in startForeground.
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.w("LoggerService", "Fine location not granted; not logging")
+            stopSelf()
+            return
+        }
 
         stopSignalListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             listenWithTelephonyCallback()
@@ -179,7 +188,13 @@ class LoggerService : Service() {
                 val simMnc = simOperator.drop(3)
 
                 // Get registered cell info
-                val infoList = telephonyManager.allCellInfo
+                val infoList = try {
+                    telephonyManager.allCellInfo
+                } catch (e: SecurityException) {
+                    Log.e("LoggerService", "Location permission revoked; stopping", e)
+                    stopSelf()
+                    break
+                }
                 val registeredInfo = infoList?.find { it.isRegistered }
                 val identity = registeredInfo?.cellIdentity
 
