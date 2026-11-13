@@ -33,12 +33,12 @@ round of fixes by the author, then one confirmation, and no review after that.
    finding as **blocking** or **follow-up**.
 5. If CI is still running, say so; don't mark the CI item pass until it's green.
 6. File every follow-up before posting, one issue each, so none is dropped. Pick the kind and
-   priority from the tables under "Follow-ups" in `plans/README.md`, and write a body a session
-   with no other context can act on:
+   priority from the tables under "Filing work" in `plans/README.md`, and write the body from the
+   template there (Depends on, Read first, Do, Don't, Done when, ending "Found in review of
+   #$ARGUMENTS.") so a session with no other context can act on it:
    ```sh
-   gh issue create --label board --label kind:<bug|test|docs|cleanup|nit> --label <p1|p2|p3> \
-     --title "<what to change, in a few words>" \
-     --body "<where (\`path/File.kt:12\`), what is wrong, what done looks like. Found in review of #$ARGUMENTS.>"
+   gh issue create --label board --label kind:<feature|bug|test|docs|cleanup|nit> \
+     --label <p1|p2|p3> --title "<what to change, in a few words>" --body-file <file>
    ```
 7. Post the result on the pull request, then give the same text in your reply:
    ```sh
