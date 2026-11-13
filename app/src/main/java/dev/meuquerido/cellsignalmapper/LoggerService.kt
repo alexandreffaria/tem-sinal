@@ -396,6 +396,7 @@ class LoggerService : Service() {
             displayInfoListeners.clear()
         }
         LoggerState.serviceStopped()
+        UploadWorker.enqueue(this)
         super.onDestroy()
     }
 }

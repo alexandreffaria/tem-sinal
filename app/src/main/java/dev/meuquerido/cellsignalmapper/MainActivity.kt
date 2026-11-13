@@ -25,12 +25,10 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import android.telephony.TelephonyManager
-import android.util.Log
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
 import com.google.firebase.FirebaseApp
-import com.google.firebase.auth.FirebaseAuth
 
 import android.content.Intent
 import androidx.lifecycle.lifecycleScope
@@ -105,14 +103,8 @@ class MainActivity : ComponentActivity() {
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
         FirebaseApp.initializeApp(this)
-        FirebaseAuth.getInstance().signInAnonymously()
-            .addOnSuccessListener {
-                Log.d("Auth", "Signed in anonymously")
-                FirebaseUploader.uploadLogFile(this) {
-                    Log.d("MainActivity", "Retry upload on start: $it")
-                }
-            }
-            .addOnFailureListener { Log.e("Auth", "Failed to sign in anonymously", it) }
+        // Sends what is pending when the app starts, not again when the activity is recreated.
+        if (savedInstanceState == null) UploadWorker.enqueue(this)
 
 
         lifecycleScope.launch(Dispatchers.IO) { SignalLogger.publishPendingCount(applicationContext) }
@@ -136,11 +128,7 @@ class MainActivity : ComponentActivity() {
                         LoggerButton(
                             isLogging = loggerState.isLogging,
                             onToggle = { toggleLogging() },
-                            onUpload = {
-                                FirebaseUploader.uploadLogFile(this@MainActivity) {
-                                    Log.d("MainActivity", "Upload complete: $it")
-                                }
-                            },
+                            onUpload = { UploadWorker.enqueue(this@MainActivity) },
                             sideBySide = sideBySide,
                             location = loggerState.location,
                             signalStrength = loggerState.signalStrength,

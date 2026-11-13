@@ -4,14 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import com.google.android.gms.tasks.Tasks
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.gson.Gson
 import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -57,6 +55,9 @@ fun parseLog(lines: List<String>, gson: Gson): ParsedLog {
  */
 const val COMMIT_TIMEOUT_SECONDS = 30L
 
+/** How long an anonymous sign-in may wait for the server. */
+const val SIGN_IN_TIMEOUT_SECONDS = 30L
+
 /**
  * Commits the samples in [pending] batch by batch with [commit], then moves the lines that are not
  * a sample to [rejected] and deletes [pending]. If [commit] throws, for example on a timeout, the
@@ -73,30 +74,27 @@ object FirebaseUploader {
     @SuppressLint("StaticFieldLeak")
     private val db = FirebaseFirestore.getInstance()
     private val gson = Gson()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val uploadLock = Mutex()
 
     /**
      * Uploads every logged sample off the main thread, one upload at a time, publishes the pending
-     * count, and calls [onComplete] on the main thread. The pending file is deleted only after every batch was
-     * committed; a failed or timed-out upload keeps it for the next attempt, and samples logged
-     * meanwhile stay in the log. Re-uploading a batch is harmless because each document id is the
-     * sample's id, so a timed-out write that Firestore still delivers later only rewrites the same
-     * documents.
+     * count, and returns whether the upload succeeded. The pending file is deleted only after every
+     * batch was committed; a failed or timed-out upload keeps it for the next attempt, and samples
+     * logged meanwhile stay in the log. Re-uploading a batch is harmless because each document id
+     * is the sample's id, so a timed-out write that Firestore still delivers later only rewrites
+     * the same documents.
      */
-    fun uploadLogFile(context: Context, onComplete: (Boolean) -> Unit) {
-        val appContext = context.applicationContext
-        scope.launch {
-            val result = uploadLock.withLock { upload(appContext) }
-            SignalLogger.publishPendingCount(appContext)
-            withContext(Dispatchers.Main) { onComplete(result) }
-        }
+    suspend fun uploadLogFile(context: Context): Boolean = withContext(Dispatchers.IO) {
+        val result = uploadLock.withLock { upload(context) }
+        SignalLogger.publishPendingCount(context)
+        result
     }
 
     /**
-     * Returns false, keeping the log and the pending file, if moving, reading or any batch fails or
-     * is not acknowledged within [COMMIT_TIMEOUT_SECONDS].
-     * Lines that are not a sample are moved to the rejected file instead of being deleted.
+     * Returns false, keeping the log and the pending file, if moving, reading, signing in or any
+     * batch fails, or sign-in or a batch is not acknowledged within its timeout. Signs in
+     * anonymously first when no user is signed in. Lines that are not a sample are moved to the
+     * rejected file instead of being deleted.
      */
     private fun upload(context: Context): Boolean {
         try {
@@ -109,6 +107,10 @@ object FirebaseUploader {
                 return false
             }
 
+            val auth = FirebaseAuth.getInstance()
+            if (auth.currentUser == null) {
+                Tasks.await(auth.signInAnonymously(), SIGN_IN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            }
             val collection = db.collection("signal_logs")
             val log = uploadPending(pending, SignalLogger.getRejectedFile(context), gson) { samples ->
                 val batch = db.batch()
