@@ -16,6 +16,6 @@ class UploadBatchesTest {
 
     @Test
     fun noLinesGiveNoBatches() {
-        assertEquals(emptyList<List<String>>(), uploadBatches(emptyList()))
+        assertEquals(emptyList<List<String>>(), uploadBatches(emptyList<String>()))
     }
 }
