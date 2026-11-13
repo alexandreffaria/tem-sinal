@@ -99,9 +99,6 @@ class LoggerService : Service() {
     private val displayInfoListeners = HashMap<Int, () -> Unit>()
     private var destroyed = false
 
-    /** The last sample logged, which the next tick's sample is compared with. */
-    private var lastSample: Sample? = null
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -187,6 +184,7 @@ class LoggerService : Service() {
             }
 
             while (isActive) {
+                val tickStartMs = SystemClock.elapsedRealtime()
                 val location = latestLocation?.takeIf {
                     isFixFresh(
                         it.elapsedRealtimeNanos / 1_000_000,
@@ -213,17 +211,16 @@ class LoggerService : Service() {
                         sims = sims,
                     )
                 }
-                val pingResult = tickResult(sample, lastSample, ::distanceM)
-                if (sample != null && pingResult == PingResult.SUCCESS) {
-                    lastSample = sample
+                val pingResult = if (sample != null) {
                     SignalLogger.logEntry(this@LoggerService, sample)
-                } else if (pingResult == PingResult.DUPLICATE) {
-                    Log.d("LoggerService", "Skipped: not moved and nothing changed")
+                    PingResult.SUCCESS
+                } else {
+                    PingResult.BAD
                 }
 
                 LoggerState.sample(location?.latitude, location?.longitude, sims, pingResult)
 
-                delay(5000)
+                delay(delayUntilNextTickMs(tickStartMs, SystemClock.elapsedRealtime()))
             }
         }
     }
@@ -371,12 +368,6 @@ class LoggerService : Service() {
 
     @Suppress("DEPRECATION") // isMock replaces it from API 31.
     private fun Location.isFromMockProviderBelowS(): Boolean = isFromMockProvider
-
-    private fun distanceM(a: Fix, b: Fix): Float {
-        val result = FloatArray(1)
-        Location.distanceBetween(a.lat, a.lon, b.lat, b.lon, result)
-        return result[0]
-    }
 
     private companion object {
         /** How long a tick waits for each subscription's modem to report its cells. */

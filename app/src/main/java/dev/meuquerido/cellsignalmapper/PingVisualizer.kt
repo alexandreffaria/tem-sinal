@@ -22,7 +22,6 @@ fun PingVisualizer(
 ) {
     val color = when (result) {
         "SUCCESS" -> Color(0xFF4CAF50)
-        "DUPLICATE" -> Color(0xFFFFC107)
         "BAD" -> Color(0xFFF44336)
         else -> Color.LightGray
     }
