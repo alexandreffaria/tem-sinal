@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.telephony.CellInfo
+import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import android.util.Log
@@ -27,6 +29,7 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.Executor
 
 class LoggerService : Service() {
 
@@ -141,22 +144,16 @@ class LoggerService : Service() {
                 val lat = location?.latitude
                 val lon = location?.longitude
 
-                val registeredCells = try {
-                    telephonyManager.allCellInfo.orEmpty()
-                        .filter { it.isRegistered }
-                        .mapNotNull { it.toCellReading() }
+                val sims = try {
+                    readSims()
                 } catch (e: SecurityException) {
                     Log.e("LoggerService", "Location permission revoked; stopping", e)
                     stopSelf()
                     break
                 }
-                // allCellInfo holds every SIM's registered cell; keep the default SIM's carrier's.
-                val simOperator = telephonyManager.simOperator
-                val cells = registeredCells.filter { it.plmn == simOperator }
-                if (cells.size < registeredCells.size) {
-                    Log.d("LoggerService", "Skipped registered cells not on the SIM's carrier")
-                }
-                val signalDbm = cells.firstNotNullOfOrNull { it.headlineDbm() }
+                val signalDbm = sims.flatMap { it.cells.orEmpty() }
+                    .filter { it.registered }
+                    .firstNotNullOfOrNull { it.headlineDbm() }
 
                 val pingResult = when {
                     lat == null || lon == null || signalDbm == null -> PingResult.BAD
@@ -174,17 +171,14 @@ class LoggerService : Service() {
                     lastLon = lon
                     lastSignal = signalDbm
 
-                    val sample = Sample(
-                        schemaVersion = SAMPLE_SCHEMA_VERSION,
-                        id = UUID.randomUUID().toString(),
+                    sample(
                         installId = installId,
                         sessionId = sessionId,
                         timeMs = System.currentTimeMillis(),
                         elapsedRealtimeMs = SystemClock.elapsedRealtime(),
                         fix = location.toFix(),
-                        sims = listOf(simReading(defaultSimSlot(), simOperator, cells)),
-                    )
-                    SignalLogger.logEntry(this@LoggerService, sample)
+                        sims = sims,
+                    )?.let { SignalLogger.logEntry(this@LoggerService, it) }
                 }
 
                 LoggerState.sample(lat, lon, signalDbm, pingResult)
@@ -194,15 +188,48 @@ class LoggerService : Service() {
         }
     }
 
-    /** The default subscription's SIM slot index, or null when it can't be read. */
-    private fun defaultSimSlot(): Int? =
-        try {
-            subscriptionManager
-                .getActiveSubscriptionInfo(SubscriptionManager.getDefaultSubscriptionId())
-                ?.simSlotIndex
+    /**
+     * One reading per active subscription, read at the same time; empty when there is none or
+     * phone state access isn't granted. Throws [SecurityException] without fine location.
+     */
+    @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+    private suspend fun readSims(): List<SimReading> {
+        val subscriptions = try {
+            subscriptionManager.activeSubscriptionInfoList.orEmpty()
+        } catch (e: SecurityException) {
+            Log.w("LoggerService", "Phone state not granted; no subscriptions to read", e)
+            return emptyList()
+        }
+        return kotlinx.coroutines.coroutineScope {
+            subscriptions.map { async { readSim(it) } }.awaitAll()
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+    private suspend fun readSim(subscription: SubscriptionInfo): SimReading {
+        val manager = telephonyManager.createForSubscriptionId(subscription.subscriptionId)
+        val serviceState = try {
+            manager.serviceState
         } catch (e: SecurityException) {
             null
         }
+        val cells = awaitCallback<List<CellInfo>>(CELL_INFO_TIMEOUT_MS) { callback ->
+            manager.requestCellInfoUpdate(
+                Executor(Runnable::run),
+                object : TelephonyManager.CellInfoCallback() {
+                    override fun onCellInfo(cellInfo: List<CellInfo>) = callback(cellInfo)
+                    override fun onError(errorCode: Int, detail: Throwable?) = callback(null)
+                },
+            )
+        }
+        return simReading(
+            slotIndex = subscription.simSlotIndex,
+            simOperator = manager.simOperator,
+            operatorNumeric = serviceState?.operatorNumeric,
+            operatorAlphaLong = serviceState?.operatorAlphaLong,
+            cells = cells?.mapNotNull { it.toCellReading() },
+        )
+    }
 
     private fun Location.toFix(): Fix = Fix(
         lat = roundCoordinate(latitude),
@@ -222,6 +249,11 @@ class LoggerService : Service() {
         val result = FloatArray(1)
         Location.distanceBetween(lat1, lon1, lat2, lon2, result)
         return result[0] > thresholdMeters
+    }
+
+    private companion object {
+        /** How long a tick waits for each subscription's modem to report its cells. */
+        const val CELL_INFO_TIMEOUT_MS = 3_000L
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =

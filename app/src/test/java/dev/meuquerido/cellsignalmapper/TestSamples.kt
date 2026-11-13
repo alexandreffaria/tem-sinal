@@ -24,6 +24,8 @@ fun testSample(id: String) = Sample(
         simReading(
             slotIndex = 0,
             simOperator = "00101",
+            operatorNumeric = "00101",
+            operatorAlphaLong = "Test Network",
             cells = listOf(
                 cellReading(
                     Rat.LTE, registered = true,

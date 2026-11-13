@@ -1,5 +1,7 @@
 package dev.meuquerido.cellsignalmapper
 
+import java.util.UUID
+
 /** The [Sample.schemaVersion] of every sample this app writes. */
 const val SAMPLE_SCHEMA_VERSION = 2
 
@@ -25,6 +27,33 @@ data class Sample(
     /** One per active subscription; never empty. */
     val sims: List<SimReading>,
 )
+
+/**
+ * A new [Sample] with a random id, or null when [sims] is empty: every carrier fact is tied to a
+ * subscription, so a tick with no active subscription has nothing to record.
+ */
+fun sample(
+    installId: String,
+    sessionId: String,
+    timeMs: Long,
+    elapsedRealtimeMs: Long,
+    fix: Fix,
+    sims: List<SimReading>,
+): Sample? =
+    if (sims.isEmpty()) {
+        null
+    } else {
+        Sample(
+            schemaVersion = SAMPLE_SCHEMA_VERSION,
+            id = UUID.randomUUID().toString(),
+            installId = installId,
+            sessionId = sessionId,
+            timeMs = timeMs,
+            elapsedRealtimeMs = elapsedRealtimeMs,
+            fix = fix,
+            sims = sims,
+        )
+    }
 
 /** The location fix a sample was taken at. */
 data class Fix(
