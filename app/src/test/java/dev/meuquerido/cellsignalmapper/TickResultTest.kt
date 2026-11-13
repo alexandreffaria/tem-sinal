@@ -40,7 +40,8 @@ class TickResultTest {
 
     @Test
     fun aTickWithAFixAndNoSignalIsLogged() {
-        val noSignal = sampleOf(sim(serviceStatus(STATE_OUT_OF_SERVICE, emptyList()), emptyList()))
+        val outOfService = serviceStatus(STATE_OUT_OF_SERVICE, emptyList(), airplaneModeOn = false)
+        val noSignal = sampleOf(sim(outOfService, emptyList()))
 
         assertNotNull(noSignal)
         assertEquals(ServiceStatus.OUT_OF_SERVICE, noSignal!!.sims.single().serviceState)
