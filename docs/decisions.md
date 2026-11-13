@@ -18,7 +18,7 @@ A phone in service can also make emergency calls, so in-service readings count t
 calls only. Signal and emergency calls only each hold for at least 9 readings in 10, and a few
 stray readings don't relabel a well-measured spot: 199 / 0 / 1 is signal, 120 / 80 / 0 is
 emergency calls only, 1 / 200 / 0 is emergency calls only, 85 / 0 / 15 and 34 / 33 / 33 are no
-signal (signal / emergency only / no service). Tapping a cell shows the three counts. Issue #17.
+signal (signal / emergency only / no service). The map can also show the three counts when a cell is tapped. Issue #17.
 
 The rule weighs the counts against each other, so it relies on the counts being fair across
 states. The fixes that make them so have merged: every tick logs a sample at a fixed rate (#136,
