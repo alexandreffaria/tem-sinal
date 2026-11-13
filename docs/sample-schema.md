@@ -201,9 +201,9 @@ The aggregation counts a SIM's reading towards coverage only when it says someth
 reading with `serviceState` `POWER_OFF` (the radio wasn't listening) or `null` (unknown) is left
 out of every coverage figure: best and median strength, technology, and the reading counts
 `serviceN`, `emergencyN` and `noServiceN`; the sample's other SIMs still count. A reading with
-`cells` null still counts towards `serviceN` or `emergencyN`, since its service state is known,
-but never towards `noServiceN`: an `OUT_OF_SERVICE` reading whose modem didn't answer may not mean
-no coverage. Strength and technology come from `IN_SERVICE` readings only: a modem
+`cells` null still counts towards the count of its service state, since `serviceState` comes from
+`getServiceState()` and not from the cell request, but adds no strength or technology. Strength
+and technology come from `IN_SERVICE` readings only: a modem
 in limited service can report the cell it is camped on as registered. A sample with no reading
 that counts adds nothing to its cell. The app and the upload keep every sample as recorded.
 
@@ -359,7 +359,7 @@ the SIM's PLMN, and published under the install-count rules of card `20261113a7d
 | `tech` | the network type of those readings registered most often, a tie going to the newer one; null when no `IN_SERVICE` reading was registered |
 | `serviceN` | the `IN_SERVICE` readings, whether their cells are known or not |
 | `emergencyN` | the `EMERGENCY_ONLY` readings, whether their cells are known or not |
-| `noServiceN` | the `OUT_OF_SERVICE` readings whose cells are known |
+| `noServiceN` | the `OUT_OF_SERVICE` readings, whether their cells are known or not |
 
 The three counts don't overlap: each counted reading is in exactly one of them, and their sum is
 the number of readings counted for the carrier in the cell. A carrier missing from `carriers` has
