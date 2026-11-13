@@ -327,7 +327,15 @@ They are never printed to the log, and fixtures and tests use made-up places.
 only to count distinct installs per map cell and to throttle uploads, and stays on the private
 side. Public files hold only the aggregates the card lists.
 
-How long the server keeps raw samples is the owner's decision (card `20261113bmjv`).
+**Retention.** The server keeps a raw sample 90 days after it received it (card `20261113bmjv`).
+The upload function stores each sample with `expireAt`, a server-side timestamp 90 days after
+receipt; the phone never sends it, and a sample uploaded again keeps its first `expireAt`. A
+Firestore TTL policy on `signal_logs.expireAt` (`firestore.indexes.json`) deletes the sample after
+that. TTL deletion lags: a sample is typically deleted within about a day after `expireAt`, and
+until then it still shows in queries. `expireAt` minus 90 days is the receive time, so the
+aggregation reads new samples by `expireAt` (it keeps an ascending index for that) and counts each
+one within hours of the end of its session, long before it expires. The aggregates are kept with
+no expiry; they are the public map.
 
 ## Example
 
