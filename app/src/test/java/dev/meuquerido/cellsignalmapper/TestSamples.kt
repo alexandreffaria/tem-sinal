@@ -27,6 +27,7 @@ fun testSample(id: String) = Sample(
             operatorNumeric = "00101",
             operatorAlphaLong = "Test Network",
             serviceState = ServiceStatus.IN_SERVICE,
+            overrideNetworkType = null,
             cells = listOf(
                 cellReading(
                     Rat.LTE, registered = true,
