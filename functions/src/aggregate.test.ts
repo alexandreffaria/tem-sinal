@@ -316,6 +316,17 @@ test("a reading whose cells are unknown is not counted as no signal", () => {
   });
 });
 
+test("an in-service reading whose cells are unknown counts towards serviceN and nothing else", () => {
+  const cells: Record<string, CellState> = {};
+  const unknown = { simPlmn: "72406", serviceState: "IN_SERVICE", cells: null };
+  const known = { simPlmn: "72406", serviceState: "IN_SERVICE", cells: [{ source: "CELL_INFO", rat: "LTE", registered: true, rsrp: -100 }] };
+  accumulate(cells, [ALICE, BRUNO, ALICE].map((id, i) => sample(id, PLACE.lat, JAN_10 + i * 60_000, { sims: [i === 1 ? known : unknown] })));
+  const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
+  assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
+    "72406": { best: -100, median: -100, tech: "LTE", serviceN: 3, emergencyN: 0, noServiceN: 0 },
+  });
+});
+
 test("a carrier seen only in emergency-only service with its cells unknown publishes its emergency count", () => {
   const cells: Record<string, CellState> = {};
   const emergency = { simPlmn: "72402", serviceState: "EMERGENCY_ONLY", cells: null };
