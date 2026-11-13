@@ -213,6 +213,12 @@ tower, which says more about the person than about coverage.
 The headline strength for a cell, for the map's best and median, is `rsrp` for LTE and NR, `rscp`
 for WCDMA and `rssi` for GSM.
 
+A WCDMA `rscp` may be an RSSI. In AOSP (android11-release onwards) `CellSignalStrengthWcdma.getDbm()`
+returns the RSCP when the modem reports one and the RSSI otherwise. An RSSI (-113..-51) falls inside
+the RSCP range (-120..-24), so the range check keeps it, and it reads a little better than the RSCP
+of the same cell would. API 30 has no public getter for the RSCP alone and no public flag for which
+of the two `getDbm()` returned, so the two can't be told apart.
+
 ## Permissions
 
 | Permission | Needed for |
@@ -356,3 +362,6 @@ Android reference, developer.android.com:
 AOSP: the emergency-only mapping follows `CellularNetworkService.getAvailableServices()` in
 `frameworks/opt/telephony`, which returns only `SERVICE_TYPE_EMERGENCY` when the modem reports
 emergency-only.
+
+AOSP: `CellSignalStrengthWcdma.getDbm()` in `frameworks/base/telephony/java/android/telephony/CellSignalStrengthWcdma.java`
+(android11-release onwards) is `if (mRscp != CellInfo.UNAVAILABLE) return mRscp; return mRssi;`.
