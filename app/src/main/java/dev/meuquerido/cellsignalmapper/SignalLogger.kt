@@ -4,11 +4,13 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import java.io.File
+import java.io.RandomAccessFile
 
 object SignalLogger {
     private val gson: Gson = GsonBuilder().create()
     private const val LOG_FILE_NAME = "signal_log.json"
     private const val PENDING_FILE_NAME = "signal_log.pending.json"
+    private const val REJECTED_FILE_NAME = "signal_log.rejected.json"
 
     fun logEntry(context: Context, entry: SignalLogEntry) {
         appendLine(getLogFile(context), gson.toJson(entry))
@@ -18,10 +20,31 @@ object SignalLogger {
 
     fun getPendingFile(context: Context): File = File(context.filesDir, PENDING_FILE_NAME)
 
-    /** Appends [line] to [log]. Never runs at the same time as [takePending]. */
+    /** Lines that are not a sample; never uploaded and never deleted by an upload. */
+    fun getRejectedFile(context: Context): File = File(context.filesDir, REJECTED_FILE_NAME)
+
+    /**
+     * Appends [line] to [log] on a line of its own, even when [log] ends with a line torn by a
+     * killed process. Never runs at the same time as [takePending].
+     */
     @Synchronized
     fun appendLine(log: File, line: String) {
-        log.appendText(line + "\n")
+        log.appendText(startOfLine(log) + line + "\n")
+    }
+
+    /** Appends [lines] to [rejected], then deletes [pending]. */
+    fun keepRejected(pending: File, rejected: File, lines: List<String>) {
+        lines.forEach { appendLine(rejected, it) }
+        pending.delete()
+    }
+
+    /** A newline when [file] ends inside a line, so that what is written next starts its own line. */
+    private fun startOfLine(file: File): String {
+        if (!file.exists() || file.length() == 0L) return ""
+        RandomAccessFile(file, "r").use {
+            it.seek(it.length() - 1)
+            return if (it.read() == '\n'.code) "" else "\n"
+        }
     }
 
     /**
@@ -35,7 +58,7 @@ object SignalLogger {
             if (!pending.exists()) {
                 check(log.renameTo(pending)) { "Could not rename the log to the pending file" }
             } else {
-                pending.appendBytes(log.readBytes())
+                pending.appendBytes(startOfLine(pending).toByteArray() + log.readBytes())
                 log.delete()
             }
         }

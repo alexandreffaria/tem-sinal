@@ -17,8 +17,27 @@ import kotlinx.coroutines.withContext
 /** Firestore rejects a write batch with more than this many operations. */
 const val FIRESTORE_BATCH_LIMIT = 500
 
-/** Splits [lines] into consecutive batches of at most [FIRESTORE_BATCH_LIMIT], in order. */
-fun uploadBatches(lines: List<String>): List<List<String>> = lines.chunked(FIRESTORE_BATCH_LIMIT)
+/** Splits [items] into consecutive batches of at most [FIRESTORE_BATCH_LIMIT], in order. */
+fun <T> uploadBatches(items: List<T>): List<List<T>> = items.chunked(FIRESTORE_BATCH_LIMIT)
+
+/** The samples in a log, in order, and the non-blank lines that are not a sample with an id. */
+data class ParsedLog(val samples: List<SignalLogEntry>, val rejected: List<String>)
+
+/** Parses each non-blank line of [lines] as a sample; blank lines are skipped. */
+fun parseLog(lines: List<String>, gson: Gson): ParsedLog {
+    val samples = mutableListOf<SignalLogEntry>()
+    val rejected = mutableListOf<String>()
+    for (line in lines.filter { it.isNotBlank() }) {
+        val entry = try {
+            gson.fromJson(line, SignalLogEntry::class.java)
+        } catch (e: RuntimeException) {
+            null
+        }
+        // Gson leaves a missing id null despite the declared type.
+        if (entry != null && !entry.id.isNullOrEmpty()) samples += entry else rejected += line
+    }
+    return ParsedLog(samples, rejected)
+}
 
 object FirebaseUploader {
     @SuppressLint("StaticFieldLeak")
@@ -41,7 +60,10 @@ object FirebaseUploader {
         }
     }
 
-    /** Returns false, keeping the log and the pending file, if moving, reading or any batch fails. */
+    /**
+     * Returns false, keeping the log and the pending file, if moving, reading or any batch fails.
+     * Lines that are not a sample are moved to the rejected file instead of being deleted.
+     */
     private fun upload(context: Context): Boolean {
         try {
             val pending = SignalLogger.takePending(
@@ -54,20 +76,17 @@ object FirebaseUploader {
             }
 
             val collection = db.collection("signal_logs")
-            for (lines in uploadBatches(pending.readLines().filter { it.isNotBlank() })) {
+            val log = parseLog(pending.readLines(), gson)
+            for (samples in uploadBatches(log.samples)) {
                 val batch = db.batch()
-                lines.forEach { line ->
-                    try {
-                        val entry = gson.fromJson(line, SignalLogEntry::class.java)
-                        batch.set(collection.document(entry.id), entry)
-                    } catch (e: Exception) {
-                        Log.e("FirebaseUploader", "Failed to parse a line", e)
-                    }
-                }
+                samples.forEach { batch.set(collection.document(it.id), it) }
                 Tasks.await(batch.commit())
             }
+            if (log.rejected.isNotEmpty()) {
+                Log.w("FirebaseUploader", "Kept ${log.rejected.size} unparseable lines in the rejected file.")
+            }
             Log.d("FirebaseUploader", "Upload successful, deleting pending file.")
-            pending.delete()
+            SignalLogger.keepRejected(pending, SignalLogger.getRejectedFile(context), log.rejected)
             return true
         } catch (e: Exception) {
             Log.e("FirebaseUploader", "Upload failed", e)
