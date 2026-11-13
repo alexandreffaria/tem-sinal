@@ -28,7 +28,7 @@
     <string name="dismiss">Fechar</string>
 
     <string name="what_is_shared">O que é compartilhado?</string>
-    <string name="sharing_recording">Nada é gravado até você tocar em %1$s, e a gravação para quando você toca em %2$s.</string>
+    <string name="sharing_recording">Nenhuma amostra é gravada até você tocar em %1$s, e a gravação para quando você toca em %2$s.</string>
     <string name="sharing_sample">Cada amostra guarda a posição e a hora, a precisão da localização e a altitude e, para cada chip, a operadora, o estado do serviço, as medições de sinal e os códigos das antenas que ele capta. Ela também leva um código aleatório do app, criado neste celular, e um código aleatório para cada gravação. Uma amostra nunca contém seu nome, número de telefone, contas, IMEI ou Android ID.</string>
     <string name="sharing_server">As amostras ficam neste celular até serem enviadas, o que acontece quando você abre o app ou toca em %1$s. No nosso servidor elas são privadas e nunca são publicadas. Quando nosso servidor de envio estiver funcionando, cada amostra será apagada 90 dias depois de chegar; até lá, as amostras no servidor não são apagadas automaticamente.</string>
     <string name="sharing_personal">As amostras em si não são anônimas: o código aleatório do app liga as amostras de um mesmo celular, então pela LGPD (a lei de proteção de dados) elas são dados pessoais.</string>
