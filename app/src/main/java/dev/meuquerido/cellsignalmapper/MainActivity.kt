@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -120,20 +121,7 @@ class MainActivity : ComponentActivity() {
             CellSignalMapperTheme {
                 val loggerState by LoggerState.state.collectAsState()
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        PingVisualizer(
-                            result = loggerState.pingResult?.name ?: "",
-                            animationKey = loggerState.sampleCount
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
+                    val controls = @Composable { sideBySide: Boolean ->
                         permissionMessage?.let {
                             Text(it, modifier = Modifier.padding(horizontal = 16.dp))
                         }
@@ -146,11 +134,54 @@ class MainActivity : ComponentActivity() {
                                     Log.d("MainActivity", "Upload complete: $it")
                                 }
                             },
+                            sideBySide = sideBySide,
                             location = loggerState.location,
                             signalStrength = loggerState.signalStrength,
                             service = loggerState.service,
                             pendingPoints = loggerState.pendingCount
                         )
+                    }
+                    val pingResult = loggerState.pingResult?.name ?: ""
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    ) {
+                        // Wider than tall, as in landscape: the visualizer, buttons and lines sit
+                        // in a row, because stacked they don't fit the height.
+                        if (maxWidth > maxHeight) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                PingVisualizer(
+                                    result = pingResult,
+                                    modifier = Modifier.padding(start = 32.dp),
+                                    animationKey = loggerState.sampleCount
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    controls(true)
+                                }
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                PingVisualizer(
+                                    result = pingResult,
+                                    animationKey = loggerState.sampleCount
+                                )
+
+                                Spacer(modifier = Modifier.height(24.dp))
+
+                                controls(false)
+                            }
+                        }
                     }
                 }
             }
