@@ -301,7 +301,7 @@ test("a reading with the radio off or the service state unknown says nothing abo
   assert.deepEqual(published[h3At(north)]?.carriers["72402"], { best: null, median: null, tech: null, serviceN: 0, emergencyN: 2, noServiceN: 1 });
 });
 
-test("a reading whose cells are unknown is not counted as no signal", () => {
+test("an out-of-service reading whose cells are unknown counts towards noServiceN and nothing else", () => {
   const cells: Record<string, CellState> = {};
   accumulate(cells, [ALICE, BRUNO].map((id, i) =>
     sample(id, PLACE.lat, JAN_10 + i * 60_000, {
@@ -313,6 +313,7 @@ test("a reading whose cells are unknown is not counted as no signal", () => {
   const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
   assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
     "72402": { best: -85, median: -85, tech: "GSM", serviceN: 2, emergencyN: 0, noServiceN: 0 },
+    "72406": { best: null, median: null, tech: null, serviceN: 0, emergencyN: 0, noServiceN: 2 },
   });
 });
 

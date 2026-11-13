@@ -190,16 +190,16 @@ const monthOf = (ms: number) => new Date(ms).toISOString().slice(0, 7);
 
 /**
  * Adds trimmed samples to [cells], keyed by H3 cell and month. Changes [cells] in place. A SIM
- * reading counts only when its carrier and service state are known, the radio was on
- * (`serviceState` not `POWER_OFF`), and its cells are known or it is not `OUT_OF_SERVICE`; a sample
- * with no such reading adds nothing. Each such reading adds one to the count of its service state.
- * Only an `IN_SERVICE` reading adds a strength and a network type: a modem in limited service can
- * report the cell it is camped on as registered.
+ * reading counts only when its carrier and service state are known and the radio was on
+ * (`serviceState` not `POWER_OFF`); a sample with no such reading adds nothing. Each such reading
+ * adds one to the count of its service state, whether its cells are known or not. Only an
+ * `IN_SERVICE` reading with known cells adds a strength and a network type: a modem in limited
+ * service can report the cell it is camped on as registered.
  */
 export function accumulate(cells: Record<string, CellState>, samples: StoredSample[]): void {
   for (const sample of samples) {
     const sims = sample.sims.flatMap((sim) =>
-      sim.simPlmn && sim.serviceState && sim.serviceState !== "POWER_OFF" && (sim.cells || sim.serviceState !== "OUT_OF_SERVICE")
+      sim.simPlmn && sim.serviceState && sim.serviceState !== "POWER_OFF"
         ? [{ ...sim, plmn: sim.simPlmn }]
         : [],
     );
