@@ -18,8 +18,8 @@ the check is green.
 2. **What did this delete?** Anything it replaces is gone in the same pull request.
 3. No new dependency, permission, service or secret unless the issue names it. No abstraction the
    issue didn't ask for.
-4. Changed lines are within about 400 (not counting deletions, generated files and renames), or
-   the description says what is left.
+4. Changed lines are within about 400 (not counting deletions, generated files, renames and
+   docs), or the description says what is left.
 5. Comments and commit messages use standard terms and hold no history: no plan or pull-request
    references, no review-round notes.
 6. No file under `decisions/`.
