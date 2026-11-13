@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { cellToParent, greatCircleDistance, latLngToCell } from "h3-js";
 import {
   type CellState, type PublicCell, type StoredSample,
-  ANCHOR_FIXES, CELL_RESOLUTION, TILE_RESOLUTION, TRIM_M, accumulate, publish, tiles, trimLengths, trimSession,
+  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, STAY_M, TILE_RESOLUTION, TRIM_M, accumulate, publish, tiles, trimLengths, trimSession,
 } from "./aggregate.js";
 
 // Made-up installs, sessions and places; 0.001 degrees of latitude is about 111 m.
@@ -85,6 +85,8 @@ test("wrong fixes at either end don't stand in for the place the phone rests", (
   const hour = (lat: number) => Array.from({ length: 720 }, (_, i) => lat + 0.00009 * Math.sin(i * 1.7));
   const end = PLACE.lat + 0.027;
   const out = Array.from({ length: 300 }, (_, i) => PLACE.lat + (i + 1) * 0.00009);
+  // The fixes strictly between [from] and [to], a twentieth of the way apart.
+  const glide = (from: number, to: number) => Array.from({ length: 19 }, (_, i) => from + ((i + 1) * (to - from)) / 20);
   for (const trimM of [TRIM_M.min, TRIM_M.max]) {
     const off = (1.3 * trimM) / 111_195;
     const cases = {
@@ -97,11 +99,37 @@ test("wrong fixes at either end don't stand in for the place the phone rests", (
         ...session([Array.from({ length: 120 }, (_, i) => PLACE.lat - 0.011 + 0.004 * Math.sin(i))]),
         ...session([hour(PLACE.lat), out, hour(end)]).map((s) => ({ ...s, elapsedRealtimeMs: s.elapsedRealtimeMs + 1_200_000 })),
       ],
+      // Ten minutes of fixes 1.2 km off, ten minutes without a fix, then GPS at the door and the walk at once.
+      gap: [
+        ...session([repeat(120, PLACE.lat - 0.011)]),
+        ...session([out, repeat(120, end + 0.011)]).map((s) => ({ ...s, elapsedRealtimeMs: s.elapsedRealtimeMs + 1_200_000 })),
+      ],
       // One fix 1.2 km off, then an hour still, at each end.
       single: session([[PLACE.lat - 0.011], hour(PLACE.lat), out, hour(end), [end + 0.011]]),
+      // Ten minutes 1 km off, a 100 s glide home in 50 m steps (36 km/h), ten minutes still, at each end.
+      glide: session([
+        repeat(120, PLACE.lat - 0.009), glide(PLACE.lat - 0.009, PLACE.lat), hour(PLACE.lat).slice(0, 120), out,
+        hour(end).slice(0, 120), glide(end + 0.009, end).toReversed(), repeat(120, end + 0.009),
+      ]),
     };
     for (const [name, s] of Object.entries(cases)) assertClear(trimSession(s, trimM, trimM), [PLACE.lat, end], trimM, `${name} ${trimM}`);
   }
+});
+
+test("a stay is cut out unless the phone first moves away from the end for DEPARTURE_FIXES", () => {
+  // Ten minutes still, a walk north at 2 m/s to a crag [metres] away, two hours there, the walk back, ten minutes still.
+  const session = (metres: number) => {
+    const walkOut = Array.from({ length: metres / 10 - 1 }, (_, i) => (i + 1) * 10);
+    const ms = [...Array(120).fill(0), ...walkOut, ...Array(1440).fill(metres), ...walkOut.toReversed(), ...Array(120).fill(0)];
+    return ms.map((m: number, i) => sample(ALICE, PLACE.lat + m / 111_195, JAN_10 + i * 5_000));
+  };
+  const atCrag = (metres: number) =>
+    trimSession(session(metres), TRIM_M.max, TRIM_M.max).filter((s) => s.fix.lat === PLACE.lat + metres / 111_195).length;
+  // The walk leaves the end's cut 900 m out, and DEPARTURE_FIXES at 2 m/s take it 600 m further; the
+  // crag's stay starts STAY_M short of it.
+  assert.deepEqual([DEPARTURE_FIXES, STAY_M], [60, 50]);
+  assert.equal(atCrag(1500), 0);
+  assert.equal(atCrag(1600), 1440);
 });
 
 test("a step faster than any phone moves after an end's cut doesn't restart it", () => {
