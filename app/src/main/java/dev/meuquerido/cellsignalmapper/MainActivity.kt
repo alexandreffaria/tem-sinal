@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
     private fun currentDeniedMessage() = loggingDeniedMessage(
         fineLocationGranted = isGranted(Manifest.permission.ACCESS_FINE_LOCATION),
         coarseLocationGranted = isGranted(Manifest.permission.ACCESS_COARSE_LOCATION),
+        phoneStateGranted = isGranted(Manifest.permission.READ_PHONE_STATE),
     )
 
     private fun toggleLogging() {

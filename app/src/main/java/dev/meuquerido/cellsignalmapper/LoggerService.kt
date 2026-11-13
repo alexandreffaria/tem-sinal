@@ -83,6 +83,12 @@ class LoggerService : Service() {
             stopSelf()
             return
         }
+        // Without phone state access there are no active subscriptions, so no sample can be written.
+        if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            Log.w("LoggerService", "Phone state not granted; not logging")
+            stopSelf()
+            return
+        }
 
         LoggerState.serviceStarted()
         locationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -197,7 +203,6 @@ class LoggerService : Service() {
         val subscriptions = try {
             subscriptionManager.activeSubscriptionInfoList.orEmpty()
         } catch (e: SecurityException) {
-            Log.w("LoggerService", "Phone state not granted; no subscriptions to read", e)
             return emptyList()
         }
         return kotlinx.coroutines.coroutineScope {

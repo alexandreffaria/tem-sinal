@@ -7,13 +7,16 @@ import org.junit.Test
 
 class LoggingPermissionTest {
     @Test
-    fun fineLocationAllowsLogging() {
-        assertNull(loggingDeniedMessage(fineLocationGranted = true, coarseLocationGranted = true))
+    fun allGrantedAllowsLogging() {
+        assertNull(
+            loggingDeniedMessage(fineLocationGranted = true, coarseLocationGranted = true, phoneStateGranted = true),
+        )
     }
 
     @Test
     fun approximateLocationAloneBlocksLoggingAndAsksForPrecise() {
-        val message = loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = true)
+        val message =
+            loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = true, phoneStateGranted = true)
 
         assertNotNull(message)
         assertTrue(message!!.contains("precise location"))
@@ -21,6 +24,26 @@ class LoggingPermissionTest {
 
     @Test
     fun noLocationBlocksLogging() {
-        assertNotNull(loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = false))
+        assertNotNull(
+            loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = false, phoneStateGranted = true),
+        )
+    }
+
+    @Test
+    fun noPhoneStateBlocksLoggingAndAsksForPhone() {
+        val message =
+            loggingDeniedMessage(fineLocationGranted = true, coarseLocationGranted = true, phoneStateGranted = false)
+
+        assertNotNull(message)
+        assertTrue(message!!.contains("phone access"))
+    }
+
+    @Test
+    fun locationMessageWinsWhenPhoneStateIsAlsoMissing() {
+        val message =
+            loggingDeniedMessage(fineLocationGranted = false, coarseLocationGranted = false, phoneStateGranted = false)
+
+        assertNotNull(message)
+        assertTrue(message!!.contains("location access"))
     }
 }
