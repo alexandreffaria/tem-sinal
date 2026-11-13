@@ -367,8 +367,14 @@ the SIM's PLMN, and published under the install-count rules of card `20261113a7d
 Each count is a number of 5 s ticks (see **Rules that hold for every field**), so the counts
 compare time spent in each state. The three counts don't overlap: each counted reading is in
 exactly one of them, and their sum is the number of readings counted for the carrier in the cell.
-A carrier missing from `carriers` has no data in that cell. This format states what was measured;
-how the map labels a carrier from the counts is the map's rule.
+A carrier missing from `carriers` has no data in that cell.
+
+The map labels each carrier in a cell from the counts, with `total` their sum: signal when
+`serviceN` is at least 90% of `total`; else emergency calls only when `serviceN + emergencyN` is at
+least 90% of `total` (a phone in service can also make emergency calls); else no signal. So 199 /
+0 / 1 (`serviceN` / `emergencyN` / `noServiceN`) is signal, 120 / 80 / 0 emergency calls only, and
+85 / 0 / 15 no signal. The map page works the label out, so the 90% can be tuned without changing
+these files (see `docs/decisions.md`).
 
 ## Example
 
