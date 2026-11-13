@@ -37,8 +37,9 @@ const h3At = (lat: number) => latLngToCell(lat, PLACE.lon, CELL_RESOLUTION);
 /** The public cells after one publication per listed day, each on the samples given before it. */
 function publishOn(cells: Record<string, CellState>, days: number[]): Record<string, PublicCell>[] {
   let published: Record<string, PublicCell> = {};
+  let lastBatch: string | null = null;
   return days.map((day) => {
-    ({ cells, published } = publish(cells, published, day));
+    ({ cells, published, lastBatch } = publish(cells, published, lastBatch, day));
     return published;
   });
 }
@@ -228,11 +229,12 @@ test("a held cell that gains a second install still waits for the next batch", (
   let cells: Record<string, CellState> = {};
   accumulate(cells, [sample(ALICE, PLACE.lat, JAN_10)]);
   let published: Record<string, PublicCell>;
-  ({ cells, published } = publish(cells, {}, JAN_10 + DAY));
+  let lastBatch: string | null = null;
+  ({ cells, published, lastBatch } = publish(cells, {}, lastBatch, JAN_10 + DAY));
   accumulate(cells, [sample(BRUNO, PLACE.lat, JAN_10 + DAY)]);
-  ({ cells, published } = publish(cells, published, JAN_10 + 2 * DAY));
+  ({ cells, published, lastBatch } = publish(cells, published, lastBatch, JAN_10 + 2 * DAY));
   assert.deepEqual(published, {});
-  ({ published } = publish(cells, published, Date.UTC(2026, 1, 1, 6)));
+  ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 1, 1, 6)));
   assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
 });
 
@@ -240,15 +242,82 @@ test("a published one-install cell changes only in monthly batches", () => {
   let cells: Record<string, CellState> = {};
   accumulate(cells, [sample(ALICE, PLACE.lat, JAN_10)]);
   let published: Record<string, PublicCell>;
-  ({ cells, published } = publish(cells, {}, Date.UTC(2026, 1, 10, 6)));
-  ({ cells, published } = publish(cells, published, Date.UTC(2026, 2, 1, 6)));
+  let lastBatch: string | null = null;
+  ({ cells, published, lastBatch } = publish(cells, {}, lastBatch, Date.UTC(2026, 1, 10, 6)));
+  ({ cells, published, lastBatch } = publish(cells, published, lastBatch, Date.UTC(2026, 2, 1, 6)));
   const march = published;
   accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2026, 2, 5, 13))]);
-  ({ cells, published } = publish(cells, published, Date.UTC(2026, 2, 6, 6)));
+  ({ cells, published, lastBatch } = publish(cells, published, lastBatch, Date.UTC(2026, 2, 6, 6)));
   assert.deepEqual(published, march);
-  ({ published } = publish(cells, published, Date.UTC(2026, 3, 1, 6)));
+  ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 3, 1, 6)));
   assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
   assert.equal(published[h3At(PLACE.lat)]?.lastSeen, "2026-03");
+});
+
+test("a batch missed on the 1st runs in the next publication with what the 1st would publish", () => {
+  const cells: Record<string, CellState> = {};
+  const early = PLACE.lat;
+  const late = PLACE.lat + 0.01;
+  // [early] is 30 days old by the end of 1 February; [late] only on 2 February at 02:00.
+  accumulate(cells, [
+    sample(ALICE, early, Date.UTC(2026, 0, 2, 13)),
+    sample(ALICE, late, Date.UTC(2026, 0, 3, 2)),
+    sample(ALICE, early, Date.UTC(2026, 1, 1, 9)),
+  ]);
+  const days = [Date.UTC(2026, 0, 31, 6), Date.UTC(2026, 1, 2, 6), Date.UTC(2026, 2, 1, 6)];
+  const [janLast, febCatchUp = {}, marBatch = {}] = publishOn(cells, days);
+  assert.deepEqual(janLast, {});
+  assert.deepEqual(Object.keys(febCatchUp), [h3At(early)]);
+  assert.equal(febCatchUp[h3At(early)]?.carriers["72406"]?.serviceN, 1);
+  assert.equal(febCatchUp[h3At(early)]?.lastSeen, "2026-01");
+  assert.deepEqual(Object.keys(marBatch).sort(), [h3At(early), h3At(late)].sort());
+  assert.equal(marBatch[h3At(early)]?.lastSeen, "2026-02");
+});
+
+test("two publications in one month run the batch only once", () => {
+  let cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2025, 11, 20, 13))]);
+  let published: Record<string, PublicCell>;
+  let lastBatch: string | null = null;
+  ({ cells, published, lastBatch } = publish(cells, {}, lastBatch, Date.UTC(2026, 1, 2, 6)));
+  assert.equal(lastBatch, "2026-02");
+  const february = published;
+  assert.deepEqual(Object.keys(february), [h3At(PLACE.lat)]);
+  accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2026, 0, 25, 13))]);
+  ({ cells, published, lastBatch } = publish(cells, published, lastBatch, Date.UTC(2026, 1, 3, 6)));
+  assert.deepEqual(published, february);
+  assert.equal(lastBatch, "2026-02");
+  ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 2, 4, 6)));
+  assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
+});
+
+test("the batch runs across a year boundary", () => {
+  let cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2025, 10, 25, 13))]);
+  let published: Record<string, PublicCell>;
+  let lastBatch: string | null = null;
+  ({ cells, published, lastBatch } = publish(cells, {}, lastBatch, Date.UTC(2025, 11, 1, 6)));
+  assert.equal(lastBatch, "2025-12");
+  assert.deepEqual(published, {});
+  ({ cells, published, lastBatch } = publish(cells, published, lastBatch, Date.UTC(2026, 0, 1, 6)));
+  assert.equal(lastBatch, "2026-01");
+  assert.deepEqual(Object.keys(published), [h3At(PLACE.lat)]);
+  assert.throws(() => publish(cells, published, "2026-01", Date.UTC(2025, 11, 15, 6)), /later than 2025-12/);
+});
+
+test("a publication without a previous batch but with public cells throws", () => {
+  const cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2025, 11, 20, 13))]);
+  const february = publish(cells, {}, null, Date.UTC(2026, 1, 1, 6));
+  assert.deepEqual(Object.keys(february.published), [h3At(PLACE.lat)]);
+  accumulate(february.cells, [sample(ALICE, PLACE.lat, Date.UTC(2026, 0, 25, 13))]);
+  assert.throws(() => publish(february.cells, february.published, null, Date.UTC(2026, 1, 15, 6)), /no previous batch/);
+});
+
+test("a publication whose previous batch is in a later month throws", () => {
+  const cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(ALICE, PLACE.lat, JAN_10)]);
+  assert.throws(() => publish(cells, {}, "2026-03", Date.UTC(2026, 1, 1, 6)), /later than 2026-02/);
 });
 
 test("public cells are grouped by their region tile", () => {
@@ -265,12 +334,13 @@ test("a batch leaves out a lone install's samples from the batch's own month", (
   let cells: Record<string, CellState> = {};
   accumulate(cells, [sample(ALICE, PLACE.lat, JAN_10)]);
   let published: Record<string, PublicCell>;
-  ({ cells, published } = publish(cells, {}, Date.UTC(2026, 2, 1, 6)));
+  let lastBatch: string | null = null;
+  ({ cells, published, lastBatch } = publish(cells, {}, lastBatch, Date.UTC(2026, 2, 1, 6)));
   const march = published;
   accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2026, 3, 1, 2))]);
-  ({ cells, published } = publish(cells, published, Date.UTC(2026, 3, 1, 6)));
+  ({ cells, published, lastBatch } = publish(cells, published, lastBatch, Date.UTC(2026, 3, 1, 6)));
   assert.deepEqual(published, march);
-  ({ published } = publish(cells, published, Date.UTC(2026, 4, 1, 6)));
+  ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 4, 1, 6)));
   assert.equal(published[h3At(PLACE.lat)]?.carriers["72406"]?.serviceN, 2);
   assert.equal(published[h3At(PLACE.lat)]?.lastSeen, "2026-04");
 });
@@ -279,9 +349,10 @@ test("a lone first visit on the 1st waits for the next batch", () => {
   let cells: Record<string, CellState> = {};
   accumulate(cells, [sample(ALICE, PLACE.lat, Date.UTC(2026, 2, 1, 2))]);
   let published: Record<string, PublicCell>;
-  ({ cells, published } = publish(cells, {}, Date.UTC(2026, 2, 1, 6)));
+  let lastBatch: string | null = null;
+  ({ cells, published, lastBatch } = publish(cells, {}, lastBatch, Date.UTC(2026, 2, 1, 6)));
   assert.deepEqual(published, {});
-  ({ published } = publish(cells, published, Date.UTC(2026, 3, 1, 6)));
+  ({ published } = publish(cells, published, lastBatch, Date.UTC(2026, 3, 1, 6)));
   assert.equal(published[h3At(PLACE.lat)]?.lastSeen, "2026-03");
 });
 
@@ -312,7 +383,7 @@ test("a reading with the radio off or the service state unknown says nothing abo
   assert.deepEqual(published[h3At(north)]?.carriers["72402"], { best: null, median: null, tech: null, serviceN: 0, emergencyN: 2, noServiceN: 1 });
 });
 
-test("a reading whose cells are unknown is not counted as no signal", () => {
+test("an out-of-service reading whose cells are unknown counts towards noServiceN and nothing else", () => {
   const cells: Record<string, CellState> = {};
   accumulate(cells, [ALICE, BRUNO].map((id, i) =>
     sample(id, PLACE.lat, JAN_10 + i * 60_000, {
@@ -324,6 +395,18 @@ test("a reading whose cells are unknown is not counted as no signal", () => {
   const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
   assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
     "72402": { best: -85, median: -85, tech: "GSM", serviceN: 2, emergencyN: 0, noServiceN: 0 },
+    "72406": { best: null, median: null, tech: null, serviceN: 0, emergencyN: 0, noServiceN: 2 },
+  });
+});
+
+test("an in-service reading whose cells are unknown counts towards serviceN and nothing else", () => {
+  const cells: Record<string, CellState> = {};
+  const unknown = { simPlmn: "72406", serviceState: "IN_SERVICE", cells: null };
+  const known = { simPlmn: "72406", serviceState: "IN_SERVICE", cells: [{ source: "CELL_INFO", rat: "LTE", registered: true, rsrp: -100 }] };
+  accumulate(cells, [ALICE, BRUNO, ALICE].map((id, i) => sample(id, PLACE.lat, JAN_10 + i * 60_000, { sims: [i === 1 ? known : unknown] })));
+  const [published = {}] = publishOn(cells, [JAN_10 + DAY]);
+  assert.deepEqual(published[h3At(PLACE.lat)]?.carriers, {
+    "72406": { best: -100, median: -100, tech: "LTE", serviceN: 3, emergencyN: 0, noServiceN: 0 },
   });
 });
 

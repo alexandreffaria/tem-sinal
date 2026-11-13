@@ -52,6 +52,7 @@ options:
 resolution:
   choice: self-hosted
   resolved_at: 2026-11-13T13:00:34Z
+applied_at: 2026-11-13T13:06:33Z
 ---
 
 ## Context

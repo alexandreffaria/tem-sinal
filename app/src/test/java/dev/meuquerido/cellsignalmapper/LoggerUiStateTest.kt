@@ -41,12 +41,12 @@ class LoggerUiStateTest {
         val sims = listOf(sim(0, ServiceStatus.IN_SERVICE, rsrp = -85))
         val state = LoggerUiState().serviceStarted()
             .withSample(-10.5, 20.25, sims, PingResult.SUCCESS)
-            .withSample(-10.5, 20.25, sims, PingResult.DUPLICATE)
+            .withSample(-10.5, 20.25, sims, PingResult.SUCCESS)
 
         assertEquals("Lat: -10.5, Lon: 20.25", state.location)
         assertEquals("Signal Strength: -85 dBm", state.signalStrength)
         assertEquals("SIM 1: In service", state.service)
-        assertEquals(PingResult.DUPLICATE, state.pingResult)
+        assertEquals(PingResult.SUCCESS, state.pingResult)
         assertEquals(2, state.sampleCount)
     }
 

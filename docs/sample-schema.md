@@ -9,10 +9,9 @@ otherwise.
 ## Rules that hold for every field
 
 - **One sample per tick that has a location fix.** No fix, no sample. A tick with a fix and no
-  signal is a sample: "no signal here" is the most useful fact for planning. A tick repeats the
-  last sample logged, and is skipped, when the fix moved at most 10 m from that sample's fix and
-  every SIM has the same `serviceState` and the same registered cells (technology and identity)
-  at the same headline strength.
+  signal is a sample: "no signal here" is the most useful fact for planning. Ticks start every
+  5 s, and no tick is skipped as a repeat of the last, so in a session each sample stands for 5 s
+  whatever the service state.
 - **No active subscription, no sample.** Every sample has at least one entry in `sims`, because
   every carrier fact is tied to a subscription.
 - **Unavailable is `null`, never a sentinel.** Android reports a missing int as
@@ -103,6 +102,10 @@ exists only from API 34, so it isn't recorded. `getTime()` comes from the satell
 fixes but may be the phone's clock for others, and the phone's clock can jump; order samples within
 a session by `elapsedRealtimeMs`, never by `timeMs`. `mock` lets the server drop fixes from a mock
 location app.
+
+Consecutive samples can share the same fix (same `timeMs` and `elapsedRealtimeMs`) when no newer
+one arrived, for as long as it is no older than `MAX_FIX_AGE_MILLIS`; each is still its own tick
+with its own SIM readings, and samples are deduplicated by `id`, never by fix.
 
 ## SimReading
 
@@ -201,8 +204,9 @@ The aggregation counts a SIM's reading towards coverage only when it says someth
 reading with `serviceState` `POWER_OFF` (the radio wasn't listening) or `null` (unknown) is left
 out of every coverage figure: best and median strength, technology, and the reading counts
 `serviceN`, `emergencyN` and `noServiceN`; the sample's other SIMs still count. A reading with
-`cells` null counts only when it is `EMERGENCY_ONLY`, towards `emergencyN`, never towards
-`serviceN` or `noServiceN`. Strength and technology come from `IN_SERVICE` readings only: a modem
+`cells` null still counts towards the count of its service state, since `serviceState` comes from
+`getServiceState()` and not from the cell request, but adds no strength or technology. Strength
+and technology come from `IN_SERVICE` readings only: a modem
 in limited service can report the cell it is camped on as registered. A sample with no reading
 that counts adds nothing to its cell. The app and the upload keep every sample as recorded.
 
@@ -356,14 +360,21 @@ the SIM's PLMN, and published under the install-count rules of card `20261113a7d
 | `best` | the strongest headline strength in dBm (RSRP for LTE and NR, RSCP for WCDMA, RSSI for GSM) of the `IN_SERVICE` readings registered to a cell; null when none had one |
 | `median` | the lower median of the same strengths; null when `best` is |
 | `tech` | the network type of those readings registered most often, a tie going to the newer one; null when no `IN_SERVICE` reading was registered |
-| `serviceN` | the `IN_SERVICE` readings whose cells are known |
+| `serviceN` | the `IN_SERVICE` readings, whether their cells are known or not |
 | `emergencyN` | the `EMERGENCY_ONLY` readings, whether their cells are known or not |
-| `noServiceN` | the `OUT_OF_SERVICE` readings whose cells are known |
+| `noServiceN` | the `OUT_OF_SERVICE` readings, whether their cells are known or not |
 
-The three counts don't overlap: each counted reading is in exactly one of them, and their sum is
-the number of readings counted for the carrier in the cell. A carrier missing from `carriers` has
-no data in that cell. This format states what was measured; how the map labels a carrier from the
-counts is the map's rule.
+Each count is a number of 5 s ticks (see **Rules that hold for every field**), so the counts
+compare time spent in each state. The three counts don't overlap: each counted reading is in
+exactly one of them, and their sum is the number of readings counted for the carrier in the cell.
+A carrier missing from `carriers` has no data in that cell.
+
+The map labels each carrier in a cell from the counts, with `total` their sum: signal when
+`serviceN` is at least 90% of `total`; else emergency calls only when `serviceN + emergencyN` is at
+least 90% of `total` (a phone in service can also make emergency calls); else no signal. So 199 /
+0 / 1 (`serviceN` / `emergencyN` / `noServiceN`) is signal, 120 / 80 / 0 emergency calls only, and
+85 / 0 / 15 no signal. The map page works the label out, so the 90% can be tuned without changing
+these files (see `docs/decisions.md`).
 
 ## Example
 
