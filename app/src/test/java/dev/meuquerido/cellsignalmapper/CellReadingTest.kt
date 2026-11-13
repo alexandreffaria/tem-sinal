@@ -81,11 +81,29 @@ class CellReadingTest {
 
     @Test
     fun simWithInvalidSlotAndNoOperatorHasNulls() {
-        val sim = simReading(slotIndex = -1, simOperator = "", cells = null)
+        val sim = simReading(
+            slotIndex = -1, simOperator = "", operatorNumeric = "", operatorAlphaLong = null,
+            cells = null,
+        )
 
         assertNull(sim.slot)
         assertNull(sim.simPlmn)
+        assertNull(sim.registeredPlmn)
+        assertNull(sim.operatorName)
         assertNull(sim.cells)
-        assertEquals(1, simReading(slotIndex = 1, simOperator = "00101", cells = emptyList()).slot)
+    }
+
+    @Test
+    fun roamingSimKeepsItsOwnAndTheRegisteredPlmn() {
+        val sim = simReading(
+            slotIndex = 1, simOperator = "00101", operatorNumeric = "00102",
+            operatorAlphaLong = "Other Network", cells = emptyList(),
+        )
+
+        assertEquals(1, sim.slot)
+        assertEquals("00101", sim.simPlmn)
+        assertEquals("00102", sim.registeredPlmn)
+        assertEquals("Other Network", sim.operatorName)
+        assertEquals(emptyList<CellReading>(), sim.cells)
     }
 }

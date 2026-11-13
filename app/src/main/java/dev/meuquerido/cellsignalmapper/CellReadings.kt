@@ -7,6 +7,9 @@ import android.telephony.CellInfoLte
 import android.telephony.CellInfoNr
 import android.telephony.CellInfoWcdma
 import android.telephony.CellSignalStrengthNr
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
 /**
  * The valid range of each raw value for one technology, from the CellReading table in
@@ -118,18 +121,38 @@ fun CellReading.headlineDbm(): Int? = when (rat) {
 
 /**
  * A [SimReading] from raw values: [slotIndex] is null or negative (`INVALID_SIM_SLOT_INDEX`) when
- * unknown, and [simOperator] is empty while the SIM isn't ready.
+ * unknown, [simOperator] is empty while the SIM isn't ready, and [operatorNumeric] and
+ * [operatorAlphaLong] are the subscription's `ServiceState` values, null or empty when it isn't
+ * registered.
  */
-fun simReading(slotIndex: Int?, simOperator: String?, cells: List<CellReading>?): SimReading =
+fun simReading(
+    slotIndex: Int?,
+    simOperator: String?,
+    operatorNumeric: String?,
+    operatorAlphaLong: String?,
+    cells: List<CellReading>?,
+): SimReading =
     SimReading(
         slot = slotIndex?.takeIf { it >= 0 },
         simPlmn = simOperator?.ifEmpty { null },
-        registeredPlmn = null,
-        operatorName = null,
+        registeredPlmn = operatorNumeric?.ifEmpty { null },
+        operatorName = operatorAlphaLong?.ifEmpty { null },
         serviceState = null,
         overrideNetworkType = null,
         cells = cells,
     )
+
+/**
+ * The value [request] passes to its callback within [timeoutMs], or null when it passes null or
+ * doesn't call back in time, so a modem that never answers can't hold up a tick. A callback that
+ * comes after the timeout is ignored. [request] calls its callback at most once.
+ */
+suspend fun <T : Any> awaitCallback(timeoutMs: Long, request: (callback: (T?) -> Unit) -> Unit): T? =
+    withTimeoutOrNull(timeoutMs) {
+        suspendCancellableCoroutine<T?> { continuation ->
+            request { value -> if (continuation.isActive) continuation.resume(value) }
+        }
+    }
 
 /** This cell's identity and its own signal strength, or null for CDMA and TD-SCDMA cells. */
 fun CellInfo.toCellReading(): CellReading? = when (this) {
