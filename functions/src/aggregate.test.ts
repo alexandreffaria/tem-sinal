@@ -147,15 +147,16 @@ test("a stay is cut out unless the phone first moves away from the end for DEPAR
   };
   const atCrag = (metres: number) =>
     trimSession(session(metres), TRIM_M.max, TRIM_M.max).filter((s) => s.fix.lat === PLACE.lat + metres / 111_195).length;
-  // The walk leaves the cut of the end's first fixes 800 m out, and DEPARTURE_FIXES at 2 m/s take it
-  // 600 m further; the crag's ten-minute stay starts 200 m short of it.
+  // The start's ten-minute stay takes in the walk's first 200 m and cuts 800 + 200 + 100 m around it;
+  // DEPARTURE_FIXES at 2 m/s take the walk 600 m further; the crag's ten-minute stay starts 200 m short of it.
   assert.deepEqual([DEPARTURE_FIXES, STAYS[1]], [60, { fixes: 120, radiusM: 200 }]);
-  assert.equal(atCrag(1500), 0);
-  assert.equal(atCrag(1700), 1440);
+  assert.equal(atCrag(1800), 0);
+  assert.equal(atCrag(1900), 1440);
 });
 
-// A tick every 5 s; each listed latitude is a fix that the next two ticks repeat.
-const repeatedFixes = (lats: number[]) => lats.flatMap((lat) => [lat, lat, lat]).map((lat, i) => sample(ALICE, lat, JAN_10 + i * 5_000));
+/** A tick every 5 s; the listed latitude i is a fix held for [held](i) ticks, three unless given. */
+const repeatedFixes = (lats: number[], held: (i: number) => number = () => 3) =>
+  lats.flatMap((lat, i) => Array<number>(held(i)).fill(lat)).map((lat, i) => sample(ALICE, lat, JAN_10 + i * 5_000));
 /** [count] latitudes [metres] apart along a meridian, after [from]. */
 const steps = (from: number, count: number, metres: number) => Array.from({ length: count }, (_, i) => from + ((i + 1) * metres) / 111_195);
 
@@ -174,6 +175,29 @@ test("an end's first fixes repeated over three ticks still cut ANCHOR_FIXES dist
   // Four wrong fixes glide to the phone at 200 m a fix, and it drives off at the same pace; the same mirrored.
   const session = repeatedFixes([...steps(PLACE.lat, 4, -200).toReversed(), PLACE.lat, ...steps(PLACE.lat, 499, 200), end, ...steps(end, 4, 200)]);
   for (const trimM of [TRIM_M.min, TRIM_M.max]) assertClear(trimSession(session, trimM, trimM), [PLACE.lat, end], trimM, `${trimM}`);
+});
+
+test("fixes held for different numbers of ticks don't change which wrong fixes stay", () => {
+  // Ten clusters 250 m apart of 2 wrong fixes, 26 at 45 m on and 10 at 90 m on, all distinct. Held one
+  // tick, a cluster's 50 m stay starts at its 26 and takes in its 10; held longer, it starts at its 2
+  // and ends before its 10, which form no stay of their own.
+  const cluster = [0, 1, ...Array.from({ length: 26 }, (_, i) => 45 + i / 100), ...Array.from({ length: 10 }, (_, i) => 90 + i / 100)];
+  // The clusters from [from] towards [home], listed in that order.
+  const clusters = (from: number, home: number) =>
+    Array.from({ length: 10 }, (_, m) => cluster.map((x) => from + (Math.sign(home - from) * (m * 250 + x)) / 111_195)).flat();
+  const home = (lat: number) => Array.from({ length: 120 }, (_, i) => lat + 0.00009 * Math.sin(i * 1.7));
+  const end = PLACE.lat + 0.1;
+  // One fix 5 km off, the clusters, home, a 10 km drive, and the same mirrored.
+  const lats = [
+    PLACE.lat - 0.045, ...clusters(PLACE.lat - 0.03, PLACE.lat), ...home(PLACE.lat), ...steps(PLACE.lat, 499, 200),
+    ...home(end), ...clusters(end + 0.03, end).toReversed(), end + 0.045,
+  ];
+  const helds = { 1: () => 1, 2: () => 2, 3: () => 3, "1-3": (i: number) => [1, 3, 2, 3, 1, 2, 2, 1, 3][i % 9] ?? 1 };
+  for (const [name, held] of Object.entries(helds)) {
+    for (const trimM of [TRIM_M.min, (TRIM_M.min + TRIM_M.max) / 2, TRIM_M.max]) {
+      assertClear(trimSession(repeatedFixes(lats, held), trimM, trimM), [PLACE.lat, end], trimM, `${name} ${trimM}`);
+    }
+  }
 });
 
 test("a step faster than any phone moves after an end's cut doesn't restart it", () => {
