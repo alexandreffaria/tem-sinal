@@ -30,6 +30,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: functions/package.json
+
       # A push to main has no base ref; diffing main against itself finds no added files.
       - name: Checks
         run: scripts/check.sh "origin/${{ github.base_ref || 'main' }}"
