@@ -1,6 +1,7 @@
 package dev.meuquerido.cellsignalmapper
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -55,6 +56,9 @@ class MainActivity : ComponentActivity() {
         }
     }.toTypedArray()
 
+    // The check is for FragmentActivity, which routes results through androidx.fragment. This is a
+    // ComponentActivity with no fragments, so its own result registry delivers the result.
+    @SuppressLint("InvalidFragmentVersionForActivityResult")
     private val permissionRequest =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             val startLogging = startLoggingWhenGranted
