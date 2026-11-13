@@ -223,4 +223,40 @@ class SignalLoggerPendingTest {
 
         assertCountMatchesFiles()
     }
+
+    @Test
+    fun keptCountMatchesCrlfFilesThroughUploads() {
+        val logBytes = "${sample("a")}\r\n\r\ntorn line\r".toByteArray()
+        val pendingBytes = "${sample("p")}\r\nnot a sample\r".toByteArray()
+        log.writeBytes(logBytes)
+        pending.writeBytes(pendingBytes)
+        assertCountMatchesFiles()
+
+        SignalLogger.appendLine(log, sample("b"))
+        assertCountMatchesFiles()
+        assertTrue(log.readBytes().startsWith(logBytes))
+
+        val movedLog = log.readBytes()
+        SignalLogger.takePending(log, pending)
+        assertCountMatchesFiles()
+        val taken = pending.readBytes()
+        assertTrue(taken.startsWith(pendingBytes))
+        assertTrue(taken.endsWith(movedLog))
+
+        assertThrows(TimeoutException::class.java) {
+            uploadPending(pending, rejected, gson) { throw TimeoutException() }
+        }
+        assertCountMatchesFiles()
+        assertTrue(pending.readBytes().contentEquals(taken))
+
+        uploadPending(pending, rejected, gson) {}
+        assertCountMatchesFiles()
+        assertEquals(0, SignalLogger.pendingCount(log, pending))
+    }
+
+    private fun ByteArray.startsWith(prefix: ByteArray) =
+        size >= prefix.size && copyOfRange(0, prefix.size).contentEquals(prefix)
+
+    private fun ByteArray.endsWith(suffix: ByteArray) =
+        size >= suffix.size && copyOfRange(size - suffix.size, size).contentEquals(suffix)
 }
