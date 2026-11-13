@@ -17,17 +17,7 @@ class TornLineTest {
     private val pending: File get() = File(dir.root, "pending.json")
     private val rejected: File get() = File(dir.root, "rejected.json")
 
-    private fun sample(id: String) = SignalLogEntry(
-        id = id,
-        timestamp = 1_000L,
-        latitude = null,
-        longitude = null,
-        signalDbm = -90,
-        carrier = "Test Carrier",
-        mcc = "001",
-        mnc = "01",
-        cellInfo = "test"
-    )
+    private fun sample(id: String) = testSample(id)
 
     private fun torn(id: String) = gson.toJson(sample(id)).take(20)
 

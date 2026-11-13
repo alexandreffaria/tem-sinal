@@ -18,17 +18,7 @@ class UploadPendingTest {
     private val pending: File get() = File(dir.root, "pending.json")
     private val rejected: File get() = File(dir.root, "rejected.json")
 
-    private fun sample(id: String) = SignalLogEntry(
-        id = id,
-        timestamp = 1_000L,
-        latitude = null,
-        longitude = null,
-        signalDbm = -90,
-        carrier = "Test Carrier",
-        mcc = "001",
-        mnc = "01",
-        cellInfo = "test"
-    )
+    private fun sample(id: String) = testSample(id)
 
     private fun writePending(lines: List<String>) = lines.forEach { SignalLogger.appendLine(pending, it) }
 
@@ -68,5 +58,22 @@ class UploadPendingTest {
         assertEquals(listOf("a"), committed)
         assertFalse(pending.exists())
         assertEquals(listOf("not a sample"), rejected.readLines())
+    }
+
+    @Test
+    fun versionOneLineGoesToTheRejectedFileAndIsNeverUploaded() {
+        // A made-up line in the version 1 format.
+        val v1 = """{"id":"0f6e8f0c-1b2a-3c4d-5e6f-708192a3b4c5","timestamp":1000,""" +
+            """"latitude":-15.5,"longitude":-47.5,"signalDbm":-90,"carrier":"Test Carrier",""" +
+            """"mcc":"001","mnc":"01","cellInfo":"CI:1, TAC:2, PCI:3"}"""
+        val newer = gson.toJson(sample("b").copy(schemaVersion = SAMPLE_SCHEMA_VERSION + 1))
+        writePending(listOf(v1, gson.toJson(sample("a")), newer))
+        val committed = mutableListOf<Sample>()
+
+        uploadPending(pending, rejected, gson) { batch -> committed += batch }
+
+        assertEquals(listOf(sample("a")), committed)
+        assertEquals(listOf(v1, newer), rejected.readLines())
+        assertFalse(pending.exists())
     }
 }

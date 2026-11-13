@@ -22,21 +22,31 @@ const val FIRESTORE_BATCH_LIMIT = 500
 /** Splits [items] into consecutive batches of at most [FIRESTORE_BATCH_LIMIT], in order. */
 fun <T> uploadBatches(items: List<T>): List<List<T>> = items.chunked(FIRESTORE_BATCH_LIMIT)
 
-/** The samples in a log, in order, and the non-blank lines that are not a sample with an id. */
-data class ParsedLog(val samples: List<SignalLogEntry>, val rejected: List<String>)
+/**
+ * The samples in a log, in order, and the non-blank lines that are not a sample of
+ * [SAMPLE_SCHEMA_VERSION] with an id.
+ */
+data class ParsedLog(val samples: List<Sample>, val rejected: List<String>)
 
-/** Parses each non-blank line of [lines] as a sample; blank lines are skipped. */
+/**
+ * Parses each non-blank line of [lines] as a [Sample]; blank lines are skipped. A line of any other
+ * schema version, such as a version 1 line, is rejected and never uploaded.
+ */
 fun parseLog(lines: List<String>, gson: Gson): ParsedLog {
-    val samples = mutableListOf<SignalLogEntry>()
+    val samples = mutableListOf<Sample>()
     val rejected = mutableListOf<String>()
     for (line in lines.filter { it.isNotBlank() }) {
-        val entry = try {
-            gson.fromJson(line, SignalLogEntry::class.java)
+        val sample = try {
+            gson.fromJson(line, Sample::class.java)
         } catch (e: RuntimeException) {
             null
         }
         // Gson leaves a missing id null despite the declared type.
-        if (entry != null && !entry.id.isNullOrEmpty()) samples += entry else rejected += line
+        if (sample != null && sample.schemaVersion == SAMPLE_SCHEMA_VERSION && !sample.id.isNullOrEmpty()) {
+            samples += sample
+        } else {
+            rejected += line
+        }
     }
     return ParsedLog(samples, rejected)
 }
@@ -52,7 +62,7 @@ const val COMMIT_TIMEOUT_SECONDS = 30L
  * a sample to [rejected] and deletes [pending]. If [commit] throws, for example on a timeout, the
  * exception propagates and both files are left as they were.
  */
-fun uploadPending(pending: File, rejected: File, gson: Gson, commit: (List<SignalLogEntry>) -> Unit): ParsedLog {
+fun uploadPending(pending: File, rejected: File, gson: Gson, commit: (List<Sample>) -> Unit): ParsedLog {
     val log = parseLog(pending.readLines(), gson)
     uploadBatches(log.samples).forEach(commit)
     SignalLogger.keepRejected(pending, rejected, log.rejected)

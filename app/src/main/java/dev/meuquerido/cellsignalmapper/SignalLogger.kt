@@ -22,7 +22,7 @@ object SignalLogger {
     private val lineCounts = mutableMapOf<File, Int>()
 
     /** Appends [entry] to the log and publishes the pending count. Not for the main thread. */
-    fun logEntry(context: Context, entry: SignalLogEntry) {
+    fun logEntry(context: Context, entry: Sample) {
         appendLine(getLogFile(context), gson.toJson(entry))
         publishPendingCount(context)
     }

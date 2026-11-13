@@ -1,10 +1,5 @@
 package dev.meuquerido.cellsignalmapper
 
-import android.telephony.CellIdentityGsm
-import android.telephony.CellIdentityLte
-import android.telephony.CellIdentityNr
-import android.telephony.CellIdentityWcdma
-
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -17,12 +12,9 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
-import android.telephony.PhoneStateListener
-import android.telephony.SignalStrength
-import android.telephony.TelephonyCallback
+import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -32,18 +24,18 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.*
+import java.io.File
+import java.io.IOException
 import java.util.UUID
 
 class LoggerService : Service() {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private lateinit var telephonyManager: TelephonyManager
+    private lateinit var subscriptionManager: SubscriptionManager
 
-    @Volatile
-    private var currentDbm: Int = UNKNOWN_DBM
-
-    /** Stops the signal-strength listener started in [onCreate]. */
-    private var stopSignalListener: (() -> Unit)? = null
+    /** Shared by every sample this service instance logs; a restarted service gets a new one. */
+    private val sessionId = UUID.randomUUID().toString()
 
     private lateinit var locationClient: FusedLocationProviderClient
 
@@ -69,6 +61,7 @@ class LoggerService : Service() {
         Log.d("LoggerService", "Service created and starting logging loop")
 
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+        subscriptionManager = getSystemService(SubscriptionManager::class.java)
 
         // startForeground comes first: a service started with startForegroundService crashes the
         // app if it stops without calling it. On Android 14+ it throws SecurityException for a
@@ -88,45 +81,10 @@ class LoggerService : Service() {
             return
         }
 
-        stopSignalListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            listenWithTelephonyCallback()
-        } else {
-            listenWithPhoneStateListener()
-        }
-
         LoggerState.serviceStarted()
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         startLocationUpdates()
         startLoggingLoop()
-    }
-
-    private fun onSignalStrength(ss: SignalStrength) {
-        val dbm = loggedDbm(ss)
-        currentDbm = dbm
-        Log.d("LoggerService", "Real-time dBm = $dbm")
-    }
-
-    /** Listens on the main thread; returns the function that stops listening. */
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun listenWithTelephonyCallback(): () -> Unit {
-        val callback = object : TelephonyCallback(), TelephonyCallback.SignalStrengthsListener {
-            override fun onSignalStrengthsChanged(ss: SignalStrength) = onSignalStrength(ss)
-        }
-        telephonyManager.registerTelephonyCallback(mainExecutor, callback)
-        return { telephonyManager.unregisterTelephonyCallback(callback) }
-    }
-
-    /**
-     * Listens on the main thread below API 31, where [TelephonyCallback] doesn't exist;
-     * returns the function that stops listening.
-     */
-    @Suppress("DEPRECATION") // PhoneStateListener is the only signal listener below API 31.
-    private fun listenWithPhoneStateListener(): () -> Unit {
-        val listener = object : PhoneStateListener(mainExecutor) {
-            override fun onSignalStrengthsChanged(ss: SignalStrength) = onSignalStrength(ss)
-        }
-        telephonyManager.listen(listener, PhoneStateListener.LISTEN_SIGNAL_STRENGTHS)
-        return { telephonyManager.listen(listener, PhoneStateListener.LISTEN_NONE) }
     }
 
     private fun startForegroundService() {
@@ -165,6 +123,14 @@ class LoggerService : Service() {
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     private fun startLoggingLoop() {
         coroutineScope.launch {
+            val installId = try {
+                installId(File(noBackupFilesDir, INSTALL_ID_FILE_NAME))
+            } catch (e: IOException) {
+                Log.e("LoggerService", "Could not store the install id; stopping", e)
+                stopSelf()
+                return@launch
+            }
+
             while (isActive) {
                 val location = latestLocation?.takeIf {
                     isFixFresh(
@@ -172,16 +138,28 @@ class LoggerService : Service() {
                         SystemClock.elapsedRealtime()
                     )
                 }
-
                 val lat = location?.latitude
                 val lon = location?.longitude
-                val latRounded = lat?.let(::roundCoordinate)
-                val lonRounded = lon?.let(::roundCoordinate)
 
-                val signalDbm = currentDbm
+                val registeredCells = try {
+                    telephonyManager.allCellInfo.orEmpty()
+                        .filter { it.isRegistered }
+                        .mapNotNull { it.toCellReading() }
+                } catch (e: SecurityException) {
+                    Log.e("LoggerService", "Location permission revoked; stopping", e)
+                    stopSelf()
+                    break
+                }
+                // allCellInfo holds every SIM's registered cell; keep the default SIM's carrier's.
+                val simOperator = telephonyManager.simOperator
+                val cells = registeredCells.filter { it.plmn == simOperator }
+                if (cells.size < registeredCells.size) {
+                    Log.d("LoggerService", "Skipped registered cells not on the SIM's carrier")
+                }
+                val signalDbm = cells.firstNotNullOfOrNull { it.headlineDbm() }
 
                 val pingResult = when {
-                    lat == null || lon == null || signalDbm == UNKNOWN_DBM -> PingResult.BAD
+                    lat == null || lon == null || signalDbm == null -> PingResult.BAD
                     lastLat == null || lastLon == null -> PingResult.SUCCESS
                     !hasMoved(lat, lon, lastLat!!, lastLon!!, 10f)
                             && signalDbm == lastSignal -> {
@@ -191,70 +169,22 @@ class LoggerService : Service() {
                     else -> PingResult.SUCCESS
                 }
 
-                // Get SIM operator MCC and MNC
-                val simOperator = telephonyManager.simOperator
-                val simMcc = simOperator.take(3)
-                val simMnc = simOperator.drop(3)
-
-                // Get registered cell info
-                val infoList = try {
-                    telephonyManager.allCellInfo
-                } catch (e: SecurityException) {
-                    Log.e("LoggerService", "Location permission revoked; stopping", e)
-                    stopSelf()
-                    break
-                }
-                val registeredInfo = infoList?.find { it.isRegistered }
-                val identity = registeredInfo?.cellIdentity
-
-                val (rawMcc, rawMnc) = when (identity) {
-                    is CellIdentityLte   -> identity.mccString to identity.mncString
-                    is CellIdentityNr    -> identity.mccString to identity.mncString
-                    is CellIdentityGsm   -> identity.mccString to identity.mncString
-                    is CellIdentityWcdma -> identity.mccString to identity.mncString
-                    else                  -> null to null
-                }
-                val mcc = rawMcc ?: "?"
-                val mnc = rawMnc ?: "?"
-
-                val carrierName = getCarrierName(mcc, mnc)
-
-                val cellInfoString = when (identity) {
-                    is CellIdentityLte   -> "CI:${identity.ci}, TAC:${identity.tac}, PCI:${identity.pci}"
-                    is CellIdentityNr    -> "CI:${identity.nci}, TAC:${identity.tac}, PCI:${identity.pci}"
-                    is CellIdentityGsm   -> "CID:${identity.cid}, LAC:${identity.lac}"
-                    is CellIdentityWcdma -> "CID:${identity.cid}, LAC:${identity.lac}"
-                    else                  -> "Unknown Cell Identity"
-                }
-
-                val isSameCarrier = (mcc == simMcc && mnc == simMnc)
-
-                if (pingResult == PingResult.SUCCESS && isSameCarrier) {
+                if (pingResult == PingResult.SUCCESS && location != null) {
                     lastLat = lat
                     lastLon = lon
                     lastSignal = signalDbm
 
-                    val pointId = UUID.nameUUIDFromBytes(
-                        "$carrierName|$latRounded|$lonRounded|$signalDbm"
-                            .toByteArray()
-                    ).toString()
-
-                    val entry = SignalLogEntry(
-                        id = pointId,
-                        timestamp = System.currentTimeMillis(),
-                        latitude = latRounded!!,
-                        longitude = lonRounded!!,
-                        signalDbm = signalDbm,
-                        carrier = carrierName,
-                        mcc = mcc,
-                        mnc = mnc,
-                        cellInfo = cellInfoString
+                    val sample = Sample(
+                        schemaVersion = SAMPLE_SCHEMA_VERSION,
+                        id = UUID.randomUUID().toString(),
+                        installId = installId,
+                        sessionId = sessionId,
+                        timeMs = System.currentTimeMillis(),
+                        elapsedRealtimeMs = SystemClock.elapsedRealtime(),
+                        fix = location.toFix(),
+                        sims = listOf(simReading(defaultSimSlot(), simOperator, cells)),
                     )
-
-                    SignalLogger.logEntry(this@LoggerService, entry)
-
-                } else if (pingResult == PingResult.SUCCESS && !isSameCarrier) {
-                    Log.d("LoggerService", "Skipped — Not user carrier (SIM $simMcc$simMnc vs Tower $mcc$mnc)")
+                    SignalLogger.logEntry(this@LoggerService, sample)
                 }
 
                 LoggerState.sample(lat, lon, signalDbm, pingResult)
@@ -263,6 +193,30 @@ class LoggerService : Service() {
             }
         }
     }
+
+    /** The default subscription's SIM slot index, or null when it can't be read. */
+    private fun defaultSimSlot(): Int? =
+        try {
+            subscriptionManager
+                .getActiveSubscriptionInfo(SubscriptionManager.getDefaultSubscriptionId())
+                ?.simSlotIndex
+        } catch (e: SecurityException) {
+            null
+        }
+
+    private fun Location.toFix(): Fix = Fix(
+        lat = roundCoordinate(latitude),
+        lon = roundCoordinate(longitude),
+        accuracyM = if (hasAccuracy()) accuracy else null,
+        altitudeM = if (hasAltitude()) altitude else null,
+        verticalAccuracyM = if (hasVerticalAccuracy()) verticalAccuracyMeters else null,
+        timeMs = time,
+        elapsedRealtimeMs = elapsedRealtimeNanos / 1_000_000,
+        mock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) isMock else isFromMockProviderBelowS(),
+    )
+
+    @Suppress("DEPRECATION") // isMock replaces it from API 31.
+    private fun Location.isFromMockProviderBelowS(): Boolean = isFromMockProvider
 
     private fun hasMoved(lat1: Double, lon1: Double, lat2: Double, lon2: Double, thresholdMeters: Float): Boolean {
         val result = FloatArray(1)
@@ -274,8 +228,6 @@ class LoggerService : Service() {
         START_STICKY
 
     override fun onDestroy() {
-        stopSignalListener?.invoke()
-        stopSignalListener = null
         if (::locationClient.isInitialized) {
             locationClient.removeLocationUpdates(locationCallback)
         }

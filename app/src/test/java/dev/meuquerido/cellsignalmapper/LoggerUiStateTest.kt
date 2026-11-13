@@ -30,11 +30,11 @@ class LoggerUiStateTest {
     }
 
     @Test
-    fun sampleWithoutLocationShowsNull() {
-        val state = LoggerUiState().serviceStarted().withSample(null, null, -999, PingResult.BAD)
+    fun tickWithoutLocationOrSignalShowsUnknown() {
+        val state = LoggerUiState().serviceStarted().withSample(null, null, null, PingResult.BAD)
 
         assertEquals("Lat: null, Lon: null", state.location)
-        assertEquals("Signal Strength: -999 dBm", state.signalStrength)
+        assertEquals("Signal Strength: unknown", state.signalStrength)
     }
 
     @Test

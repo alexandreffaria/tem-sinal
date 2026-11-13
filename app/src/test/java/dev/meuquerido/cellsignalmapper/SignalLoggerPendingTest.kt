@@ -23,19 +23,7 @@ class SignalLoggerPendingTest {
     private val rejected: File get() = File(dir.root, "rejected.json")
     private val gson = Gson()
 
-    private fun sample(id: String) = gson.toJson(
-        SignalLogEntry(
-            id = id,
-            timestamp = 1_000L,
-            latitude = null,
-            longitude = null,
-            signalDbm = -90,
-            carrier = "Test Carrier",
-            mcc = "001",
-            mnc = "01",
-            cellInfo = "test"
-        )
-    )
+    private fun sample(id: String) = gson.toJson(testSample(id))
 
     /** The non-blank lines in the log and the pending file, read from disk. */
     private fun fullCount(): Int =
