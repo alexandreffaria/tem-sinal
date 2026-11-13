@@ -15,34 +15,13 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  forbidden-files:
-    name: No secrets or binaries added
-    # It diffs against the pull request's base ref, which a push doesn't have.
-    if: github.event_name == 'pull_request'
+  checks:
+    name: scripts/check.sh
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Check added, copied and renamed files
-        run: |
-          # -z prints paths raw and NUL-terminated, so no name is quoted or split.
-          # git diff runs as its own command so that a git failure fails the step.
-          list=$(mktemp)
-          git diff -z --name-only --find-renames --find-copies --diff-filter=ACR "origin/${{ github.base_ref }}...HEAD" > "$list"
-          bad=$(grep -ziE '\.(jks|keystore|p12|b64|pem|p8|key|aab|apk|log)$|play-account\.json$|(^|/)\.env' "$list" | tr '\0' '\n' || true)
-          if [ -n "$bad" ]; then
-            echo "These files must not be committed:"
-            echo "$bad"
-            exit 1
-          fi
-
-  build:
-    name: Lint, unit tests, debug build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
@@ -51,8 +30,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Lint, test, build
-        run: ./gradlew lintDebug testDebugUnitTest assembleDebug
+      # A push to main has no base ref; diffing main against itself finds no added files.
+      - name: Checks
+        run: scripts/check.sh "origin/${{ github.base_ref || 'main' }}"
 
       - name: Upload reports
         if: always()

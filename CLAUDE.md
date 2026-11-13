@@ -14,7 +14,7 @@ Settled decisions: `docs/decisions.md`.
 - Take the next ready `board` issue (see `plans/README.md`); one issue, one pull request.
 - Never commit to `main`. Branch from an up-to-date `main`.
 - After opening a pull request, start a fresh session (a subagent) to run `/review-pr` on it. It
-  files follow-ups as issues and merges once CI is green and nothing blocking is left. Never merge
+  files follow-ups as issues and merges once the checks pass and nothing blocking is left. Never merge
   your own pull request. The owner never has to start a review.
 - A merge to `main` publishes to Google Play. Merge one at a time.
 - Ask the owner as little as possible. Their decisions go in president decision cards
@@ -33,5 +33,6 @@ Settled decisions: `docs/decisions.md`.
 
 ## Checks
 
-`./gradlew lintDebug testDebugUnitTest assembleDebug`, run by CI on every pull request. There is
-no Android SDK on the owner's workstation; read the CI run.
+`scripts/check.sh`, run on this machine (it installs JDK 17 and the Android SDK on first use). The
+account has no GitHub Actions minutes, so nothing runs the checks on GitHub: the author runs them
+before opening the pull request and after each push, and the merging session runs them again.
