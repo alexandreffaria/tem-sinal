@@ -13,7 +13,7 @@ export const TRIM_M = { min: 300, max: 800 } as const;
 /** How old a single-install cell's first sample must be before a monthly batch publishes it. */
 export const LONE_CELL_AGE_MS = 30 * 86_400_000;
 
-/** How many fixes a resting place is drawn from: a minute at the app's 5 s interval. */
+/** How many distinct fixes a resting place is drawn from: a minute at the app's 5 s interval. */
 export const ANCHOR_FIXES = 12;
 
 /**
@@ -26,7 +26,7 @@ export const STAYS = [
   { fixes: 120, radiusM: 200 },
 ] as const;
 
-/** How many fixes outside the cut it takes for the phone to have left an end's resting places: five minutes at the app's 5 s interval. */
+/** How many distinct fixes outside the cut it takes for the phone to have left an end's resting places: five minutes at the app's 5 s interval. */
 export const DEPARTURE_FIXES = 60;
 
 /** A speed in m/s, 180 km/h, above any road's limit in Brazil: a step between two fixes faster than this means one of them is wrong. */
@@ -118,22 +118,37 @@ type Anchor = { fix: StoredSample["fix"]; radiusM: number };
  * [ANCHOR_FIXES] fixes from where they start. A stay of radius r cuts [trimM] + s + r / 2 around
  * its first fix, s being its fixes' largest distance from that fix, which covers [trimM] around
  * every point within r / 2 of any of its fixes. The phone has left the end once [DEPARTURE_FIXES]
- * fixes have moved: lain in no stay and outside the cut of the places of the first two kinds that
- * started by then. Every place that starts before that is one of the end's resting places, and a
- * sample is beyond the cut if it lies outside every resting place's cut. So ten minutes of
- * consecutive fixes within 100 m of where the phone rests (or three minutes within 25 m) cut that place
- * out, whatever wrong fixes come before or among them, unless [DEPARTURE_FIXES] of those wrong
- * fixes move.
+ * fixes have moved: lain in no stay and outside the cut of every place that started by then. Every
+ * place that starts before that is one of the end's resting places, and a sample is beyond the cut
+ * if it lies outside every resting place's cut. So ten minutes of consecutive fixes within 100 m of
+ * where the phone rests (or three minutes within 25 m) cut that place out, whatever wrong fixes come
+ * before or among them, unless [DEPARTURE_FIXES] of those wrong fixes move.
+ *
+ * No fix in a run long enough for a stay moves, whichever stays the scan picks: the scan, which
+ * skips the fixes of a stay it has found, either starts a stay at the run's first fix or finds it in
+ * a stay that started at an earlier fix a. The run's fixes past that stay then lie within r of the
+ * run's first fix, so within s + r of a, inside a's cut since [trimM] > r / 2.
+ *
+ * Consecutive samples can carry the same fix. A sample whose fix has the coordinates of the one
+ * before it counts once, with it, towards [ANCHOR_FIXES] and [DEPARTURE_FIXES]. Stays and the speed
+ * check count samples and their tick times: a repeat makes a run within a stay's radius longer, so
+ * every run long enough for a stay without it still is one, and makes the step after it shorter in
+ * time. So a repeated wrong fix neither narrows a cut nor brings departure sooner.
  */
 function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   const fixes = samples.map((s) => s.fix);
-  const places: { from: number; stay: boolean; anchors: Anchor[] }[] = [];
+  const repeat = fixes.map((fix, i) => fix.lat === fixes[i - 1]?.lat && fix.lon === fixes[i - 1]?.lon);
+  const places: { from: number; anchors: Anchor[] }[] = [];
   const inStay = fixes.map(() => false);
   samples.forEach((s, i) => {
     const before = samples[i - 1];
     const metres = before ? metresApart(before.fix, s.fix) : Infinity;
     if (metres > trimM || metres > (MAX_SPEED_MPS * Math.abs(s.elapsedRealtimeMs - (before?.elapsedRealtimeMs ?? 0))) / 1000) {
-      places.push({ from: i, stay: false, anchors: fixes.slice(i, i + ANCHOR_FIXES).map((fix) => ({ fix, radiusM: trimM })) });
+      const anchors: Anchor[] = [];
+      for (let k = i, fix = fixes[k]; fix && anchors.length < ANCHOR_FIXES; fix = fixes[++k]) {
+        if (k === i || !repeat[k]) anchors.push({ fix, radiusM: trimM });
+      }
+      places.push({ from: i, anchors });
     }
   });
   for (const stay of STAYS) {
@@ -148,15 +163,15 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
         spreadM = Math.max(spreadM, metres);
       }
       if (j - i < stay.fixes) return;
-      places.push({ from: i, stay: true, anchors: [{ fix: first, radiusM: trimM + spreadM + stay.radiusM / 2 }] });
+      places.push({ from: i, anchors: [{ fix: first, radiusM: trimM + spreadM + stay.radiusM / 2 }] });
       inStay.fill(true, i, j);
       next = j;
     });
   }
   places.sort((a, b) => a.from - b.from);
   // Fixes in cubes of the unit sphere's space whose side is at least the widest cut's straight-line
-  // length, so a cut reaches only fixes in its own cube and the 26 next to it. A fix leaves a cube's
-  // [uncut] once cut and its [moving] once it no longer moves, so no cut tests it again.
+  // length, so a cut reaches only fixes in its own cube and the 26 next to it. A fix leaves its cube
+  // once cut, so no cut tests it again.
   let widestM = 0;
   for (const place of places) for (const { radiusM } of place.anchors) widestM = Math.max(widestM, radiusM);
   // 6 300 km is below the Earth's radius in h3-js, 6 371 km, which only widens the cubes.
@@ -166,16 +181,14 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
     return [Math.cos(φ) * Math.cos(λ), Math.cos(φ) * Math.sin(λ), Math.sin(φ)].map((c) => Math.floor(c / side));
   };
   type Entry = { k: number; fix: StoredSample["fix"] };
-  const cubes = new Map<string, { uncut: Entry[]; moving: Entry[] }>();
+  const cubes = new Map<string, Entry[]>();
   fixes.forEach((fix, k) => {
     const key = cubeOf(fix).join();
-    const cube = cubes.get(key) ?? { uncut: [], moving: [] };
-    cube.uncut.push({ k, fix });
-    if (!inStay[k]) cube.moving.push({ k, fix });
+    const cube = cubes.get(key) ?? [];
+    cube.push({ k, fix });
     cubes.set(key, cube);
   });
   const beyond = fixes.map(() => true);
-  const moving = fixes.map((_, i) => !inStay[i]);
   let resting = 0;
   let away = 0;
   for (let i = 0; i < fixes.length && away < DEPARTURE_FIXES; i++) {
@@ -184,17 +197,15 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
         const outside = (entry: Entry) => metresApart(fix, entry.fix) > radiusM;
         const [x = 0, y = 0, z = 0] = cubeOf(fix);
         for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
-          const cube = cubes.get([x + dx, y + dy, z + dz].join());
+          const key = [x + dx, y + dy, z + dz].join();
+          const cube = cubes.get(key);
           if (!cube) continue;
-          for (const entry of cube.uncut) if (!outside(entry)) beyond[entry.k] = false;
-          cube.uncut = cube.uncut.filter(({ k }) => beyond[k]);
-          if (place.stay) continue;
-          for (const entry of cube.moving) if (!outside(entry)) moving[entry.k] = false;
-          cube.moving = cube.moving.filter(({ k }) => moving[k]);
+          for (const entry of cube) if (!outside(entry)) beyond[entry.k] = false;
+          cubes.set(key, cube.filter(({ k }) => beyond[k]));
         }
       }
     }
-    if (moving[i]) away++;
+    if (beyond[i] && !inStay[i] && !repeat[i]) away++;
   }
   return beyond;
 }
