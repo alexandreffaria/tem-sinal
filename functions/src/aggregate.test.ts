@@ -17,7 +17,7 @@ const DAY = 86_400_000;
 function sample(installId: string, lat: number, timeMs: number, options: Partial<StoredSample> = {}): StoredSample {
   return {
     installId, sessionId: SESSION, timeMs, elapsedRealtimeMs: timeMs - JAN_10 + 1_000_000,
-    fix: { lat, lon: PLACE.lon, accuracyM: 5, mock: false },
+    fix: { lat, lon: PLACE.lon, mock: false },
     sims: [
       {
         simPlmn: "72406", serviceState: "IN_SERVICE",
@@ -78,33 +78,42 @@ test("a phone left still at either end loses those samples despite GPS jitter", 
   assertClear(trimSession([...still(PLACE.lat, 0), ...between, ...still(end, 390)], TRIM_M.max, TRIM_M.max), [PLACE.lat, end], TRIM_M.max);
 });
 
-test("coarse fixes at either end don't stand in for the place the phone sits", () => {
-  // Three hours still at each end and a 3 km walk between, as above; 0.011 degrees is about 1.2 km.
+test("wrong fixes at either end don't stand in for the place the phone rests", () => {
+  // A fix every 5 s, latitudes listed; 1 degree of latitude is about 111 195 m.
+  const session = (pieces: number[][]) => pieces.flat().map((lat, i) => sample(ALICE, lat, JAN_10 + i * 5_000));
+  const repeat = (length: number, lat: number) => Array.from({ length }, () => lat);
+  const hour = (lat: number) => Array.from({ length: 720 }, (_, i) => lat + 0.00009 * Math.sin(i * 1.7));
   const end = PLACE.lat + 0.027;
-  const between = Array.from({ length: 30 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.0009, JAN_10 + (361 + i) * 30_000));
-  const coarse = (lat: number, at: number, accuracyM: number | null) => {
-    const s = sample(ALICE, lat, JAN_10 + at * 30_000);
-    return { ...s, fix: { ...s.fix, accuracyM } };
-  };
-  // Each way to go wrong, given the latitude of the coarse fixes and the 30 s step of the first.
-  const ways = {
-    "one coarse fix": (lat: number, at: number) => [coarse(lat, at, 1500)],
-    "one fix without an accuracy": (lat: number, at: number) => [coarse(lat, at, null)],
-    "ten minutes of coarse fixes": (lat: number, at: number) =>
-      Array.from({ length: 20 }, (_, i) => coarse(lat + 0.004 * Math.sin(i), at + i, 1500)),
-    "wrong fixes that claim to be accurate": (lat: number, at: number) =>
-      Array.from({ length: ANCHOR_FIXES - 1 }, (_, i) => coarse(lat, at + i / 6, 20)),
-  };
-  for (const [name, wrong] of Object.entries(ways)) {
-    // Coarse fixes 1.2 km beyond each end, ten minutes without a fix, then three hours still there.
-    const session = [...wrong(PLACE.lat - 0.011, -40), ...still(PLACE.lat, 0), ...between, ...still(end, 391), ...wrong(end + 0.011, 771)];
-    for (const trimM of [TRIM_M.min, TRIM_M.max]) assertClear(trimSession(session, trimM, trimM), [PLACE.lat, end], trimM, name);
+  const out = Array.from({ length: 300 }, (_, i) => PLACE.lat + (i + 1) * 0.00009);
+  for (const trimM of [TRIM_M.min, TRIM_M.max]) {
+    const off = (1.3 * trimM) / 111_195;
+    const cases = {
+      // Twelve repeats of a network fix 1.3 trims off, then an hour still with jitter, at each end.
+      network: session([repeat(ANCHOR_FIXES, PLACE.lat - off), hour(PLACE.lat), out, hour(end), repeat(ANCHOR_FIXES, end + off)]),
+      // An hour of Wi-Fi fixes 1 km off, then GPS at the door and the walk at once, at each end.
+      wifi: session([repeat(720, PLACE.lat - 0.009), out, repeat(720, end + 0.009)]),
+      // Ten minutes of scattered fixes 1.2 km off, ten minutes without a fix, then an hour still.
+      scattered: [
+        ...session([Array.from({ length: 120 }, (_, i) => PLACE.lat - 0.011 + 0.004 * Math.sin(i))]),
+        ...session([hour(PLACE.lat), out, hour(end)]).map((s) => ({ ...s, elapsedRealtimeMs: s.elapsedRealtimeMs + 1_200_000 })),
+      ],
+      // One fix 1.2 km off, then an hour still, at each end.
+      single: session([[PLACE.lat - 0.011], hour(PLACE.lat), out, hour(end), [end + 0.011]]),
+    };
+    for (const [name, s] of Object.entries(cases)) assertClear(trimSession(s, trimM, trimM), [PLACE.lat, end], trimM, `${name} ${trimM}`);
   }
+});
+
+test("a step faster than any phone moves after an end's cut doesn't restart it", () => {
+  const fixes = walk(401);
+  // One fix 1 km off in the middle: two steps longer than either trim, both after the cuts.
+  fixes[200] = { ...sample(ALICE, PLACE.lat + 200 * 0.00009, JAN_10 + 200 * 5_000), fix: { lat: PLACE.lat, lon: PLACE.lon + 0.01, mock: false } };
+  assert.deepEqual(trimSession(fixes, 555, 345), fixes.slice(67, 355));
 });
 
 test("mock fixes are dropped and a session shorter than both trims keeps nothing", () => {
   const fixes = walk(211);
-  const mocked = { ...fixes[105], fix: { lat: PLACE.lat + 0.009, lon: PLACE.lon, accuracyM: 5, mock: true } } as StoredSample;
+  const mocked = { ...fixes[105], fix: { lat: PLACE.lat + 0.009, lon: PLACE.lon, mock: true } } as StoredSample;
   fixes[105] = mocked;
   const kept = trimSession(fixes, 355, 355);
   assert.equal(kept.includes(mocked), false);
