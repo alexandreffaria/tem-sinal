@@ -12,6 +12,7 @@ class LoggerUiStateTest {
     private fun sim(slot: Int?, serviceState: ServiceStatus?, rsrp: Int? = null) = simReading(
         slotIndex = slot, simOperator = "00101", operatorNumeric = null, operatorAlphaLong = null,
         serviceState = serviceState,
+        overrideNetworkType = null,
         cells = listOfNotNull(
             rsrp?.let {
                 cellReading(
