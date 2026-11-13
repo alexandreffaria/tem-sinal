@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { cellToParent, greatCircleDistance, latLngToCell } from "h3-js";
 import {
   type CellState, type PublicCell, type StoredSample,
-  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, STAYS, TILE_RESOLUTION, TRIM_M, accumulate, publish, tiles, trimLengths, trimSession,
+  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, STAYS, TILE_RESOLUTION, TRIM_M, accumulate, distancesComputed, publish, tiles, trimLengths, trimSession,
 } from "./aggregate.js";
 
 // Made-up installs, sessions and places; 0.001 degrees of latitude is about 111 m.
@@ -159,6 +159,18 @@ test("a step faster than any phone moves after an end's cut doesn't restart it",
   // One fix 1 km off in the middle: two steps longer than either trim, both after the cuts.
   fixes[200] = { ...sample(ALICE, PLACE.lat + 200 * 0.00009, JAN_10 + 200 * 5_000), fix: { lat: PLACE.lat, lon: PLACE.lon + 0.01, mock: false } };
   assert.deepEqual(trimSession(fixes, 555, 345), fixes.slice(67, 355));
+});
+
+test("a 14 h session that never leaves its start costs a bounded number of distances per fix", () => {
+  // A fix every 5 s within about 10 m of PLACE, every 50th 1.2 km off: it never departs, so every place cuts.
+  // About 5 000 places' anchors each cut around them; testing each against every fix would take about 10 000 distances per fix.
+  const session = Array.from({ length: 10_080 }, (_, i) =>
+    sample(ALICE, i % 50 === 49 ? PLACE.lat - 0.011 : PLACE.lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + i * 5_000));
+  for (const trimM of [TRIM_M.min, TRIM_M.max]) {
+    const before = distancesComputed;
+    assert.deepEqual(trimSession(session, trimM, trimM), []);
+    assert.ok(distancesComputed - before < 100 * session.length, `${trimM}: ${distancesComputed - before}`);
+  }
 });
 
 test("mock fixes are dropped and a session shorter than both trims keeps nothing", () => {
