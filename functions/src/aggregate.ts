@@ -13,8 +13,21 @@ export const TRIM_M = { min: 300, max: 800 } as const;
 /** How old a single-install cell's first sample must be before a monthly batch publishes it. */
 export const LONE_CELL_AGE_MS = 30 * 86_400_000;
 
-/** How many fixes from where a session's end starts anchor its straight-line cut: a minute at the app's 5 s interval. */
+/** How many fixes a resting place is drawn from: a minute at the app's 5 s interval. */
 export const ANCHOR_FIXES = 12;
+
+/**
+ * The two kinds of stay: this many consecutive fixes within this radius in metres of the first.
+ * Three minutes within 50 m is a phone at rest under open sky; ten minutes within 200 m is one at
+ * rest indoors, whose fixes can be 100 m off. A walk slower than 0.33 m/s also reads as the second.
+ */
+export const STAYS = [
+  { fixes: 36, radiusM: 50 },
+  { fixes: 120, radiusM: 200 },
+] as const;
+
+/** How many fixes outside the cut it takes for the phone to have left an end's resting places: five minutes at the app's 5 s interval. */
+export const DEPARTURE_FIXES = 60;
 
 /** A speed in m/s, 180 km/h, above any road's limit in Brazil: a step between two fixes faster than this means one of them is wrong. */
 export const MAX_SPEED_MPS = 50;
@@ -70,42 +83,75 @@ export function trimLengths(random: () => number = Math.random): { startM: numbe
 
 const metresApart = (a: StoredSample["fix"], b: StoredSample["fix"]) => greatCircleDistance([a.lat, a.lon], [b.lat, b.lon], "m");
 
+type Anchor = { fix: StoredSample["fix"]; radiusM: number };
+
 /**
  * Which of [samples], ordered from one end of a session inwards, lie beyond that end's cut of
- * [trimM] metres: more than [trimM] along the path from where the end starts, and more than [trimM]
- * in a straight line from every fix up to [ANCHOR_FIXES] fixes past that start. The end starts
- * after the last step, before the first sample beyond the cut, that is longer than [trimM] or
- * faster than [MAX_SPEED_MPS]. Such a step can't be told apart from the fixes before it being wrong
- * (a coarse or mislocated fix at a cold start, however accurate it claims to be), so the place the
- * phone rests is taken to be where the fixes after it are.
+ * [trimM] metres. A place the phone may rest at starts at the end's first fix, at each fix after a
+ * step longer than [trimM] or faster than [MAX_SPEED_MPS] (the fixes before it may be wrong), and
+ * at each stay of either kind in [STAYS]. The first two cut [trimM] around each of the
+ * [ANCHOR_FIXES] fixes from where they start. A stay of radius r cuts [trimM] + s + r / 2 around
+ * its first fix, s being its fixes' largest distance from that fix, which covers [trimM] around
+ * every point within r / 2 of any of its fixes. The phone has left the end once [DEPARTURE_FIXES]
+ * fixes have moved: lain in no stay and outside the cut of the places of the first two kinds that
+ * started by then. Every place that starts before that is one of the end's resting places, and a
+ * sample is beyond the cut if it lies outside every resting place's cut. So ten minutes of
+ * consecutive fixes within 100 m of where the phone rests (or three minutes within 25 m) cut that place
+ * out, whatever wrong fixes come before or among them, unless [DEPARTURE_FIXES] of those wrong
+ * fixes move.
  */
 function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   const fixes = samples.map((s) => s.fix);
-  const steps = samples.map((s, i) => {
+  const places: { from: number; stay: boolean; anchors: Anchor[] }[] = [];
+  const inStay = fixes.map(() => false);
+  samples.forEach((s, i) => {
     const before = samples[i - 1];
-    if (!before) return { metres: 0, seconds: Infinity };
-    return { metres: metresApart(before.fix, s.fix), seconds: Math.abs(s.elapsedRealtimeMs - before.elapsedRealtimeMs) / 1000 };
+    const metres = before ? metresApart(before.fix, s.fix) : Infinity;
+    if (metres > trimM || metres > (MAX_SPEED_MPS * Math.abs(s.elapsedRealtimeMs - (before?.elapsedRealtimeMs ?? 0))) / 1000) {
+      places.push({ from: i, stay: false, anchors: fixes.slice(i, i + ANCHOR_FIXES).map((fix) => ({ fix, radiusM: trimM })) });
+    }
   });
-  let total = 0;
-  const along = steps.map(({ metres }) => (total += metres));
-  const breaks = steps.map(({ metres, seconds }) => metres > trimM || metres > MAX_SPEED_MPS * seconds);
-  for (let start = 0; ; ) {
-    const anchors = fixes.slice(0, start + ANCHOR_FIXES);
-    const from = along[start] ?? 0;
-    const beyond = fixes.map((fix, i) =>
-      (along[i] ?? 0) - from > trimM && anchors.every((a) => metresApart(a, fix) > trimM));
-    const first = beyond.indexOf(true);
-    const next = breaks.findLastIndex((b, i) => b && i > start && (first === -1 || i <= first));
-    if (next === -1) return beyond;
-    start = next;
+  for (const stay of STAYS) {
+    let next = 0;
+    fixes.forEach((first, i) => {
+      if (i < next) return;
+      let j = i + 1;
+      let spreadM = 0;
+      for (let fix = fixes[j]; fix; fix = fixes[++j]) {
+        const metres = metresApart(first, fix);
+        if (metres > stay.radiusM) break;
+        spreadM = Math.max(spreadM, metres);
+      }
+      if (j - i < stay.fixes) return;
+      places.push({ from: i, stay: true, anchors: [{ fix: first, radiusM: trimM + spreadM + stay.radiusM / 2 }] });
+      inStay.fill(true, i, j);
+      next = j;
+    });
   }
+  places.sort((a, b) => a.from - b.from);
+  const beyond = fixes.map(() => true);
+  const moving = fixes.map((_, i) => !inStay[i]);
+  let resting = 0;
+  let away = 0;
+  for (let i = 0; i < fixes.length && away < DEPARTURE_FIXES; i++) {
+    for (let place = places[resting]; place && place.from <= i; place = places[++resting]) {
+      for (const { fix, radiusM } of place.anchors) {
+        fixes.forEach((f, k) => {
+          if (metresApart(fix, f) > radiusM) return;
+          beyond[k] = false;
+          if (!place.stay) moving[k] = false;
+        });
+      }
+    }
+    if (moving[i]) away++;
+  }
+  return beyond;
 }
 
 /**
  * The samples of one whole session that lie beyond the cut of [startM] metres at its first end and
- * of [endM] at its last, in `elapsedRealtimeMs` order. The straight-line cut holds where GPS jitter
- * uses up the path while the phone sits still, and the anchors past the end hold where its first
- * or last fixes are coarse or wrong. Mock fixes are dropped first and count for nothing.
+ * of [endM] at its last, in `elapsedRealtimeMs` order. Mock fixes are dropped first and count for
+ * nothing.
  */
 export function trimSession(session: StoredSample[], startM: number, endM: number): StoredSample[] {
   const samples = session.filter((s) => !s.fix.mock).sort((a, b) => a.elapsedRealtimeMs - b.elapsedRealtimeMs);
