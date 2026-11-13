@@ -334,6 +334,29 @@ Android ID, Advertising ID, the subscription id, the SIM's display name, the use
 **On the phone,** samples sit in app-private storage until uploaded; a failed upload keeps them.
 They are never printed to the log, and fixtures and tests use made-up places.
 
+**Firebase.** Each time the app starts it signs in to Firebase Auth anonymously
+(`MainActivity.signInAnonymously`): the first start creates an anonymous account, later starts
+reuse it until the app's data is cleared. Firebase keeps that account's uid and its creation and
+sign-in times. Every request to Auth and Firestore reaches Google with the phone's IP address.
+Besides that, the SDKs send (firebase-auth 22.3.0, firebase-firestore 24.10.0, firebase-common
+20.4.2):
+
+- **Firestore, on every call:** `x-firebase-client`, firebase-common's user agent: `Build.BRAND`
+  (`device-brand`), `Build.DEVICE` (`device-model`, a device code), `Build.PRODUCT`
+  (`device-name`, a product code, not the name the user gave the phone), the API level
+  (`fire-android`), the store that installed the app (`android-installer`), the form factor
+  (`android-platform`: phone, tv, watch, auto or embedded), the app's target and min SDK, and the
+  Kotlin and SDK versions; also `x-firebase-gmpid`, the Firebase app id, and
+  `x-firebase-client-log-type`, a heartbeat code, when one is due.
+- **Auth, on every request:** `Accept-Language`, built from `Locale.getDefault()` (the phone's
+  language and country); `X-Android-Package` and `X-Android-Cert` (the app's package and signing
+  certificate hash); `X-Client-Version`; `X-Firebase-GMPID`. `X-Firebase-Client` carries the
+  stored heartbeats, each with the same user agent, when there are any (about once a day).
+- **Firestore requests and Auth's token refreshes** carry the account's sign-in token.
+
+The app ships only Firebase Auth and Firestore: no Analytics and no Installations id.
+The "What is shared?" dialog says this in `sharing_firebase`.
+
 **The server must never publish** a raw sample or any field of one: no coordinates, no
 `installId`, `sessionId` or sample `id`, no exact time (`timeMs`, `elapsedRealtimeMs`,
 `timestampMs`; the public files carry the month only), no cell identity. The install id is used
