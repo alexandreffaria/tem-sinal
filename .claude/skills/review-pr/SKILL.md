@@ -12,7 +12,7 @@ Don't push commits to the pull request; report. There is one review per pull req
 round of fixes by the author, then one confirmation, and no review after that.
 
 1. Read `.github/REVIEW_CHECKLIST.md`, then `CLAUDE.md`, then `plans/README.md` (its rules win
-   over anything else in the repo). Check the pull request against the card it names.
+   over anything else in the repo). Check the pull request against the issue it closes (`gh issue view <n>`).
 2. Gather the pull request:
    ```sh
    gh pr view $ARGUMENTS --json number,title,body,baseRefName,headRefName,headRefOid,files,additions,deletions
@@ -49,5 +49,7 @@ round of fixes by the author, then one confirmation, and no review after that.
    **Follow-ups filed** list with each issue number and title. Ready to merge means nothing
    blocking. If this is the confirmation, check only that the blocking findings are fixed and CI
    is green. Keep notes to one sentence; plain words.
-8. If it's ready and you are the merging session, follow "Merging" in `plans/README.md`.
+8. If it's ready to merge, merge it yourself, following "Merging" in `plans/README.md`, and remove
+   `blocked` from issues whose only open dependency was the one this closed. If it has blocking
+   findings, don't merge: the author fixes them and starts a fresh confirmation.
 9. Clean up: `git branch -D review/pr-$ARGUMENTS`.

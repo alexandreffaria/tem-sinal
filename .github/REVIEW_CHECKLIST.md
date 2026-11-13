@@ -13,11 +13,11 @@ the check is green.
 
 ## Shape
 
-1. The pull request does one card, its title starts with the card id, its branch is named after
-   the card, and its description follows the template in `plans/README.md`.
+1. The pull request does one issue, its title starts with `I-<number>`, its branch is
+   `i-<number>-…`, and its description follows the template in `plans/README.md`.
 2. **What did this delete?** Anything it replaces is gone in the same pull request.
-3. No new dependency, permission, service or secret unless the card names it. No abstraction the
-   card didn't ask for.
+3. No new dependency, permission, service or secret unless the issue names it. No abstraction the
+   issue didn't ask for.
 4. Changed lines are within about 400 (not counting deletions, generated files and renames), or
    the description says what is left.
 5. Comments and commit messages use standard terms and hold no history: no plan or pull-request

@@ -5,19 +5,22 @@ backcountry can see, before they go, where each carrier has signal and where onl
 get through. The app logs samples offline and uploads them later; a public map shows the
 aggregated result.
 
-The rules, the checks and the task board are in `plans/README.md`. Read it before doing anything;
-its rules apply to every session. Where the project stands and why: `plans/audit-2026-11-12.md`.
+The rules and the checks are in `plans/README.md`; the work is the GitHub issues labelled `board`.
+Read it before doing anything; its rules apply to every session. Where the project stands and why: `plans/audit-2026-11-12.md`.
 Settled decisions: `docs/decisions.md`.
 
 ## The short version
 
-- Work on one card from `plans/README.md` per session; one pull request per card.
+- Take the next ready `board` issue (see `plans/README.md`); one issue, one pull request.
 - Never commit to `main`. Branch from an up-to-date `main`.
-- Open a pull request and stop. Another session reviews it with `/review-pr` and merges it once CI
-  is green and nothing blocking is left. Never merge your own pull request.
+- After opening a pull request, start a fresh session (a subagent) to run `/review-pr` on it. It
+  files follow-ups as issues and merges once CI is green and nothing blocking is left. Never merge
+  your own pull request. The owner never has to start a review.
 - A merge to `main` publishes to Google Play. Merge one at a time.
-- Questions for the owner go in president decision cards (`decisions/`, the `decision-cards`
-  skill), never as guesses. Never commit files under `decisions/`.
+- Ask the owner as little as possible. Their decisions go in president decision cards
+  (`decisions/`, the `decision-cards` skill), written whenever one comes up, never as chat
+  questions or guesses; keep working on what doesn't depend on the answer. Never commit files
+  under `decisions/`.
 - Code that stays is good code; bad code is deleted. Never add a second way to do something
   without removing the first.
 
