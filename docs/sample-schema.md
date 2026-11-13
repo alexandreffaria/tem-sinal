@@ -334,6 +334,16 @@ Android ID, Advertising ID, the subscription id, the SIM's display name, the use
 **On the phone,** samples sit in app-private storage until uploaded; a failed upload keeps them.
 They are never printed to the log, and fixtures and tests use made-up places.
 
+**Firebase.** Each time the app starts it signs in to Firebase Auth anonymously
+(`MainActivity.signInAnonymously`): the first start creates an anonymous account, later starts
+reuse it until the app's data is cleared. Firebase keeps that account's uid and its creation and
+sign-in times. Every request to Auth and Firestore reaches Google with the phone's IP address. The
+SDKs add a client header (`X-Firebase-Client`) at most about once a day, which names the phone's
+brand, model and device name, the Android version and the SDK versions. Requests also identify the app
+(package name, signing certificate hash, Firebase app id) and carry the sign-in token. The app
+ships only Firebase Auth and Firestore: no Analytics and no Installations id.
+The "What is shared?" dialog says this in `sharing_firebase`.
+
 **The server must never publish** a raw sample or any field of one: no coordinates, no
 `installId`, `sessionId` or sample `id`, no exact time (`timeMs`, `elapsedRealtimeMs`,
 `timestampMs`; the public files carry the month only), no cell identity. The install id is used
