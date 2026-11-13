@@ -23,20 +23,22 @@ fun delayUntilNextTickMs(tickStartMs: Long, nowMs: Long): Long =
     (TICK_INTERVAL_MS - (nowMs - tickStartMs)).coerceAtLeast(0L)
 
 /** Each SIM's service state in plain words, one line per SIM, such as "SIM 1: No service". */
-fun serviceText(sims: List<SimReading>): String =
+fun serviceText(sims: List<SimReading>): List<UiText> =
     if (sims.isEmpty()) {
-        "No active SIM"
+        listOf(UiText(R.string.no_active_sim))
     } else {
-        sims.joinToString("\n") { sim ->
-            val name = sim.slot?.let { "SIM ${it + 1}" } ?: "SIM"
-            val words = when (sim.serviceState) {
-                ServiceStatus.IN_SERVICE -> "In service"
-                ServiceStatus.EMERGENCY_ONLY -> "Emergency calls only"
-                ServiceStatus.OUT_OF_SERVICE -> "No service"
-                ServiceStatus.POWER_OFF -> "No service (radio off)"
-                null -> "Service unknown"
-            }
-            "$name: $words"
+        sims.map { sim ->
+            val words = UiText(
+                when (sim.serviceState) {
+                    ServiceStatus.IN_SERVICE -> R.string.in_service
+                    ServiceStatus.EMERGENCY_ONLY -> R.string.emergency_calls_only
+                    ServiceStatus.OUT_OF_SERVICE -> R.string.no_service
+                    ServiceStatus.POWER_OFF -> R.string.no_service_radio_off
+                    null -> R.string.service_unknown
+                },
+            )
+            sim.slot?.let { UiText(R.string.sim_slot_service, listOf(it + 1, words)) }
+                ?: UiText(R.string.sim_service, listOf(words))
         }
     }
 
@@ -47,19 +49,21 @@ fun serviceText(sims: List<SimReading>): String =
  */
 data class LoggerUiState(
     val isLogging: Boolean = false,
-    val location: String = "Getting Location...",
-    val signalStrength: String = "Getting Signal Strength...",
+    /** The last tick's position; null shows nothing. */
+    val location: UiText? = UiText(R.string.getting_location),
+    /** The last tick's signal strength; null shows nothing. */
+    val signalStrength: UiText? = UiText(R.string.getting_signal_strength),
     /** [serviceText] of the last tick's SIMs. */
-    val service: String = "",
+    val service: List<UiText> = emptyList(),
     val pingResult: PingResult? = null,
     val sampleCount: Int = 0,
     val pendingCount: Int = 0,
 ) {
     fun serviceStarted(): LoggerUiState =
-        copy(isLogging = true, location = "", signalStrength = "", service = "")
+        copy(isLogging = true, location = null, signalStrength = null, service = emptyList())
 
     fun serviceStopped(): LoggerUiState =
-        copy(isLogging = false, location = "", signalStrength = "", service = "")
+        copy(isLogging = false, location = null, signalStrength = null, service = emptyList())
 
     /**
      * Shows a tick's position (null when it had no fresh fix), the headline strength of the first
@@ -79,8 +83,9 @@ data class LoggerUiState(
                 .filter { it.registered }
                 .firstNotNullOfOrNull { it.headlineDbm() }
             copy(
-                location = "Lat: $lat, Lon: $lon",
-                signalStrength = "Signal Strength: ${signalDbm?.let { "$it dBm" } ?: "unknown"}",
+                location = UiText(R.string.location, listOf(lat.toString(), lon.toString())),
+                signalStrength = signalDbm?.let { UiText(R.string.signal_strength_dbm, listOf(it)) }
+                    ?: UiText(R.string.signal_strength_unknown),
                 service = serviceText(sims),
                 pingResult = pingResult,
                 sampleCount = sampleCount + 1,

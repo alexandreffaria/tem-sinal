@@ -144,8 +144,8 @@ class LoggerService : Service() {
         createNotificationChannel(channelId)
 
         val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Signal logging active")
-            .setContentText("Tracking location and signal strength")
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(getString(R.string.notification_text))
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)
             .build()
@@ -156,7 +156,7 @@ class LoggerService : Service() {
     private fun createNotificationChannel(channelId: String) {
         val channel = NotificationChannel(
             channelId,
-            "Logger Service",
+            getString(R.string.notification_channel),
             NotificationManager.IMPORTANCE_LOW
         )
         (getSystemService(NotificationManager::class.java))

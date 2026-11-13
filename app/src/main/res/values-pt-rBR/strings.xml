@@ -1,0 +1,34 @@
+<resources>
+    <string name="log">GRAVAR</string>
+    <string name="stop">PARAR</string>
+    <string name="send_my_data">Enviar meus dados</string>
+    <string name="no_pending_points">Nenhum ponto guardado esperando envio</string>
+    <plurals name="pending_points">
+        <item quantity="one">%d ponto guardado esperando envio</item>
+        <item quantity="many">%d pontos guardados esperando envio</item>
+        <item quantity="other">%d pontos guardados esperando envio</item>
+    </plurals>
+
+    <string name="getting_location">Obtendo localização…</string>
+    <string name="getting_signal_strength">Obtendo intensidade do sinal…</string>
+    <string name="location">Lat: %1$s, Long: %2$s</string>
+    <string name="signal_strength_dbm">Intensidade do sinal: %1$d dBm</string>
+    <string name="signal_strength_unknown">Intensidade do sinal: desconhecida</string>
+
+    <string name="no_active_sim">Nenhum chip ativo</string>
+    <string name="sim_slot_service">Chip %1$d: %2$s</string>
+    <string name="sim_service">Chip: %1$s</string>
+    <string name="in_service">Com serviço</string>
+    <string name="emergency_calls_only">Só chamadas de emergência</string>
+    <string name="no_service">Sem serviço</string>
+    <string name="no_service_radio_off">Sem serviço (rádio desligado)</string>
+    <string name="service_unknown">Serviço desconhecido</string>
+
+    <string name="needs_precise_location">Para gravar, o app precisa da localização precisa. Permita a localização precisa para este app nas Configurações.</string>
+    <string name="needs_location">Para gravar, o app precisa acessar sua localização. Permita a localização para este app nas Configurações.</string>
+    <string name="needs_phone">Para gravar, o app precisa do acesso ao Telefone para ler seu chip. Permita Telefone para este app nas Configurações.</string>
+
+    <string name="notification_title">Gravação de sinal ativa</string>
+    <string name="notification_text">Registrando localização e intensidade do sinal</string>
+    <string name="notification_channel">Serviço de gravação</string>
+</resources>
