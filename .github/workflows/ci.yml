@@ -2,13 +2,22 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
+# A new push to a pull request supersedes its earlier run; every push to main is built.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   forbidden-files:
     name: No secrets or binaries added
+    # It diffs against the pull request's base ref, which a push doesn't have.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
