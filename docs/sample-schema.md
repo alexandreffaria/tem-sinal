@@ -1,5 +1,8 @@
 # Sample schema, version 2
 
+Issue numbers here written before the move to tem-sinal are the archive's,
+`alexandreffaria/CellSignalMapper#n` (see `plans/README.md`, "Numbers from before the move").
+
 What the phone records on each logging tick, field by field, and where each value comes from on
 Android. The Kotlin types are in `app/src/main/java/dev/meuquerido/cellsignalmapper/Sample.kt`;
 their property names are the wire names, in the log file on the phone, in JSON sent to the server

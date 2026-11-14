@@ -1,5 +1,8 @@
 # Decisions
 
+Issue numbers here written before the move to tem-sinal are the archive's,
+`alexandreffaria/CellSignalMapper#n` (see `plans/README.md`, "Numbers from before the move").
+
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
 ## 2026-11-13: The code goes public in a new repo, as Tem Sinal
