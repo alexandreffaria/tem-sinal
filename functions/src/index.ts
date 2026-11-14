@@ -99,8 +99,16 @@ const aggregationStore: AggregationStore = {
     if (after && after.expireAtMs > notBeforeMs) query = query.startAfter(Timestamp.fromMillis(after.expireAtMs), after.id);
     return (await query.limit(limit).get()).docs.map(stored);
   },
-  sessionSamples: async (sessionId, fromMs) =>
-    (await signalLogs.where("sessionId", "==", sessionId).where("expireAt", ">=", Timestamp.fromMillis(fromMs)).get()).docs.map(stored),
+  sessionSamples: async (sessionId, fromMs, notAfterMs, limit) =>
+    (
+      await signalLogs
+        .where("sessionId", "==", sessionId)
+        .where("expireAt", ">=", Timestamp.fromMillis(fromMs))
+        .where("expireAt", "<=", Timestamp.fromMillis(notAfterMs))
+        .orderBy("expireAt")
+        .limit(limit)
+        .get()
+    ).docs.map(stored),
   commit: (expected, next, ids, update) =>
     db.runTransaction(async (tx) => {
       if (!isDeepStrictEqual(hourlyState((await tx.get(hourlyRef)).data()), expected)) return false;

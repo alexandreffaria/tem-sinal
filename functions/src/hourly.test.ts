@@ -10,11 +10,13 @@ import {
   type HourlyState,
   READ_LIMIT,
   SESSION_IDLE_MS,
+  SESSION_READ_LIMIT,
   type Stored,
   WRITE_MARGIN_MS,
   runHourly,
 } from "./hourly.js";
 import { SAMPLE_LIFETIME_MS, WRITE_DEADLINE_MS } from "./ingest.js";
+import { MAX_BATCH } from "./sample.js";
 import { TRANSACTION_LIFETIME_MS } from "./create-missing.js";
 import { testSample } from "./test-sample.js";
 
@@ -42,8 +44,13 @@ function fakeStore() {
           .sort(order)
           .slice(0, limit),
       ),
-    sessionSamples: async (sessionId, fromMs) =>
-      structuredClone(docs.filter((d) => (d.data as StoredSample).sessionId === sessionId && d.expireAtMs >= fromMs)),
+    sessionSamples: async (sessionId, fromMs, notAfterMs, limit) =>
+      structuredClone(
+        docs
+          .filter((d) => (d.data as StoredSample).sessionId === sessionId && d.expireAtMs >= fromMs && d.expireAtMs <= notAfterMs)
+          .sort((a, b) => a.expireAtMs - b.expireAtMs)
+          .slice(0, limit),
+      ),
     commit: async (expected, next, ids, update) => {
       if (!isDeepStrictEqual(state, expected)) return false;
       const read = Object.fromEntries(ids.map((id) => [id, structuredClone(cells[id] ?? {})]));
@@ -116,12 +123,15 @@ test("samples of a session that arrive after it was aggregated are added on thei
 
 test("a session is not aggregated while a run that stopped at its read limit may have left some of it unread", async () => {
   const fake = fakeStore();
-  const session = walk(randomUUID(), READ_LIMIT + 1);
-  fake.receive(session, T);
+  const session = walk(randomUUID(), 600);
+  const other = walk(randomUUID(), READ_LIMIT - 300, -16.5);
+  fake.receive(session.slice(0, 300), T);
+  for (let i = 0; i < other.length; i += MAX_BATCH) fake.receive(other.slice(i, i + MAX_BATCH), T + 1 + i / MAX_BATCH);
+  fake.receive(session.slice(300), T + HOUR);
   await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS, NO_RANDOM);
   assert.deepEqual(fake.cells, {});
   await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS + HOUR, NO_RANDOM);
-  assert.deepEqual(fake.cells, expected(session));
+  assert.ok(isDeepStrictEqual(fake.cells, expected(session, other)));
 });
 
 test("ended sessions past the cell limit wait for the next run", async () => {
@@ -139,6 +149,47 @@ test("ended sessions past the cell limit wait for the next run", async () => {
   assert.ok(isDeepStrictEqual(fake.cells, expected(...first)));
   await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS + HOUR, NO_RANDOM);
   assert.ok(isDeepStrictEqual(fake.cells, expected(a, b)));
+  assert.deepEqual(fake.state().open, {});
+});
+
+test("a session too long to read whole is aggregated in parts, without holding up other sessions", async () => {
+  const fake = fakeStore();
+  // Uploads of MAX_BATCH samples a minute apart; about one private cell a sample, far over CELL_LIMIT.
+  const huge = walk(randomUUID(), 2 * SESSION_READ_LIMIT);
+  for (let i = 0; i < huge.length; i += MAX_BATCH) fake.receive(huge.slice(i, i + MAX_BATCH), T + (i / MAX_BATCH) * 60_000);
+  const other = walk(randomUUID(), 300, -16.5);
+  fake.receive(other, T + HOUR);
+  const run = (hours: number) => runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, NO_RANDOM);
+  for (let hours = 1; hours <= 4; hours++) await run(hours);
+  // A part ends before the last expireAt it read: the upload there may be only partly read.
+  const partLength = SESSION_READ_LIMIT - MAX_BATCH;
+  const parts = [huge.slice(0, partLength), huge.slice(partLength, 2 * partLength), huge.slice(2 * partLength)];
+  assert.ok(isDeepStrictEqual(fake.cells, expected(other, parts[0] ?? [])));
+  assert.deepEqual(Object.keys(fake.state().open), [huge[0]?.sessionId]);
+  await run(5);
+  await run(6);
+  assert.ok(isDeepStrictEqual(fake.cells, expected(other, ...parts)));
+  assert.deepEqual(fake.state().open, {});
+  assert.equal(fake.state().cursor?.expireAtMs, T + HOUR + SAMPLE_LIFETIME_MS);
+});
+
+test("more samples of one session than a run reads at one expireAt are skipped, not read again", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const fake = fakeStore();
+  const sessionId = randomUUID();
+  const later = walk(sessionId, 300, -15.45, T);
+  fake.receive(walk(sessionId, SESSION_READ_LIMIT), T);
+  fake.receive(later, T + 1);
+  const other = walk(randomUUID(), 300, -16.5);
+  fake.receive(other, T + 2);
+  const run = (hours: number) => runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, NO_RANDOM);
+  await run(1);
+  await run(SESSION_IDLE_MS / HOUR + 1);
+  assert.deepEqual(fake.cells, expected(other));
+  assert.equal(warn.mock.callCount(), 1);
+  assert.ok(!String(warn.mock.calls[0]?.arguments[0]).includes(sessionId));
+  await run(SESSION_IDLE_MS / HOUR + 2);
+  assert.ok(isDeepStrictEqual(fake.cells, expected(other, later)));
   assert.deepEqual(fake.state().open, {});
 });
 
