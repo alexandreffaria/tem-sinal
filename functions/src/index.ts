@@ -3,6 +3,7 @@ import { initializeApp } from "firebase-admin/app";
 import { getAppCheck } from "firebase-admin/app-check";
 import { getAuth } from "firebase-admin/auth";
 import { FieldPath, type QueryDocumentSnapshot, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import type { CellState, PublicCell } from "./aggregate.js";
@@ -128,9 +129,11 @@ export const aggregateHourly = onSchedule({ schedule: "every 60 minutes", timeou
 );
 
 // The daily job's state and the public cells, keyed by resolution 11 H3 cell. firestore.rules
-// gives clients no access to either; the map is served from tiles made from the public cells.
+// gives clients no access to either; the map is served from tiles made from the public cells, one
+// file per tile at `tiles/<h3>.json` in the default bucket, which storage.rules lets anyone read.
 const dailyRef = db.collection("aggregation").doc("daily");
 const publicCells = db.collection("public_cells");
+const bucket = getStorage().bucket();
 
 const dailyState = (data: unknown) => (data as DailyState | undefined) ?? { held: [], lastBatch: null, runMs: null };
 
@@ -145,9 +148,15 @@ const publishStore: PublishStore = {
       tx.set(dailyRef, next);
       return true;
     }),
+  // The job rewrites every tile once a day, so a cache may keep a tile for up to a day.
+  writeTile: (tile, cells) =>
+    bucket.file(`tiles/${tile}.json`).save(JSON.stringify(cells), {
+      resumable: false,
+      metadata: { contentType: "application/json", cacheControl: "public, max-age=86400" },
+    }),
 };
 
-/** Publishes the private cells into the public cells once a day, at 00:30 UTC. */
+/** Publishes the private cells into the public cells and the map tiles once a day, at 00:30 UTC. */
 export const publishDaily = onSchedule({ schedule: "every day 00:30", timeZone: "Etc/UTC", timeoutSeconds: 540 }, () =>
   runDaily(publishStore, Date.now()),
 );
