@@ -1,9 +1,10 @@
 rules_version = '2';
+// Clients can neither read nor write any document. Only the functions touch Firestore, through
+// the Admin SDK, which these rules don't bind.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /signal_logs/{docId} {
-      allow write: if request.auth != null;
-      allow read: if false;
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
