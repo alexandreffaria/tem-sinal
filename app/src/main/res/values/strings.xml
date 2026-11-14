@@ -3,7 +3,6 @@
 
     <string name="log">LOG</string>
     <string name="stop">STOP</string>
-    <string name="send_my_data">Send my data</string>
     <string name="no_pending_points">No pending points stored</string>
     <plurals name="pending_points">
         <item quantity="one">%d pending point stored</item>

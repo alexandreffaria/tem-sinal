@@ -23,9 +23,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /**
- * The pending count, the LOG/STOP and upload buttons, a dismissible [hint] below them, a link that
- * calls [onShowSharing], and the location and signal lines: stacked,
- * or with the lines beside the buttons when [sideBySide]. Either way the content scrolls when the
+ * The pending count, the LOG/STOP button, a dismissible [hint] below it, a link that calls
+ * [onShowSharing], and the location and signal lines: stacked, or with the lines beside the button
+ * when [sideBySide]. Either way the content scrolls when the
  * window is too short for it; when it fits, it stays centred because the scroll keeps the filled
  * height as its minimum.
  */
@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.dp
 fun LoggerButton(
     isLogging: Boolean,
     onToggle: () -> Unit,
-    onUpload: () -> Unit,
     modifier: Modifier = Modifier,
     sideBySide: Boolean = false,
     location: UiText? = null,
@@ -56,7 +55,7 @@ fun LoggerButton(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 LoggingControls(
-                    isLogging, onToggle, onUpload, pendingPoints, hint, onDismissHint, onShowSharing
+                    isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -70,7 +69,7 @@ fun LoggerButton(
             verticalArrangement = Arrangement.Center
         ) {
             LoggingControls(
-                isLogging, onToggle, onUpload, pendingPoints, hint, onDismissHint, onShowSharing
+                isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing
             )
             Spacer(modifier = Modifier.height(32.dp))
             SignalLines(location, signalStrength, service)
@@ -83,7 +82,6 @@ fun LoggerButton(
 private fun LoggingControls(
     isLogging: Boolean,
     onToggle: () -> Unit,
-    onUpload: () -> Unit,
     pendingPoints: Int,
     hint: UiText?,
     onDismissHint: () -> Unit,
@@ -102,12 +100,6 @@ private fun LoggingControls(
         modifier = Modifier.size(200.dp)
     ) {
         Text(stringResource(if (isLogging) R.string.stop else R.string.log))
-    }
-    if (pendingPoints > 0) {
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onUpload) {
-            Text(stringResource(R.string.send_my_data))
-        }
     }
     if (hint != null) {
         Spacer(modifier = Modifier.height(16.dp))
