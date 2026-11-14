@@ -5,6 +5,19 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-14: The upload function checks App Check but doesn't require it
+
+The app gets an App Check token from the Play Integrity provider and sends it with each batch; the
+upload function verifies it and logs whether it was valid, invalid or missing, and takes the batch
+either way, as long as the Firebase Auth ID token is valid. Play Integrity only attests an install
+from Google Play, and the app ships as an APK from GitHub Releases, so requiring App Check now
+would stop every install's uploads (the samples would stay on the phone, but never go up). The
+validation and the per-install and per-user hourly limits still bound what any client can send.
+Whether to require it once the app is on Play, which would end uploads from the APK, is the
+owner's call (issue #58).
+
+Follows from card `20261114d95s` (choice: apk-then-play).
+
 ## 2026-11-14: The app ships as an APK on GitHub Releases now, and on Play once its test passes
 
 The app has never been on Play. Each merge to `main` that changes the app publishes a signed APK

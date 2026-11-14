@@ -176,7 +176,7 @@ class SignalLoggerPendingTest {
 
         SignalLogger.takePending(log, pending)
         SignalLogger.appendLine(log, sample("c"))
-        uploadPending(pending, rejected, gson) {}
+        uploadPending(pending, rejected, gson) { emptySet() }
         assertCountMatchesFiles()
         assertEquals(1, SignalLogger.pendingCount(log, pending))
     }
@@ -191,7 +191,7 @@ class SignalLoggerPendingTest {
                 if (attempt++ % 2 == 0) {
                     runCatching { uploadPending(toUpload, rejected, gson) { throw TimeoutException() } }
                 } else {
-                    uploadPending(toUpload, rejected, gson) {}
+                    uploadPending(toUpload, rejected, gson) { emptySet() }
                 }
             }
             assertCountMatchesFiles()
@@ -237,7 +237,7 @@ class SignalLoggerPendingTest {
         assertCountMatchesFiles()
         assertTrue(pending.readBytes().contentEquals(taken))
 
-        uploadPending(pending, rejected, gson) {}
+        uploadPending(pending, rejected, gson) { emptySet() }
         assertCountMatchesFiles()
         assertEquals(0, SignalLogger.pendingCount(log, pending))
     }
