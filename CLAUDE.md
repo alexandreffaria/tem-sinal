@@ -20,7 +20,7 @@ pull request numbers from before the move (in commits, docs and cards) refer to 
 - After opening a pull request, start a fresh session (a subagent) to run `/review-pr` on it. It
   files follow-ups as issues and merges once the checks pass and nothing blocking is left. Never merge
   your own pull request. The owner never has to start a review.
-- A merge to `main` publishes to Google Play once the rotated secrets are added (issue #1).
+- A merge to `main` that changes the app publishes a signed APK release on GitHub Releases.
   Merge one at a time.
 - Ask the owner as little as possible. Their decisions go in president decision cards
   (`decisions/`, the `decision-cards` skill), written whenever one comes up, never as chat
