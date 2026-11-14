@@ -81,6 +81,7 @@ resolution:
   choice: fresh
   note: let's also rebrand it's a good opportunity, you can choose a name i dont really care not in the mood to thing and i don't really care, anything is better than cellsignalmapper lol
   resolved_at: 2026-11-13T19:29:48Z
+applied_at: 2026-11-13T20:36:58Z
 ---
 
 ## Context
