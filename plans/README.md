@@ -109,10 +109,10 @@ It fails a branch that adds a keystore, a service-account key, an app bundle, a 
 first run installs JDK 17 and the Android SDK in your home folder (about 1 GB, no root); a full
 run takes a few minutes. Run one at a time: two Gradle builds at once slow this machine down.
 
-The checks run on this machine, not on GitHub: the account has no GitHub Actions minutes, so the
-`CI` workflow (which runs the same script) doesn't start. The author runs the script before
-opening the pull request and after every push; the session that merges runs it again on the
-pull request's latest commit.
+The `CI` workflow runs the same script on GitHub-hosted runners for every push to a pull request
+and to `main`; its job reports as `scripts/check.sh`. A green `CI` run on the pull request's latest
+commit is what counts as the checks passing. Run the script here before opening the pull request
+and before each push, so a failure shows up before CI does.
 
 ## The pull request
 
@@ -122,7 +122,7 @@ Title: `I-<number> <issue title>`. Description:
 Closes #<number>
 What changed: <three lines at most>
 What was deleted: <files, functions, lines>
-Checks: <the last line of scripts/check.sh, naming the commit>
+Checks: <the last line of a local scripts/check.sh run, naming the commit>
 Not done: <or "nothing"; anything left is filed as a new issue>
 Filed: <issue numbers, or "nothing">
 ```
@@ -150,23 +150,25 @@ owner never has to.
 
 The reviewer (or the confirming session) merges when:
 
-1. `scripts/check.sh` passes on the pull request's latest commit, run by the merging session.
+1. `CI` passed on the pull request's latest commit (`gh pr checks <n> --watch --required`).
 2. Nothing blocking is left, and every follow-up is filed.
 3. It has no conflict with `main`. After a rebase, the checks run again first.
 
 Then `gh pr merge <n> --merge --delete-branch`. Never push to `main`, never merge past a failing
-check, never `--admin`. GitHub can't enforce any of this on this repo's plan, so it holds only
-because sessions follow it.
+check, never `--admin`. Branch protection on `main` requires a pull request and a green `CI` run,
+and refuses force pushes and deletion. It doesn't bind the owner's account, which every session
+and president's Sync act as, so `--admin` would get past it.
 
 **A merge to `main` publishes to Google Play** (`.github/workflows/android-publish.yml`, except
-for changes that only touch docs, plans and decision cards). Merge one pull request at a time and
+for changes that only touch docs, plans and decision cards) once the owner has added the rotated
+signing and Play secrets (issue #1). Merge one pull request at a time and
 wait for its deploy run (`gh run list --branch main`) before the next. If the deploy fails because
 of the change, fix forward or revert in a new pull request. A deploy that fails for a reason
 outside the change (Play access, signing secrets) doesn't block merging; note it on the owner's
 issue for it.
 
-While the account has no GitHub Actions minutes, the deploy doesn't start either, so a merge
-publishes nothing; don't wait for a deploy run.
+Until those secrets are in the repo, the deploy run starts and fails without them, so a merge
+publishes nothing; that failure doesn't block merging and needs no note.
 
 ## Filing work
 

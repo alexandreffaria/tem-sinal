@@ -20,7 +20,8 @@ pull request numbers from before the move (in commits, docs and cards) refer to 
 - After opening a pull request, start a fresh session (a subagent) to run `/review-pr` on it. It
   files follow-ups as issues and merges once the checks pass and nothing blocking is left. Never merge
   your own pull request. The owner never has to start a review.
-- A merge to `main` publishes to Google Play. Merge one at a time.
+- A merge to `main` publishes to Google Play once the rotated secrets are added (issue #1).
+  Merge one at a time.
 - Ask the owner as little as possible. Their decisions go in president decision cards
   (`decisions/`, the `decision-cards` skill), written whenever one comes up, never as chat
   questions or guesses; keep working on what doesn't depend on the answer. Never commit files
@@ -37,7 +38,7 @@ pull request numbers from before the move (in commits, docs and cards) refer to 
 
 ## Checks
 
-`scripts/check.sh`, run on this machine (it needs Node and npm, and installs JDK 17 and the
-Android SDK on first use). The account has no GitHub Actions minutes, so nothing runs the checks
-on GitHub: the author runs them before opening the pull request and after each push, and the
-merging session runs them again.
+The `CI` workflow runs `scripts/check.sh` on every pull request; a green `CI` run on the latest
+commit is the checks passing, and `main` can't take a merge without it. Run `scripts/check.sh` on
+this machine before opening the pull request and before each push (it needs Node and npm, and
+installs JDK 17 and the Android SDK on first use).

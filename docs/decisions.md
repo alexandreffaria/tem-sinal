@@ -185,6 +185,9 @@ before opening a pull request and the merging session runs it again on the lates
 the owner's workstation, as Geode does, changes only where it runs. Until a runner is
 registered for this repo, no workflow runs, the Play deploy included. Issue #89.
 
+Replaced on 2026-11-14, when `tem-sinal` went public: the `CI` run on GitHub-hosted runners is
+the checks again, and `scripts/check.sh` is how to run them on this machine.
+
 Card: `20261113tc78`, answered in chat ("we run ci locally or on the workstation docker setup").
 
 ## 2026-11-13: Raw samples are kept 90 days
