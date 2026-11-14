@@ -5,6 +5,19 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-14: The app ships as an APK on GitHub Releases now, and on Play once its test passes
+
+The app has never been on Play. Each merge to `main` that changes the app publishes a signed APK
+on the repo's Releases page, so people can install it now. At the same time the owner opens a
+Play developer account and runs the closed test Google requires of new personal accounts (12
+testers opted in for 14 days) before a production release. Both builds are signed with the same
+key, uploaded to Play as the app signing key, so a phone with the APK updates to the Play build
+without uninstalling and losing samples not yet uploaded. Google's developer verification
+doesn't affect APKs installed directly until its global rollout in 2027; the Play account
+registers the developer for it.
+
+Card: `20261114d95s` (choice: apk-then-play).
+
 ## 2026-11-13: The code goes public in a new repo, as Tem Sinal
 
 The code moves to a new public repo, `alexandreffaria/tem-sinal`, built from a cleaned copy of
