@@ -44,6 +44,8 @@ jobs:
         run: npm ci --prefix functions
 
       # `firestore` deploys the rules and the indexes, including the TTL field overrides that
-      # delete stored samples and upload counters; `storage` deploys storage.rules.
+      # delete stored samples and upload counters; `storage` deploys storage.rules to the bucket
+      # firebase.json names. Naming it keeps firebase-tools from looking up the default bucket,
+      # which the Firebase Storage API answers with 404 for this account.
       - name: Deploy
         run: npx --yes firebase-tools@15.34.2 deploy --only functions,firestore,storage --project cellsignalmapper-a9da1 --non-interactive
