@@ -109,6 +109,16 @@ It fails a branch that adds a keystore, a service-account key, an app bundle, a 
 first run installs JDK 17 and the Android SDK in your home folder (about 1 GB, no root); a full
 run takes a few minutes. Run one at a time: two Gradle builds at once slow this machine down.
 
+Gradle checks every dependency and plugin against the sha256 sums in
+`gradle/verification-metadata.xml` and fails the build on a mismatch or a missing entry. A pull
+request that adds or changes a dependency regenerates the file, with the release tasks so the
+release workflow's build verifies too, and checks that its diff names only the expected artifacts:
+
+```sh
+./gradlew --write-verification-metadata sha256 lintDebug testDebugUnitTest assembleDebug \
+  assembleRelease bundleRelease
+```
+
 The `CI` workflow runs the same script on GitHub-hosted runners for every push to a pull request
 and to `main`; its job reports as `scripts/check.sh`. A green `CI` run on the pull request's latest
 commit is what counts as the checks passing. Run the script here before opening the pull request
