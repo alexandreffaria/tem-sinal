@@ -159,16 +159,13 @@ check, never `--admin`. Branch protection on `main` requires a pull request and 
 and refuses force pushes and deletion. It doesn't bind the owner's account, which every session
 and president's Sync act as, so `--admin` would get past it.
 
-**A merge to `main` publishes to Google Play** (`.github/workflows/android-publish.yml`, except
-for changes that only touch docs, plans and decision cards) once the owner has added the rotated
-signing and Play secrets (issue #1). Merge one pull request at a time and
-wait for its deploy run (`gh run list --branch main`) before the next. If the deploy fails because
-of the change, fix forward or revert in a new pull request. A deploy that fails for a reason
-outside the change (Play access, signing secrets) doesn't block merging; note it on the owner's
-issue for it.
-
-Until those secrets are in the repo, the deploy run starts and fails without them, so a merge
-publishes nothing; that failure doesn't block merging and needs no note.
+**A merge to `main` publishes a release** (`.github/workflows/release.yml`, except for changes
+that only touch docs, plans, decision cards and `functions/`): a GitHub Release tagged
+`v<versionCode>` with the signed APK and AAB attached. Merge one pull request at a time and wait
+for its `Release` run (`gh run list --workflow release.yml --branch main`) before the next. If the
+release fails because of the change, fix forward or revert in a new pull request. A release that
+fails for a reason outside the change (the signing secrets) doesn't block merging; note it on an
+issue for the owner.
 
 ## Filing work
 

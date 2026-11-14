@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
-    id("com.github.triplet.play")
 }
 
 android {
@@ -14,8 +13,9 @@ android {
         applicationId = "dev.meuquerido.cellsignalmapper"
         minSdk = 30
         targetSdk = 35
-        versionCode = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "10")
-        versionName = "new cell polling"
+        // The release workflow passes -PversionCode; local and CI builds use 1.
+        versionCode = providers.gradleProperty("versionCode").orNull?.toInt() ?: 1
+        versionName = "1.0.$versionCode"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -40,11 +40,6 @@ android {
     buildFeatures {
         compose = true
     }
-}
-
-play {
-    serviceAccountCredentials.set(rootProject.file("play-account.json"))
-    track.set("plz")
 }
 
 dependencies {
