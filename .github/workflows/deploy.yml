@@ -1,0 +1,49 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'storage.rules'
+      - 'firebase.json'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# Deploys run one at a time, in merge order, and none is cancelled.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Functions, Firestore rules and indexes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: functions/package.json
+
+      # Workload Identity Federation: GitHub's OIDC token for this repo's main branch is exchanged
+      # for the deploy service account's credentials. No key is stored anywhere. The provider only
+      # accepts tokens for repository id 1457321730 on refs/heads/main.
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1048309727525/locations/global/workloadIdentityPools/github/providers/tem-sinal
+          service_account: github-deploy@cellsignalmapper-a9da1.iam.gserviceaccount.com
+
+      - name: Install functions dependencies
+        run: npm ci --prefix functions
+
+      # `firestore` deploys the rules and the indexes, including the TTL field overrides that
+      # delete stored samples and upload counters; `storage` deploys storage.rules.
+      - name: Deploy
+        run: npx --yes firebase-tools@15.34.2 deploy --only functions,firestore,storage --project cellsignalmapper-a9da1 --non-interactive

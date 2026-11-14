@@ -37,12 +37,12 @@ class UploadPendingTest {
 
     @Test
     fun timeoutOnALaterBatchKeepsEverySample() {
-        val lines = (1..FIRESTORE_BATCH_LIMIT + 1).map { gson.toJson(sample("s$it")) }
+        val lines = (1..UPLOAD_BATCH_LIMIT + 1).map { gson.toJson(sample("s$it")) }
         writePending(lines)
         var commits = 0
 
         assertThrows(TimeoutException::class.java) {
-            uploadPending(pending, rejected, gson) { if (++commits == 2) throw TimeoutException() }
+            uploadPending(pending, rejected, gson) { if (++commits == 2) throw TimeoutException() else emptySet() }
         }
 
         assertEquals(lines, pending.readLines())
@@ -53,11 +53,24 @@ class UploadPendingTest {
         writePending(listOf(gson.toJson(sample("a")), "not a sample"))
         val committed = mutableListOf<String>()
 
-        uploadPending(pending, rejected, gson) { batch -> committed += batch.map { it.id } }
+        uploadPending(pending, rejected, gson) { batch -> committed += batch.map { it.id }; emptySet() }
 
         assertEquals(listOf("a"), committed)
         assertFalse(pending.exists())
         assertEquals(listOf("not a sample"), rejected.readLines())
+    }
+
+    @Test
+    fun samplesTheServerRejectedGoToTheRejectedFile() {
+        val lines = (1..UPLOAD_BATCH_LIMIT + 2).map { gson.toJson(sample("s$it")) }
+        writePending(lines)
+        var batches = 0
+
+        val uploaded = uploadPending(pending, rejected, gson) { if (++batches == 1) setOf(0) else setOf(1) }
+
+        assertEquals(UploadedLog(unparseable = 0, refused = 2), uploaded)
+        assertEquals(listOf(lines[0], lines[UPLOAD_BATCH_LIMIT + 1]), rejected.readLines())
+        assertFalse(pending.exists())
     }
 
     @Test
@@ -70,7 +83,7 @@ class UploadPendingTest {
         writePending(listOf(v1, gson.toJson(sample("a")), newer))
         val committed = mutableListOf<Sample>()
 
-        uploadPending(pending, rejected, gson) { batch -> committed += batch }
+        uploadPending(pending, rejected, gson) { batch -> committed += batch; emptySet() }
 
         assertEquals(listOf(sample("a")), committed)
         assertEquals(listOf(v1, newer), rejected.readLines())

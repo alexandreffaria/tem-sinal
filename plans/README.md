@@ -172,12 +172,20 @@ and refuses force pushes and deletion. It doesn't bind the owner's account, whic
 and president's Sync act as, so `--admin` would get past it.
 
 **A merge to `main` publishes a release** (`.github/workflows/release.yml`, except for changes
-that only touch docs, plans, decision cards and `functions/`): a GitHub Release tagged
+that only touch docs, plans, decision cards, `functions/` and the Firebase files): a GitHub Release tagged
 `v<versionCode>` with the signed APK and AAB attached. Merge one pull request at a time and wait
 for its `Release` run (`gh run list --workflow release.yml --branch main`) before the next. If the
 release fails because of the change, fix forward or revert in a new pull request. A release that
 fails for a reason outside the change (the signing secrets) doesn't block merging; note it on an
 issue for the owner.
+
+**A merge to `main` that touches `functions/`, `firestore.rules`, `firestore.indexes.json`,
+`storage.rules` or `firebase.json` deploys them** (`.github/workflows/deploy.yml`): the
+functions, the Firestore rules and indexes with their TTL policies, and the Storage rules, to project `cellsignalmapper-a9da1`. It signs in
+through Workload Identity Federation as `github-deploy@`, which only runs from `main` of this
+repo; no key exists. Wait for its `Deploy` run before the next merge too. A change the app and
+the server both depend on ships server first: the function before the app that calls it, and
+rules that refuse an old app only after the app release that no longer needs them is out.
 
 ## Filing work
 

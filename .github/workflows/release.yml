@@ -10,8 +10,13 @@ on:
       - 'docs/**'
       - '.claude/**'
       - 'functions/**'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'storage.rules'
+      - 'firebase.json'
       - '**.md'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/deploy.yml'
 
 permissions:
   contents: write

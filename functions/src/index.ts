@@ -4,6 +4,7 @@ import { getAppCheck } from "firebase-admin/app-check";
 import { getAuth } from "firebase-admin/auth";
 import { FieldPath, type QueryDocumentSnapshot, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { logger } from "firebase-functions";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import type { CellState, PublicCell } from "./aggregate.js";
@@ -41,15 +42,26 @@ const firestoreStore: SampleStore = {
 };
 
 /**
- * The Firebase Auth uid of a request that carries a valid App Check token and a valid Firebase
- * Auth ID token, or undefined.
+ * What the App Check token on a request is: `valid`, `invalid` or `missing`. It is logged and not
+ * enforced: Play Integrity can only attest an install from Google Play, and the app ships as an APK
+ * from GitHub Releases, so every install today would be refused.
  */
-async function verifiedUid(appCheckToken: string | undefined, authorization: string | undefined): Promise<string | undefined> {
-  const idToken = authorization?.match(/^Bearer (.+)$/)?.[1];
-  if (!appCheckToken || !idToken) return undefined;
+async function appCheckVerdict(token: string | undefined): Promise<"valid" | "invalid" | "missing"> {
+  if (!token) return "missing";
   try {
-    const [, decoded] = await Promise.all([getAppCheck().verifyToken(appCheckToken), getAuth().verifyIdToken(idToken)]);
-    return decoded.uid;
+    await getAppCheck().verifyToken(token);
+    return "valid";
+  } catch {
+    return "invalid";
+  }
+}
+
+/** The Firebase Auth uid of a request that carries a valid Firebase Auth ID token, or undefined. */
+async function verifiedUid(authorization: string | undefined): Promise<string | undefined> {
+  const idToken = authorization?.match(/^Bearer (.+)$/)?.[1];
+  if (!idToken) return undefined;
+  try {
+    return (await getAuth().verifyIdToken(idToken)).uid;
   } catch {
     return undefined;
   }
@@ -66,9 +78,13 @@ export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30 }, async (req
   } else if (req.method !== "POST") {
     res.status(405).set("Allow", "POST").json({ error: "use POST" });
   } else {
-    const uid = await verifiedUid(req.header("X-Firebase-AppCheck"), req.header("Authorization"));
+    const [uid, appCheck] = await Promise.all([
+      verifiedUid(req.header("Authorization")),
+      appCheckVerdict(req.header("X-Firebase-AppCheck")),
+    ]);
+    logger.info("upload", { appCheck });
     if (uid === undefined) {
-      res.status(401).json({ error: "missing or invalid App Check or ID token" });
+      res.status(401).json({ error: "missing or invalid ID token" });
     } else {
       const { status, body } = await ingest(req.body, uid, firestoreStore, Date.now());
       res.status(status).json(body);
