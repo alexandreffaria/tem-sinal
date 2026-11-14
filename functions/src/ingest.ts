@@ -14,6 +14,12 @@ const HOUR_MS = 3_600_000;
  */
 export const SAMPLE_LIFETIME_MS = 90 * 86_400_000;
 
+/**
+ * How long after the server receives an upload its samples may still start being written. The
+ * request is cut off after 30 seconds, but its code can keep running on a throttled instance.
+ */
+export const WRITE_DEADLINE_MS = 60_000;
+
 /** Where uploads are counted and samples stored. */
 export interface SampleStore {
   /**
@@ -22,8 +28,12 @@ export interface SampleStore {
    * [limit].
    */
   reserve(installId: string, uid: string, hourStartMs: number, count: number, limit: number): Promise<boolean>;
-  /** Stores each sample under its id; a sample whose id is already stored is left as it is. */
-  create(samples: (Sample & { expireAt: Date })[]): Promise<void>;
+  /**
+   * Stores each sample under its id; a sample whose id is already stored is left as it is. Rejects,
+   * storing none, when the writes would start after [deadlineMs]; every write it makes is stored
+   * before [deadlineMs] + [TRANSACTION_LIFETIME_MS].
+   */
+  create(samples: (Sample & { expireAt: Date })[], deadlineMs: number): Promise<void>;
 }
 
 export interface Response {
@@ -35,7 +45,9 @@ export interface Response {
  * Validates an upload body from the Firebase Auth user [uid], received at [nowMs], and stores its
  * valid samples, each with `expireAt` [SAMPLE_LIFETIME_MS] after [nowMs]. The uid is used only to
  * count uploads; it is never stored on a sample. A sample already stored counts as accepted and
- * keeps its first `expireAt`, so sending the same batch again is harmless.
+ * keeps its first `expireAt`, so sending the same batch again is harmless. Rejects, so that the
+ * request fails and the phone keeps the batch, when the store would start writing more than
+ * [WRITE_DEADLINE_MS] after [nowMs].
  */
 export async function ingest(body: unknown, uid: string, store: SampleStore, nowMs: number): Promise<Response> {
   const batch = validateBatch(body);
@@ -48,7 +60,10 @@ export async function ingest(body: unknown, uid: string, store: SampleStore, now
       return { status: 429, body: { error: "too many samples from this install or user this hour" } };
     }
     const expireAt = new Date(nowMs + SAMPLE_LIFETIME_MS);
-    await store.create(valid.map((sample) => ({ ...sample, expireAt })));
+    await store.create(
+      valid.map((sample) => ({ ...sample, expireAt })),
+      nowMs + WRITE_DEADLINE_MS,
+    );
   }
   return { status: 200, body: { accepted: valid.length, rejected } };
 }
