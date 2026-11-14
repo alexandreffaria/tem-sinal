@@ -34,7 +34,15 @@ import android.content.Intent
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
+/** Holds, for the life of the process, whether the app has scheduled its upload on open. */
+object UploadOnOpen {
+    private val scheduled = AtomicBoolean(false)
+
+    /** True on the first call in a process, false on every later one. */
+    fun firstInProcess(): Boolean = scheduled.compareAndSet(false, true)
+}
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -103,8 +111,9 @@ class MainActivity : ComponentActivity() {
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
         FirebaseApp.initializeApp(this)
-        // Sends what is pending when the app starts, not again when the activity is recreated.
-        if (savedInstanceState == null) UploadWorker.enqueue(this)
+        // Sends what is pending once per process start, which includes a restore after the
+        // process was killed. A rotation doesn't enqueue again, which would reset a running backoff.
+        if (UploadOnOpen.firstInProcess()) UploadWorker.enqueue(this)
 
 
         lifecycleScope.launch(Dispatchers.IO) { SignalLogger.publishPendingCount(applicationContext) }
