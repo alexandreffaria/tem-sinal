@@ -30,13 +30,9 @@ round of fixes by the author, then one confirmation, and no review after that.
    `format(`, `toDouble()`, `Locale`, `registerReceiver`, `requestLocationUpdates`,
    `allCellInfo`, `Log.` and `delete(`, which are where this app has broken before. Classify each
    finding as **blocking** or **follow-up**.
-5. Run the checks on the pull request's latest commit, in a worktree of your own, and remove it
-   afterwards:
+5. Wait for the `CI` run on the pull request's latest commit:
    ```sh
-   git fetch origin pull/$ARGUMENTS/head:review/pr-$ARGUMENTS
-   git worktree add .claude/worktrees/review-$ARGUMENTS review/pr-$ARGUMENTS
-   (cd .claude/worktrees/review-$ARGUMENTS && scripts/check.sh)
-   git worktree remove --force .claude/worktrees/review-$ARGUMENTS
+   gh pr checks $ARGUMENTS --watch --required
    ```
    A failure is blocking. Name the commit the checks ran on in the review.
 6. File every follow-up before posting, one issue each, so none is dropped. Pick the kind and
