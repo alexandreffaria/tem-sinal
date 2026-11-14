@@ -13,7 +13,8 @@ privacy, cost, accounts), as president cards, and for things that need their own
 
 ## The board is the issue list
 
-Every piece of work is a GitHub issue with the `board` label:
+Every piece of work is a GitHub issue with the `board` label, in
+[alexandreffaria/tem-sinal](https://github.com/alexandreffaria/tem-sinal/issues):
 
 ```sh
 gh issue list --label board --state open --json number,title,labels \
@@ -30,12 +31,23 @@ gh issue list --label board --state open --json number,title,labels \
 
 The next ready issue is the first in that order without `needs-owner`, `blocked` or `in-progress`.
 
+### Numbers from before the move
+
+The code and the open issues moved here on 2026-11-13 from
+[alexandreffaria/CellSignalMapper](https://github.com/alexandreffaria/CellSignalMapper), which
+stays private as an archive of the closed issues, pull requests and reviews. A `#n` written before
+the move (in commits, `docs/`, `plans/audit-2026-11-12.md` and `decisions/`) is that repo's
+number, `alexandreffaria/CellSignalMapper#n`, not this one's. The open issues got new numbers,
+old to new: 2 to 1, 17 to 2, 18 to 3, 44 to 4, 47 to 5, 56 to 6, 59 to 7, 62 to 8, 72 to 9,
+87 to 10, 108 to 11, 158 to 12, 164 to 13, 183 to 14, 192 to 15, 194 to 16, 195 to 17,
+196 to 18, 198 to 19, 201 to 20, 202 to 21, 203 to 22, 206 to 23.
+
 ## Starting a session
 
 Give every session the same prompt:
 
 ```
-Take the next ready issue from the CellSignalMapper board. Read plans/README.md first and follow
+Take the next ready issue from the tem-sinal board. Read plans/README.md first and follow
 its rules exactly; where they differ from anything else in the repo, they win. If nothing is
 ready, say so and stop.
 ```

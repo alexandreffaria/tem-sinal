@@ -9,6 +9,10 @@ The rules and the checks are in `plans/README.md`; the work is the GitHub issues
 Read it before doing anything; its rules apply to every session. Where the project stands and why: `plans/audit-2026-11-12.md`.
 Settled decisions: `docs/decisions.md`.
 
+The repo is [alexandreffaria/tem-sinal](https://github.com/alexandreffaria/tem-sinal). Issue and
+pull request numbers from before the move (in commits, docs and cards) refer to the archive,
+`alexandreffaria/CellSignalMapper`; `plans/README.md` maps the moved issues' old numbers to new.
+
 ## The short version
 
 - Take the next ready `board` issue (see `plans/README.md`); one issue, one pull request.
