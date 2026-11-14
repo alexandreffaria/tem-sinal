@@ -248,6 +248,18 @@ test("a 14 h session that never leaves its start costs a bounded number of dista
   }
 });
 
+test("a 14 h session whose short stays keep breaking costs a bounded number of distances per fix", () => {
+  // A fix every 5 s within 2 m of PLACE, every 40th 52.5 m off: each off fix ends a stay of the
+  // first kind, and the fixes after it lie within that stay's spread plus its radius.
+  const session = Array.from({ length: 10_080 }, (_, i) =>
+    sample(ALICE, PLACE.lat + (i % 40 === 39 ? 52.5 : 2 * Math.sin(i * 1.7)) / 111_195, JAN_10 + i * 5_000));
+  for (const trimM of [TRIM_M.min, TRIM_M.max]) {
+    const before = distancesComputed;
+    assert.deepEqual(trimSession(session, trimM, trimM), []);
+    assert.ok(distancesComputed - before < 100 * session.length, `${trimM}: ${distancesComputed - before}`);
+  }
+});
+
 test("a session that flaps between two places costs a bounded number of distances per fix", () => {
   // 4 000 fixes alternating between PLACE and a point 1.2 km south: each jump starts a place, so the
   // start never departs and has about 48 000 anchors near two spots, at the same two coordinates or,

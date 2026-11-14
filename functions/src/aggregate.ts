@@ -136,8 +136,10 @@ type Anchor = { fix: StoredSample["fix"]; radiusM: number };
  * No fix in a run long enough for a stay moves, whichever stays the scan picks: the scan, which
  * skips the fixes of a stay it has found, either starts a stay at the run's first fix or finds it in
  * a stay that started at an earlier fix a. The run's fixes past that stay then lie within r of the
- * run's first fix, so within s + r of a, and the consecutive fixes after a stay that lie within
- * s + r of its first fix don't move.
+ * run's first fix, so within s + r of a. The fixes from a stay's first fix to the last one an
+ * earlier stay of its kind marked are all marked as not moving, and so are the consecutive fixes
+ * after both that lie within s + r of the stay's first fix; so none of the run's fixes move. Each
+ * fix is tested this way once per kind of stay, plus once per stay where the marking stops.
  *
  * Consecutive samples can carry the same fix. A sample whose fix has the coordinates of the one
  * before it counts once, with it, towards [ANCHOR_FIXES] and [DEPARTURE_FIXES]. Stays and the speed
@@ -164,6 +166,7 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   });
   for (const stay of STAYS) {
     let next = 0;
+    let marked = 0;
     fixes.forEach((first, i) => {
       if (i < next) return;
       let j = i + 1;
@@ -177,7 +180,9 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
       stays.push({ from: i, fix: first, radiusM: trimM + spreadM + stay.radiusM / 2 });
       inStay.fill(true, i, j);
       next = j;
+      j = Math.max(j, marked);
       for (let fix = fixes[j]; fix && metresApart(first, fix) <= spreadM + stay.radiusM; fix = fixes[++j]) inStay[j] = true;
+      marked = j;
     });
   }
   // Fixes in cubes of the unit sphere's space whose side is at least the widest cut's straight-line
