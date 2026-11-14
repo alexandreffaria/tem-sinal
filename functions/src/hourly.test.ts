@@ -14,12 +14,17 @@ import {
   WRITE_MARGIN_MS,
   runHourly,
 } from "./hourly.js";
-import { SAMPLE_LIFETIME_MS } from "./ingest.js";
+import { SAMPLE_LIFETIME_MS, WRITE_DEADLINE_MS } from "./ingest.js";
+import { TRANSACTION_LIFETIME_MS } from "./create-missing.js";
 import { testSample } from "./test-sample.js";
 
 const T = Date.UTC(2026, 0, 10, 12);
 const HOUR = 3_600_000;
 const NO_RANDOM = () => 0;
+
+test("every sample is stored before the job reads past its expireAt", () => {
+  assert.ok(WRITE_DEADLINE_MS + TRANSACTION_LIFETIME_MS < WRITE_MARGIN_MS);
+});
 
 /** An [AggregationStore] in memory, ordering and filtering samples as the Firestore queries do. */
 function fakeStore() {

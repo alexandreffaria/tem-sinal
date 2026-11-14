@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { HOURLY_LIMIT, SAMPLE_LIFETIME_MS, type SampleStore, ingest } from "./ingest.js";
+import { HOURLY_LIMIT, SAMPLE_LIFETIME_MS, type SampleStore, WRITE_DEADLINE_MS, ingest } from "./ingest.js";
 import { INSTALL_ID, testSample } from "./test-sample.js";
 
-/** A [SampleStore] in memory, with create-only writes like Firestore's. */
-function fakeStore() {
+/**
+ * A [SampleStore] in memory, with create-only writes like Firestore's, that records each deadline
+ * it is given and refuses to write when [nowMs] is past it.
+ */
+function fakeStore(nowMs = 0) {
   const stored = new Map<string, unknown>();
+  const deadlines: number[] = [];
   const counts = new Map<string, number>();
   const store: SampleStore = {
     reserve: async (installId, uid, hourStartMs, count, limit) => {
@@ -15,19 +19,33 @@ function fakeStore() {
       for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + count);
       return true;
     },
-    create: async (samples) => {
+    create: async (samples, deadlineMs) => {
+      deadlines.push(deadlineMs);
+      if (nowMs > deadlineMs) throw new Error("the write deadline passed");
       for (const s of samples) {
         if (!stored.has(s.id)) stored.set(s.id, structuredClone(s));
       }
     },
   };
-  return { store, stored, counts };
+  return { store, stored, counts, deadlines };
 }
 
 const NOW = Date.UTC(2026, 0, 1, 10, 30);
 const UID = "test-user";
 const HOUR = `${INSTALL_ID}_${Date.UTC(2026, 0, 1, 10)}`;
 const USER_HOUR = `uid_${UID}_${Date.UTC(2026, 0, 1, 10)}`;
+
+test("the store is told to start writing within the write deadline", async () => {
+  const fake = fakeStore();
+  await ingest({ samples: [testSample()] }, UID, fake.store, NOW);
+  assert.deepEqual(fake.deadlines, [NOW + WRITE_DEADLINE_MS]);
+});
+
+test("a write attempted after the deadline is not made and the request fails", async () => {
+  const fake = fakeStore(NOW + WRITE_DEADLINE_MS + 1);
+  await assert.rejects(ingest({ samples: [testSample()] }, UID, fake.store, NOW), /deadline/);
+  assert.equal(fake.stored.size, 0);
+});
 
 test("a stored sample expires 90 days after the server received it", async () => {
   const fake = fakeStore();

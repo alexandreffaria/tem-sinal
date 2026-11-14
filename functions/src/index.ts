@@ -6,7 +6,7 @@ import { FieldPath, type QueryDocumentSnapshot, Timestamp, getFirestore } from "
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import type { CellState } from "./aggregate.js";
-import { createAll } from "./bulk-create.js";
+import { createMissing } from "./create-missing.js";
 import { type AggregationStore, type HourlyState, type Stored, runHourly } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
 
@@ -31,12 +31,10 @@ const firestoreStore: SampleStore = {
       }
       return true;
     }),
-  create: (samples) => {
+  create: (samples, deadlineMs) => {
     const collection = db.collection("signal_logs");
-    return createAll(
-      db.bulkWriter(),
-      samples.map((sample) => ({ ref: collection.doc(sample.id), data: sample })),
-    );
+    const docs = samples.map((sample) => ({ ref: collection.doc(sample.id), data: sample }));
+    return db.runTransaction((tx) => createMissing(tx, docs, deadlineMs));
   },
 };
 

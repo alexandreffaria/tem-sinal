@@ -9,9 +9,11 @@ export const SESSION_IDLE_MS = 3 * 3_600_000;
 
 /**
  * How long after a sample's receive time the job first reads it. An upload's samples all carry the
- * `expireAt` of the time its request started, and the request is cut off 30 seconds later, so by
- * then every sample with that `expireAt` or an earlier one is stored and the cursor never passes a
- * sample still being written. It also keeps a document written with a future `expireAt` from
+ * `expireAt` of the time its request started; `ingest` starts no write later than
+ * [WRITE_DEADLINE_MS] after that time, and each write is made in a Firestore transaction, which the
+ * server ends [TRANSACTION_LIFETIME_MS] after it began. Those two add up to less than this margin,
+ * so by then every sample with that `expireAt` or an earlier one is stored and the cursor never
+ * passes a sample still being written. It also keeps a document written with a future `expireAt` from
  * moving the cursor ahead of samples not yet read.
  */
 export const WRITE_MARGIN_MS = 10 * 60_000;
