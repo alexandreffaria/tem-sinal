@@ -64,6 +64,14 @@ fun <T> recordWhileRegistered(
     }
 }
 
+/**
+ * Runs [action] once [job] has completed, which for a cancelled job is after its body has stopped
+ * running; straight away when there is no job or it has already completed.
+ */
+fun afterCompletion(job: Job?, action: () -> Unit) {
+    if (job == null) action() else job.invokeOnCompletion { action() }
+}
+
 class LoggerService : Service() {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
@@ -98,6 +106,9 @@ class LoggerService : Service() {
      */
     private val displayInfoListeners = HashMap<Int, () -> Unit>()
     private var destroyed = false
+
+    /** The logging loop; null when [onCreate] stopped before starting it. */
+    private var loggingJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -174,7 +185,7 @@ class LoggerService : Service() {
 
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     private fun startLoggingLoop() {
-        coroutineScope.launch {
+        loggingJob = coroutineScope.launch {
             val installId = try {
                 installId(File(noBackupFilesDir, INSTALL_ID_FILE_NAME))
             } catch (e: IOException) {
@@ -396,7 +407,9 @@ class LoggerService : Service() {
             displayInfoListeners.clear()
         }
         LoggerState.serviceStopped()
-        UploadWorker.enqueue(this)
+        // A tick past its last suspension point still writes its sample after the cancel, so the
+        // stop upload waits for the loop to finish to include it.
+        afterCompletion(loggingJob) { UploadWorker.enqueue(applicationContext) }
         super.onDestroy()
     }
 }
