@@ -137,7 +137,6 @@ class MainActivity : ComponentActivity() {
                         LoggerButton(
                             isLogging = loggerState.isLogging,
                             onToggle = { toggleLogging() },
-                            onUpload = { UploadWorker.enqueue(this@MainActivity) },
                             sideBySide = sideBySide,
                             location = loggerState.location,
                             signalStrength = loggerState.signalStrength,
