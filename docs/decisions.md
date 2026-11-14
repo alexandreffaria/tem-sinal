@@ -48,6 +48,8 @@ owner decides again.
 
 The app is renamed Tem Sinal ("is there signal?"): its display name, the Play listing, the docs.
 The application id `dev.meuquerido.cellsignalmapper` stays, since Play can't change it.
+The app has never been on Play, so its listing takes the name when the owner creates the app in
+Play Console (issue #28); no listing has to be renamed.
 
 This replaces the in-place history rewrite (card `202611134udw`, issue #4) and the self-hosted
 runners (card `20261113tc78`, issue #95): a public repo must never run pull-request code on the
