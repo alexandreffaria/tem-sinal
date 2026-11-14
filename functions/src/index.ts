@@ -1,9 +1,13 @@
+import { isDeepStrictEqual } from "node:util";
 import { initializeApp } from "firebase-admin/app";
 import { getAppCheck } from "firebase-admin/app-check";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldPath, type QueryDocumentSnapshot, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import type { CellState } from "./aggregate.js";
 import { createAll } from "./bulk-create.js";
+import { type AggregationStore, type HourlyState, type Stored, runHourly } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
 
 initializeApp();
@@ -71,3 +75,47 @@ export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30 }, async (req
     }
   }
 });
+
+// The hourly job's state and the private cells, keyed by resolution 12 H3 cell. firestore.rules
+// gives clients no access to either; only the functions, through the Admin SDK, use them.
+const hourlyRef = db.collection("aggregation").doc("hourly");
+const privateCells = db.collection("private_cells");
+const signalLogs = db.collection("signal_logs");
+
+function stored(doc: QueryDocumentSnapshot): Stored {
+  const { expireAt, ...data } = doc.data();
+  return { id: doc.id, expireAtMs: (expireAt as Timestamp).toMillis(), data };
+}
+
+const hourlyState = (data: unknown) => (data as HourlyState | undefined) ?? { cursor: null, open: {} };
+
+const aggregationStore: AggregationStore = {
+  state: async () => hourlyState((await hourlyRef.get()).data()),
+  samplesAfter: async (after, notBeforeMs, notAfterMs, limit) => {
+    let query = signalLogs
+      .where("expireAt", ">", Timestamp.fromMillis(notBeforeMs))
+      .where("expireAt", "<=", Timestamp.fromMillis(notAfterMs))
+      .orderBy("expireAt")
+      .orderBy(FieldPath.documentId());
+    if (after && after.expireAtMs > notBeforeMs) query = query.startAfter(Timestamp.fromMillis(after.expireAtMs), after.id);
+    return (await query.limit(limit).get()).docs.map(stored);
+  },
+  sessionSamples: async (sessionId, fromMs) =>
+    (await signalLogs.where("sessionId", "==", sessionId).where("expireAt", ">=", Timestamp.fromMillis(fromMs)).get()).docs.map(stored),
+  commit: (expected, next, ids, update) =>
+    db.runTransaction(async (tx) => {
+      if (!isDeepStrictEqual(hourlyState((await tx.get(hourlyRef)).data()), expected)) return false;
+      const refs = ids.map((id) => privateCells.doc(id));
+      const docs = refs.length > 0 ? await tx.getAll(...refs) : [];
+      const cells: Record<string, CellState> = Object.fromEntries(docs.map((doc) => [doc.id, (doc.data() as CellState | undefined) ?? {}]));
+      update(cells);
+      for (const ref of refs) tx.set(ref, cells[ref.id] ?? {});
+      tx.set(hourlyRef, next);
+      return true;
+    }),
+};
+
+/** Adds the sessions that have ended to the private cells, every hour. */
+export const aggregateHourly = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 540 }, () =>
+  runHourly(aggregationStore, Date.now()),
+);
