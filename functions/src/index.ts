@@ -5,8 +5,9 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldPath, type QueryDocumentSnapshot, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import type { CellState } from "./aggregate.js";
+import type { CellState, PublicCell } from "./aggregate.js";
 import { createMissing } from "./create-missing.js";
+import { type DailyState, type PublishStore, runDaily } from "./daily.js";
 import { type AggregationStore, type HourlyState, type Stored, runHourly } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
 
@@ -116,4 +117,29 @@ const aggregationStore: AggregationStore = {
 /** Adds the sessions that have ended to the private cells, every hour. */
 export const aggregateHourly = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 540 }, () =>
   runHourly(aggregationStore, Date.now()),
+);
+
+// The daily job's state and the public cells, keyed by resolution 11 H3 cell. firestore.rules
+// gives clients no access to either; the map is served from tiles made from the public cells.
+const dailyRef = db.collection("aggregation").doc("daily");
+const publicCells = db.collection("public_cells");
+
+const dailyState = (data: unknown) => (data as DailyState | undefined) ?? { held: [], lastBatch: null, runMs: null };
+
+const publishStore: PublishStore = {
+  privateCells: async () => Object.fromEntries((await privateCells.get()).docs.map((doc) => [doc.id, doc.data() as CellState])),
+  state: async () => dailyState((await dailyRef.get()).data()),
+  publicCells: async () => Object.fromEntries((await publicCells.get()).docs.map((doc) => [doc.id, doc.data() as PublicCell])),
+  commit: (expected, next, changed) =>
+    db.runTransaction(async (tx) => {
+      if (!isDeepStrictEqual(dailyState((await tx.get(dailyRef)).data()), expected)) return false;
+      for (const [h3, cell] of Object.entries(changed)) tx.set(publicCells.doc(h3), cell);
+      tx.set(dailyRef, next);
+      return true;
+    }),
+};
+
+/** Publishes the private cells into the public cells once a day, at 00:30 UTC. */
+export const publishDaily = onSchedule({ schedule: "every day 00:30", timeZone: "Etc/UTC", timeoutSeconds: 540 }, () =>
+  runDaily(publishStore, Date.now()),
 );
