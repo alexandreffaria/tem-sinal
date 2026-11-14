@@ -1,0 +1,9 @@
+rules_version = '2';
+// Only the map tiles are public, and only to read; the functions write them through the Admin SDK.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /tiles/{path=**} {
+      allow read: if true;
+    }
+  }
+}

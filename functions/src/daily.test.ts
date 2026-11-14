@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isDeepStrictEqual } from "node:util";
-import { latLngToCell } from "h3-js";
-import { type CellState, type PublicCell, type StoredSample, CELL_RESOLUTION, accumulate, publish } from "./aggregate.js";
+import { cellToParent, latLngToCell } from "h3-js";
+import { type CellState, type PublicCell, type StoredSample, CELL_RESOLUTION, TILE_RESOLUTION, accumulate, publish } from "./aggregate.js";
 import { type DailyState, type PublishStore, runDaily } from "./daily.js";
 import { INSTALL_ID, testSample } from "./test-sample.js";
 
@@ -19,12 +19,19 @@ function sample(installId: string, timeMs: number): StoredSample {
   return { ...s, installId, timeMs, fix: { ...s.fix, ...PLACE } };
 }
 
-/** A [PublishStore] in memory that records each commit's state and public cells. */
+/**
+ * A [PublishStore] in memory that records each commit's state and public cells, and each tile file
+ * as the text that would be stored.
+ */
 function fakeStore(cells: Record<string, CellState>) {
   let state: DailyState = { held: [], lastBatch: null, runMs: null };
   const published: Record<string, PublicCell> = {};
   const commits: { next: DailyState; changed: Record<string, PublicCell> }[] = [];
+  const files = new Map<string, string>();
   const store: PublishStore = {
+    writeTile: async (tile, tileCells) => {
+      files.set(tile, JSON.stringify(tileCells));
+    },
     privateCells: async () => structuredClone(cells),
     state: async () => structuredClone(state),
     publicCells: async () => structuredClone(published),
@@ -36,8 +43,57 @@ function fakeStore(cells: Record<string, CellState>) {
       return true;
     },
   };
-  return { store, published, commits, state: () => state };
+  return { store, published, commits, files, state: () => state };
 }
+
+/** Private cells that publish one public cell, seen by two installs, on the first run. */
+function sharedCells(): Record<string, CellState> {
+  const cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(INSTALL_ID, JAN_10), sample(OTHER, JAN_10)]);
+  return cells;
+}
+
+test("each run writes every tile of all the public cells, holding only the fields of PublicCell", async () => {
+  const fake = fakeStore(sharedCells());
+  await runDaily(fake.store, JAN_10 + DAY);
+  const tile = cellToParent(h3, TILE_RESOLUTION);
+  assert.deepEqual([...fake.files.keys()], [tile]);
+  const cells = JSON.parse(fake.files.get(tile) ?? "") as Record<string, unknown>[];
+  assert.equal(cells.length, 1);
+  for (const cell of cells) {
+    assert.deepEqual(Object.keys(cell).sort(), ["carriers", "h3", "lastSeen"]);
+    assert.equal(cell.h3, h3);
+    assert.match(cell.lastSeen as string, /^\d{4}-\d{2}$/);
+    const carriers = Object.entries(cell.carriers as Record<string, Record<string, unknown>>);
+    assert.ok(carriers.length > 0);
+    for (const [plmn, carrier] of carriers) {
+      assert.match(plmn, /^\d{5,6}$/);
+      assert.deepEqual(Object.keys(carrier).sort(), ["best", "emergencyN", "median", "noServiceN", "serviceN", "tech"]);
+    }
+  }
+  for (const id of [INSTALL_ID, OTHER, testSample().sessionId as string]) assert.ok(!fake.files.get(tile)?.includes(id));
+
+  // A run that changes no public cell writes the same tiles again.
+  fake.files.clear();
+  await runDaily(fake.store, JAN_10 + 2 * DAY);
+  assert.deepEqual([...fake.files], [[tile, JSON.stringify([fake.published[h3]])]]);
+});
+
+test("a failed tile write doesn't stop the others, and the run then throws", async () => {
+  const cells = sharedCells();
+  const far = { ...sample(INSTALL_ID, JAN_10), fix: { ...sample(INSTALL_ID, JAN_10).fix, lat: -20.5, lon: -42.5 } };
+  accumulate(cells, [far, { ...far, installId: OTHER }]);
+  const fake = fakeStore(cells);
+  const failing = cellToParent(h3, TILE_RESOLUTION);
+  const flaky: PublishStore = {
+    ...fake.store,
+    writeTile: (tile, tileCells) => (tile === failing ? Promise.reject(new Error("unavailable")) : fake.store.writeTile(tile, tileCells)),
+  };
+  await assert.rejects(runDaily(flaky, JAN_10 + DAY), /1 of 2 tile writes failed/);
+  assert.equal(fake.commits.length, 1);
+  assert.equal(fake.files.size, 1);
+  assert.ok(!fake.files.has(failing));
+});
 
 test("each run writes held, lastBatch and the public cells that changed in one commit", async () => {
   const cells: Record<string, CellState> = {};
