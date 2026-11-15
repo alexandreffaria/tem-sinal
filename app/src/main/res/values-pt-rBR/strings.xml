@@ -54,6 +54,7 @@
     <string name="deleting">Apagando…</string>
     <string name="delete_recording_title">Apagar esta gravação?</string>
     <string name="delete_recording_text">Ela é apagada do nosso servidor agora e do mapa na próxima atualização diária. Não dá para desfazer.</string>
+    <string name="delete_after_stop">Gravando agora. Aperte PARAR para apagar.</string>
     <string name="delete_failed">Não deu para apagar. Tente de novo quando estiver com internet.</string>
 
     <string name="needs_precise_location">Para gravar, o app precisa da localização precisa. Permita a localização precisa para este app nas Configurações.</string>

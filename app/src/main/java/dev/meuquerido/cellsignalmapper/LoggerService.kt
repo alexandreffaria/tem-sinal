@@ -217,7 +217,7 @@ class LoggerService : Service() {
             return
         }
 
-        LoggerState.serviceStarted()
+        LoggerState.serviceStarted(sessionId)
         // A low-battery notice from an earlier session is stale once logging runs again.
         getSystemService(NotificationManager::class.java).cancel(LOW_BATTERY_NOTIFICATION_ID)
         // ACTION_BATTERY_CHANGED is sticky: the receiver gets the current level straight away, so

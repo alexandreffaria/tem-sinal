@@ -76,12 +76,27 @@ data class LoggerUiState(
     val pendingCount: Int = 0,
     /** Advice shown below the button, such as [R.string.indoor_hint]; null shows nothing. */
     val hint: UiText? = null,
+    /** The session id of the recording being logged; null while the service is stopped. */
+    val sessionId: String? = null,
 ) {
-    fun serviceStarted(): LoggerUiState =
-        copy(isLogging = true, location = null, signalStrength = null, service = emptyList())
+    fun serviceStarted(sessionId: String): LoggerUiState =
+        copy(isLogging = true, location = null, signalStrength = null, service = emptyList(), sessionId = sessionId)
 
     fun serviceStopped(): LoggerUiState =
-        copy(isLogging = false, location = null, signalStrength = null, service = emptyList(), hint = null)
+        copy(
+            isLogging = false,
+            location = null,
+            signalStrength = null,
+            service = emptyList(),
+            hint = null,
+            sessionId = null,
+        )
+
+    /**
+     * Whether the recording [sessionId] can be deleted: not while it is being logged, since the
+     * server would then refuse the rest of it while the phone kept logging it.
+     */
+    fun canDelete(sessionId: String): Boolean = sessionId != this.sessionId
 
     /**
      * Suggests logging on the trail, after a start that [startLooksIndoor]. Ignored after the
@@ -127,7 +142,7 @@ object LoggerState {
     private val mutableState = MutableStateFlow(LoggerUiState())
     val state: StateFlow<LoggerUiState> = mutableState.asStateFlow()
 
-    fun serviceStarted() = mutableState.update { it.serviceStarted() }
+    fun serviceStarted(sessionId: String) = mutableState.update { it.serviceStarted(sessionId) }
 
     fun serviceStopped() = mutableState.update { it.serviceStopped() }
 

@@ -36,7 +36,7 @@ class LoggerUiStateTest {
 
     @Test
     fun startingClearsReadingsAndMarksLogging() {
-        val state = LoggerUiState().serviceStarted()
+        val state = LoggerUiState().serviceStarted(SESSION)
 
         assertTrue(state.isLogging)
         assertNull(state.location)
@@ -48,7 +48,7 @@ class LoggerUiStateTest {
     @Test
     fun sampleShowsReadingsAndCountsUp() {
         val sims = listOf(sim(0, ServiceStatus.IN_SERVICE, rsrp = -85))
-        val state = LoggerUiState().serviceStarted()
+        val state = LoggerUiState().serviceStarted(SESSION)
             .withSample(-10.5, 20.25, sims, PingResult.SUCCESS)
             .withSample(-10.5, 20.25, sims, PingResult.SUCCESS)
 
@@ -64,7 +64,7 @@ class LoggerUiStateTest {
 
     @Test
     fun tickWithoutLocationOrSignalShowsUnknown() {
-        val state = LoggerUiState().serviceStarted()
+        val state = LoggerUiState().serviceStarted(SESSION)
             .withSample(null, null, emptyList(), PingResult.BAD)
 
         assertEquals(UiText(R.string.no_location_fix), state.location)
@@ -99,7 +99,7 @@ class LoggerUiStateTest {
     @Test
     fun stoppingClearsReadingsAndIgnoresLateSamples() {
         val sims = listOf(sim(0, ServiceStatus.IN_SERVICE, rsrp = -70))
-        val stopped = LoggerUiState().serviceStarted()
+        val stopped = LoggerUiState().serviceStarted(SESSION)
             .withSample(1.0, 2.0, sims, PingResult.SUCCESS)
             .serviceStopped()
 
@@ -112,7 +112,7 @@ class LoggerUiStateTest {
 
     @Test
     fun indoorHintShowsWhileLoggingAndClearsOnStop() {
-        val hinted = LoggerUiState().serviceStarted().withIndoorHint()
+        val hinted = LoggerUiState().serviceStarted(SESSION).withIndoorHint()
 
         assertEquals(UiText(R.string.indoor_hint), hinted.hint)
         assertNull(hinted.serviceStopped().hint)
@@ -120,8 +120,23 @@ class LoggerUiStateTest {
 
     @Test
     fun indoorHintAfterStopIsIgnored() {
-        val stopped = LoggerUiState().serviceStarted().serviceStopped()
+        val stopped = LoggerUiState().serviceStarted(SESSION).serviceStopped()
 
         assertEquals(stopped, stopped.withIndoorHint())
+    }
+
+    @Test
+    fun theRecordingBeingLoggedCanBeDeletedOnlyAfterStop() {
+        val logging = LoggerUiState().serviceStarted(SESSION)
+
+        assertFalse(logging.canDelete(SESSION))
+        assertTrue(logging.canDelete(OTHER_SESSION))
+        assertTrue(logging.serviceStopped().canDelete(SESSION))
+    }
+
+    private companion object {
+        // Made-up session ids.
+        const val SESSION = "3f6b2c9e-1a4d-4e8b-b7c2-9d0e5f1a6b83"
+        const val OTHER_SESSION = "c81d4e2a-6f3b-4a9c-8e7d-2b5f0a9c3d16"
     }
 }

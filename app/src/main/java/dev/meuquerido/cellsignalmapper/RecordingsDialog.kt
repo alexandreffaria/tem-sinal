@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,13 +32,14 @@ import kotlinx.coroutines.withContext
 
 /**
  * The recordings sent from this phone, newest first, each with its date, its sample count and a
- * Delete button that asks once before deleting it from the server. The list scrolls when the
- * window is too short for it.
+ * Delete button that asks once before deleting it from the server. The recording being logged
+ * can't be deleted until logging stops. The list scrolls when the window is too short for it.
  */
 @Composable
 fun RecordingsDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
+    val loggerState by LoggerState.state.collectAsState()
     var recordings by remember { mutableStateOf<List<Recording>?>(null) }
     var confirming by rememberSaveable { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf<String?>(null) }
@@ -50,6 +52,7 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     confirming = null
+                    if (!LoggerState.state.value.canDelete(sessionId)) return@TextButton
                     deleting = sessionId
                     failed = false
                     scope.launch {
@@ -90,10 +93,13 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(format.format(Date(recording.startMs)))
                             Text(pluralStringResource(R.plurals.recording_points, recording.samples, recording.samples))
+                            if (!loggerState.canDelete(recording.sessionId)) {
+                                Text(stringResource(R.string.delete_after_stop), style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                         TextButton(
                             onClick = { confirming = recording.sessionId },
-                            enabled = deleting == null,
+                            enabled = deleting == null && loggerState.canDelete(recording.sessionId),
                         ) {
                             Text(stringResource(if (deleting == recording.sessionId) R.string.deleting else R.string.delete))
                         }
