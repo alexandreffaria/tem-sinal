@@ -10,7 +10,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import type { CellState, PublicCell } from "./aggregate.js";
 import { createMissing } from "./create-missing.js";
-import { type DailyState, type PublishStore, runDaily } from "./daily.js";
+import { CELLS_PER_WRITE, type DailyState, type PublishStore, runDaily } from "./daily.js";
 import { type AggregationStore, type HourlyState, type Stored, runHourly } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
 
@@ -155,11 +155,12 @@ export const aggregateHourly = onSchedule({ schedule: "every 60 minutes", timeou
   return runHourly(aggregationStore, nowMs, nowMs + 5 * 60_000);
 });
 
-// The daily job's state and the public cells, keyed by resolution 11 H3 cell. firestore.rules
-// gives clients no access to either; the map is served from tiles made from the public cells, one
+// The daily job's state, the public cells keyed by resolution 11 H3 cell, and the public cells
+// each run staged, keyed by `<runMs>_<h3>`. firestore.rules gives clients no access to any; the map is served from tiles made from the public cells, one
 // file per tile at `tiles/<h3>.json` in the default bucket, which storage.rules lets anyone read.
 const dailyRef = db.collection("aggregation").doc("daily");
 const publicCells = db.collection("public_cells");
+const stagedCells = db.collection("staged_public_cells");
 const bucket = getStorage().bucket();
 
 const dailyState = (data: unknown) => (data as DailyState | undefined) ?? { held: [], lastBatch: null, runMs: null };
@@ -168,13 +169,36 @@ const publishStore: PublishStore = {
   privateCells: async () => Object.fromEntries((await privateCells.get()).docs.map((doc) => [doc.id, doc.data() as CellState])),
   state: async () => dailyState((await dailyRef.get()).data()),
   publicCells: async () => Object.fromEntries((await publicCells.get()).docs.map((doc) => [doc.id, doc.data() as PublicCell])),
-  commit: (expected, next, changed) =>
+  stage: async (runMs, cells) => {
+    const batch = db.batch();
+    for (const [h3, cell] of Object.entries(cells)) batch.set(stagedCells.doc(`${runMs}_${h3}`), { runMs, h3, cell });
+    await batch.commit();
+  },
+  staged: async (runMs) =>
+    Object.fromEntries(
+      (await stagedCells.where("runMs", "==", runMs).get()).docs.map((doc) => [doc.get("h3") as string, doc.get("cell") as PublicCell]),
+    ),
+  commit: (expected, next) =>
     db.runTransaction(async (tx) => {
       if (!isDeepStrictEqual(dailyState((await tx.get(dailyRef)).data()), expected)) return false;
-      for (const [h3, cell] of Object.entries(changed)) tx.set(publicCells.doc(h3), cell);
       tx.set(dailyRef, next);
       return true;
     }),
+  writePublic: (runMs, cells) =>
+    db.runTransaction(async (tx) => {
+      if (dailyState((await tx.get(dailyRef)).data()).runMs !== runMs) return false;
+      for (const [h3, cell] of Object.entries(cells)) tx.set(publicCells.doc(h3), cell);
+      return true;
+    }),
+  dropStaged: async (runMs) => {
+    for (;;) {
+      const { docs } = await stagedCells.where("runMs", "<=", runMs).limit(CELLS_PER_WRITE).get();
+      if (docs.length === 0) return;
+      const batch = db.batch();
+      for (const doc of docs) batch.delete(doc.ref);
+      await batch.commit();
+    }
+  },
   // The job rewrites every tile once a day, so a cache may keep a tile for up to a day.
   writeTile: (tile, cells) =>
     bucket.file(`tiles/${tile}.json`).save(JSON.stringify(cells), {
