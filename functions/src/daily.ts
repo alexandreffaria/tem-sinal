@@ -5,13 +5,16 @@ import { isDeepStrictEqual } from "node:util";
 import { type CellState, type PublicCell, publish, tiles } from "./aggregate.js";
 
 /**
- * What the job keeps between runs, private because [held] lists where one install was seen.
- * [held] and [lastBatch] are those returned by the last [publish]; [runMs] is the time of the run
- * that stored them, null before the first, so that two runs that compute the same [held] and
- * [lastBatch] still tell each other apart, and so that the cells staged under that run are known
- * to be public.
+ * What the job keeps between runs: [runMs] is the time of the run that stored it, null before the
+ * first, so that the cells staged under that run are known to be public.
  */
-export type DailyState = { held: string[]; lastBatch: string | null; runMs: number | null };
+export type DailyState = { runMs: number | null };
+
+/** The state in the stored document [data], which may be missing or hold fields other than `runMs`. */
+export function dailyState(data: unknown): DailyState {
+  const runMs = (data as { runMs?: unknown } | undefined)?.runMs;
+  return { runMs: typeof runMs === "number" ? runMs : null };
+}
 
 /**
  * Where the job reads the private cells and keeps its state and the public cells. A run stages the
@@ -68,21 +71,21 @@ async function applyStaged(store: PublishStore, runMs: number, cells: Record<str
 /**
  * One run at [nowMs]. It first finishes copying the stored run's staged cells into the public
  * cells. Then it runs [publish] over every private cell, stages the public cells that changed and
- * only then stores the returned `held` and `lastBatch`, so the state and the public cells never get
- * out of step: a run that stops before storing its state leaves both as they were, and one that
- * stops after has its cells copied by the next run. Throws, storing no state, when another run
- * changed the state since this one read it, or when [publish] throws. After copying its cells,
- * every tile of [tiles] over all the public cells is written, so a tile whose write failed is
- * written again by the next run; throws, after trying every tile, when any tile write failed.
+ * only then stores its state, so the state and the public cells never get out of step: a run that
+ * stops before storing its state leaves both as they were, and one that stops after has its cells
+ * copied by the next run. Throws, storing no state, when another run changed the state since this
+ * one read it. After copying its cells, every tile of [tiles] over all the public cells is written,
+ * so a tile whose write failed is written again by the next run; throws, after trying every tile,
+ * when any tile write failed.
  */
 export async function runDaily(store: PublishStore, nowMs: number): Promise<void> {
   const state = await store.state();
   if (state.runMs !== null) await applyStaged(store, state.runMs, await store.staged(state.runMs));
   const [cells, previous] = await Promise.all([store.privateCells(), store.publicCells()]);
-  const { held, published, lastBatch } = publish(cells, state.held, previous, state.lastBatch, nowMs);
+  const published = publish(cells);
   const changed = Object.fromEntries(Object.entries(published).filter(([h3, cell]) => !isDeepStrictEqual(cell, previous[h3])));
   for (const chunk of chunks(changed)) await store.stage(nowMs, chunk);
-  if (!(await store.commit(state, { held, lastBatch, runMs: nowMs }))) {
+  if (!(await store.commit(state, { runMs: nowMs }))) {
     throw new Error("runDaily: the state changed during the run; nothing was published");
   }
   await applyStaged(store, nowMs, changed);

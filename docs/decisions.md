@@ -5,6 +5,19 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-15: Every cell is published in the next daily run
+
+Every public cell is updated by the daily run after its samples are aggregated, however many
+installs back it; the monthly batch for cells backed by one install (card `20261113a7do`) is
+gone. Recording is opt-in and visibly on, the places logged are public or open to the public, and
+a remote crag needs full precision to be of use. In the owner's words: make it as hard as
+possible for people to *think* they can track someone, but don't hide where someone went.
+Unchanged: H3 resolution 11, the per-carrier statistics, the month last seen as the only time
+published, randomised trimming of each session's ends, raw samples never public, and the 90-day
+sample TTL.
+
+Decided by the owner in chat on 2026-11-15; no card.
+
 ## 2026-11-15: The map page is on GitHub Pages
 
 The public map page, `map/public/`, is published at
@@ -240,6 +253,8 @@ Firestore TTL policy can apply it with no deletion job. Issue #64.
 Card: `20261113bmjv` (choice: ninety-days).
 
 ## 2026-11-13: Single-install cells are published in monthly batches
+
+Replaced by: Every cell is published in the next daily run (2026-11-15).
 
 A cell backed by two or more installs is updated daily. A cell backed by one install, including
 that install's later visits, is published only in the batch on the 1st of the month, once its
