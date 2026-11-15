@@ -1,6 +1,7 @@
 // The public map: fetches the published tiles in view and colours each cell by the chosen
 // carrier's label. maplibregl and h3 are the globals of the scripts index.html loads.
 import { label } from "./label.js";
+import { tileLoader } from "./loader.js";
 
 const BUCKET = "cellsignalmapper-a9da1.firebasestorage.app";
 /** Served by `node serve.js` with the fixtures when the page runs on this machine. */
@@ -38,18 +39,7 @@ const colour = (name) => css.getPropertyValue(`--${name}`).trim();
 const select = document.getElementById("carrier");
 const status = document.getElementById("status");
 
-/** Each requested tile's cells; a tile with no published cells (404) is an empty array. */
-const tiles = new Map();
-/** Every fetched cell by H3 index. */
-const cells = new Map();
-/**
- * Each tile being fetched, with the fetch that stores its cells; a failed fetch leaves its tile out
- * of all three, so a later move retries it.
- */
-const fetching = new Map();
-/** The number of the latest load; only that load sets the status. */
-let latest = 0;
-
+/** A tile's published cells; a tile with no published cells (404) is an empty array. */
 async function fetchTile(tile) {
   const name = encodeURIComponent(`tiles/${tile}.json`);
   const response = await fetch(`${STORAGE}/v0/b/${BUCKET}/o/${name}?alt=media`);
@@ -57,6 +47,8 @@ async function fetchTile(tile) {
   if (!response.ok) throw new Error(`tile ${tile}: HTTP ${response.status}`);
   return response.json();
 }
+
+const { tiles, cells, fetching, load: loadTiles } = tileLoader(fetchTile);
 
 /** The tiles that cover the view: every tile that overlaps it, and no other. */
 function tilesInView(map) {
@@ -114,25 +106,16 @@ function explain(map, view) {
   setStatus("");
 }
 
-/** Fetches the view's tiles that aren't stored yet, waiting on fetches already running for it. */
+/** Loads the view's tiles and draws them; only the latest load sets the status. */
 async function load(map) {
-  const id = ++latest;
-  if (map.getZoom() < MIN_ZOOM) return explain(map, []);
-  const view = tilesInView(map);
-  const pending = view.filter((tile) => !tiles.has(tile));
-  if (pending.length > 0) setStatus("Carregando… · Loading…");
-  for (const tile of pending) {
-    if (fetching.has(tile)) continue;
-    fetching.set(tile, fetchTile(tile).then((published) => {
-      tiles.set(tile, published);
-      for (const cell of published) cells.set(cell.h3, cell);
-    }).finally(() => fetching.delete(tile)));
-  }
-  const results = await Promise.allSettled(pending.map((tile) => fetching.get(tile)));
+  const view = map.getZoom() < MIN_ZOOM ? [] : tilesInView(map);
+  const loaded = loadTiles(view);
+  if (view.some((tile) => fetching.has(tile))) setStatus("Carregando… · Loading…");
+  const { latest, failed } = await loaded;
   updateCarriers();
   render(map);
-  if (id !== latest) return;
-  if (results.some((r) => r.status === "rejected")) {
+  if (!latest) return;
+  if (failed) {
     setStatus("Não foi possível carregar os dados. Tente de novo mais tarde. · Couldn't load the data. Try again later.");
     return;
   }
