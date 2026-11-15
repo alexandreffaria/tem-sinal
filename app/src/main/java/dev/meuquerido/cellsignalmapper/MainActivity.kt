@@ -88,12 +88,29 @@ class MainActivity : ComponentActivity() {
         phoneStateGranted = isGranted(Manifest.permission.READ_PHONE_STATE),
     )
 
-    private fun toggleLogging() {
-        val serviceIntent = Intent(this, LoggerService::class.java)
+    private val firstLogWarningFile get() = java.io.File(filesDir, FIRST_LOG_WARNING_FILE_NAME)
+
+    /** Stops or starts logging; calls [showFirstLogWarning] instead when the first LOG is due. */
+    private fun toggleLogging(showFirstLogWarning: () -> Unit) {
         if (LoggerState.state.value.isLogging) {
-            stopService(serviceIntent)
+            stopService(Intent(this, LoggerService::class.java))
             return
         }
+        if (firstLogWarningDue(firstLogWarningFile)) {
+            showFirstLogWarning()
+            return
+        }
+        startLogging()
+    }
+
+    /** Answers the first-LOG warning; it never shows again either way. */
+    private fun answerFirstLogWarning(start: Boolean) {
+        markFirstLogWarningShown(firstLogWarningFile)
+        if (start) startLogging()
+    }
+
+    private fun startLogging() {
+        val serviceIntent = Intent(this, LoggerService::class.java)
         permissionMessage = currentDeniedMessage()
         if (permissionMessage == null) {
             startForegroundService(serviceIntent)
@@ -132,6 +149,20 @@ class MainActivity : ComponentActivity() {
                 if (showSharing) {
                     SharingDialog(onDismiss = { showSharing = false })
                 }
+                // Saved like showSharing, so a rotation keeps the first-LOG warning open.
+                var showFirstLogWarning by rememberSaveable { mutableStateOf(false) }
+                if (showFirstLogWarning) {
+                    FirstLogWarningDialog(
+                        onStart = {
+                            showFirstLogWarning = false
+                            answerFirstLogWarning(start = true)
+                        },
+                        onCancel = {
+                            showFirstLogWarning = false
+                            answerFirstLogWarning(start = false)
+                        }
+                    )
+                }
                 var showDataSent by rememberSaveable { mutableStateOf(false) }
                 if (showDataSent) {
                     // The dialog opens once the copy of the last sample is read.
@@ -163,7 +194,7 @@ class MainActivity : ComponentActivity() {
 
                         LoggerButton(
                             isLogging = loggerState.isLogging,
-                            onToggle = { toggleLogging() },
+                            onToggle = { toggleLogging { showFirstLogWarning = true } },
                             sideBySide = sideBySide,
                             location = loggerState.location,
                             signalStrength = loggerState.signalStrength,

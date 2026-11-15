@@ -40,7 +40,8 @@ a remote crag needs full precision to be of use. In the owner's words: make it a
 possible for people to *think* they can track someone, but don't hide where someone went.
 Unchanged: H3 resolution 11, the per-carrier statistics, the month last seen as the only time
 published, randomised trimming of each session's ends, raw samples never public, and the 90-day
-sample TTL.
+sample TTL. A cell changes the day after its samples arrive, so comparing the map day to day
+shows roughly the day of a visit.
 
 Decided by the owner in chat on 2026-11-15; no card.
 
