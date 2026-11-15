@@ -31,7 +31,7 @@ object SignalLogger {
         val line = gson.toJson(entry)
         appendLine(getLogFile(context), line)
         try {
-            getLastFile(context).writeText(line + "\n")
+            replaceFile(getLastFile(context), line + "\n")
         } catch (e: IOException) {
             Log.w("SignalLogger", "Could not keep a copy of the last sample", e)
         }

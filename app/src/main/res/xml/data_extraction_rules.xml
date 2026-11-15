@@ -15,6 +15,7 @@
         <exclude domain="file" path="signal_log.pending.json" />
         <exclude domain="file" path="signal_log.rejected.json" />
         <exclude domain="file" path="signal_log.last.json" />
+        <exclude domain="file" path="signal_log.last.json.tmp" />
         <exclude domain="database" path="." />
         <exclude domain="sharedpref" path="." />
     </cloud-backup>
@@ -23,6 +24,7 @@
         <exclude domain="file" path="signal_log.pending.json" />
         <exclude domain="file" path="signal_log.rejected.json" />
         <exclude domain="file" path="signal_log.last.json" />
+        <exclude domain="file" path="signal_log.last.json.tmp" />
         <exclude domain="database" path="." />
         <exclude domain="sharedpref" path="." />
     </device-transfer>
