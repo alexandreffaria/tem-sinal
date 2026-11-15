@@ -42,8 +42,13 @@ const status = document.getElementById("status");
 const tiles = new Map();
 /** Every fetched cell by H3 index. */
 const cells = new Map();
-/** The tiles being fetched; a failed fetch leaves its tile out of both, so a later move retries it. */
-const fetching = new Set();
+/**
+ * Each tile being fetched, with the fetch that stores its cells; a failed fetch leaves its tile out
+ * of all three, so a later move retries it.
+ */
+const fetching = new Map();
+/** The number of the latest load; only that load sets the status. */
+let latest = 0;
 
 async function fetchTile(tile) {
   const name = encodeURIComponent(`tiles/${tile}.json`);
@@ -100,6 +105,7 @@ function render(map) {
 /** Says why nothing shows, when nothing does. */
 function explain(map, view) {
   if (map.getZoom() < MIN_ZOOM) return setStatus("Aproxime o mapa para ver o sinal. · Zoom in to see the signal.");
+  if (view.some((tile) => fetching.has(tile))) return setStatus("Carregando… · Loading…");
   const here = view.flatMap((tile) => tiles.get(tile) ?? []);
   if (here.length === 0) return setStatus("Ainda não há medições aqui. · No readings here yet.");
   if (!here.some((cell) => cell.carriers[select.value])) {
@@ -108,27 +114,28 @@ function explain(map, view) {
   setStatus("");
 }
 
+/** Fetches the view's tiles that aren't stored yet, waiting on fetches already running for it. */
 async function load(map) {
+  const id = ++latest;
   if (map.getZoom() < MIN_ZOOM) return explain(map, []);
   const view = tilesInView(map);
-  const missing = view.filter((tile) => !tiles.has(tile) && !fetching.has(tile));
-  if (missing.length > 0) setStatus("Carregando… · Loading…");
-  const results = await Promise.allSettled(missing.map(async (tile) => {
-    fetching.add(tile);
-    try {
-      const published = await fetchTile(tile);
+  const pending = view.filter((tile) => !tiles.has(tile));
+  if (pending.length > 0) setStatus("Carregando… · Loading…");
+  for (const tile of pending) {
+    if (fetching.has(tile)) continue;
+    fetching.set(tile, fetchTile(tile).then((published) => {
       tiles.set(tile, published);
       for (const cell of published) cells.set(cell.h3, cell);
-    } finally {
-      fetching.delete(tile);
-    }
-  }));
+    }).finally(() => fetching.delete(tile)));
+  }
+  const results = await Promise.allSettled(pending.map((tile) => fetching.get(tile)));
+  updateCarriers();
+  render(map);
+  if (id !== latest) return;
   if (results.some((r) => r.status === "rejected")) {
     setStatus("Não foi possível carregar os dados. Tente de novo mais tarde. · Couldn't load the data. Try again later.");
     return;
   }
-  updateCarriers();
-  render(map);
   explain(map, view);
 }
 
