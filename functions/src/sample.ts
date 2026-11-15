@@ -33,7 +33,10 @@ const num = (min = -Infinity, max = Infinity) =>
 const oneOf = (...values: unknown[]) => check((v) => values.includes(v), `one of ${values.join(", ")}`);
 const text = (pattern: RegExp, name: string) => check((v) => typeof v === "string" && pattern.test(v), name);
 
-const uuid = text(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/, "a lowercase version 4 UUID");
+/** A lowercase version 4 UUID, the form of every id the app makes. */
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+const uuid = text(UUID, "a lowercase version 4 UUID");
 const plmn = text(/^\d{5,6}$/, "an MCC + MNC of 5 or 6 digits");
 const long = int(0, Number.MAX_SAFE_INTEGER);
 const absent: Rule = (v, path, errors) => {

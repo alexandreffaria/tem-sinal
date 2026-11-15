@@ -1,4 +1,5 @@
 // Aggregation of stored samples into the public map's cells (card 20261113a7do). Pure: no I/O.
+import { createHash } from "node:crypto";
 import { cellToParent, greatCircleDistance, latLngToCell } from "h3-js";
 
 /** The H3 resolution of a public map cell: edge about 29 m. */
@@ -88,6 +89,15 @@ export type Bucket = {
  * Install ids, exact times and private cell ids never leave it.
  */
 export type CellState = Record<string, Bucket>;
+
+/**
+ * The key under which one session's contribution to the private cells is kept: the SHA-256, in
+ * hex, of its install id and session id. It names neither, and only someone who holds both can
+ * compute it.
+ */
+export function sessionKey(installId: string, sessionId: string): string {
+  return createHash("sha256").update(`${installId}\n${sessionId}`).digest("hex");
+}
 
 /**
  * One carrier's figures in a public cell. `best` and `median` are the strongest and the lower
@@ -367,11 +377,12 @@ function toPublic(h3: string, cell: Pick<Bucket, "lastMs" | "carriers">): Public
 /**
  * The daily publication: a public cell for each parent of the private [cells], however many
  * installs back it, with the figures of every month of every private cell it is the parent of.
- * No input is changed.
+ * [cells] pairs each private cell's H3 cell with its state; an H3 cell comes once per session that
+ * reached it. No input is changed.
  */
-export function publish(cells: Record<string, CellState>): Record<string, PublicCell> {
+export function publish(cells: Iterable<readonly [h3: string, months: CellState]>): Record<string, PublicCell> {
   const parents: Record<string, Bucket[]> = {};
-  for (const [h3, months] of Object.entries(cells)) (parents[cellToParent(h3, CELL_RESOLUTION)] ??= []).push(...Object.values(months));
+  for (const [h3, months] of cells) (parents[cellToParent(h3, CELL_RESOLUTION)] ??= []).push(...Object.values(months));
   const published: Record<string, PublicCell> = {};
   for (const [h3, buckets] of Object.entries(parents)) {
     const all = merge(buckets);

@@ -29,7 +29,8 @@ export interface SampleStore {
    */
   reserve(installId: string, uid: string, hourStartMs: number, count: number, limit: number): Promise<boolean>;
   /**
-   * Stores each sample under its id; a sample whose id is already stored is left as it is. Rejects,
+   * Stores each sample under its id; a sample whose id is already stored is left as it is, and one
+   * of a deleted session (see [deleteSession]) is not stored. Rejects,
    * storing none, when the writes would start after [deadlineMs]; every write it makes is stored
    * before [deadlineMs] + [TRANSACTION_LIFETIME_MS].
    */
@@ -45,7 +46,8 @@ export interface Response {
  * Validates an upload body from the Firebase Auth user [uid], received at [nowMs], and stores its
  * valid samples, each with `expireAt` [SAMPLE_LIFETIME_MS] after [nowMs]. The uid is used only to
  * count uploads; it is never stored on a sample. A sample already stored counts as accepted and
- * keeps its first `expireAt`, so sending the same batch again is harmless. Rejects, so that the
+ * keeps its first `expireAt`, so sending the same batch again is harmless; one of a deleted session
+ * counts as accepted too, so the phone drops it, and is never stored. Rejects, so that the
  * request fails and the phone keeps the batch, when the store would start writing more than
  * [WRITE_DEADLINE_MS] after [nowMs].
  */

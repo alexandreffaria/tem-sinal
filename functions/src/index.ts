@@ -8,10 +8,11 @@ import { logger } from "firebase-functions";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import type { CellState, PublicCell } from "./aggregate.js";
+import { type CellState, type PublicCell, sessionKey } from "./aggregate.js";
 import { createMissing } from "./create-missing.js";
 import { CELLS_PER_WRITE, type PublishStore, dailyState, runDaily } from "./daily.js";
-import { type AggregationStore, type HourlyState, type Stored, runHourly } from "./hourly.js";
+import { type DeletionStore, deleteSession } from "./delete-session.js";
+import { type AggregationStore, type HourlyState, type Stored, runHourly, sessionCellOf } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
 
 // Every function runs as this account, which holds only what they use: Firestore through the
@@ -22,6 +23,13 @@ setGlobalOptions({ serviceAccount: "functions-runtime@cellsignalmapper-a9da1.iam
 
 initializeApp();
 const db = getFirestore();
+
+// The raw samples; the private cells, one per session and resolution 12 H3 cell, keyed by
+// `sessionCellId`; and the tombstones of deleted sessions, keyed by `sessionKey`, with no fields.
+// firestore.rules gives clients no access to any; only the functions, through the Admin SDK, use them.
+const signalLogs = db.collection("signal_logs");
+const privateCells = db.collection("session_cells");
+const deletedSessions = db.collection("deleted_sessions");
 
 /** How long a counter document is kept after its hour starts; a TTL policy on `expireAt` deletes it. */
 const COUNTER_LIFETIME_MS = 2 * 3_600_000;
@@ -42,8 +50,11 @@ const firestoreStore: SampleStore = {
       return true;
     }),
   create: (samples, deadlineMs) => {
-    const collection = db.collection("signal_logs");
-    const docs = samples.map((sample) => ({ ref: collection.doc(sample.id), data: sample }));
+    const docs = samples.map((sample) => ({
+      ref: signalLogs.doc(sample.id),
+      data: sample,
+      unless: deletedSessions.doc(sessionKey(sample.installId, sample.sessionId as string)),
+    }));
     return db.runTransaction((tx) => createMissing(tx, docs, deadlineMs));
   },
 };
@@ -74,13 +85,44 @@ async function verifiedUid(authorization: string | undefined): Promise<string | 
   }
 }
 
+/** How many documents one deletion batch removes. */
+const DELETES_PER_BATCH = 400;
+
+/** Deletes every document [query] matches, a batch at a time. */
+async function deleteAll(query: FirebaseFirestore.Query): Promise<void> {
+  for (;;) {
+    const { docs } = await query.limit(DELETES_PER_BATCH).get();
+    if (docs.length === 0) return;
+    const batch = db.batch();
+    for (const doc of docs) batch.delete(doc.ref);
+    await batch.commit();
+  }
+}
+
+const sessionSamples = (installId: string, sessionId: string) =>
+  signalLogs.where("sessionId", "==", sessionId).where("installId", "==", installId);
+
+const deletionStore: DeletionStore = {
+  stored: async (key, installId, sessionId) =>
+    (await deletedSessions.doc(key).get()).exists ||
+    !(await sessionSamples(installId, sessionId).limit(1).get()).empty ||
+    !(await privateCells.where("owner", "==", key).limit(1).get()).empty,
+  bury: async (key) => {
+    await deletedSessions.doc(key).set({});
+  },
+  deleteCells: (key) => deleteAll(privateCells.where("owner", "==", key)),
+  deleteSamples: (installId, sessionId) => deleteAll(sessionSamples(installId, sessionId)),
+};
+
 /**
- * `POST /v1/samples`: the function is named `v1` and serves the path `/samples`. At most 10
- * instances run and a request is cut off after 30 seconds, so a flood of requests with valid
- * tokens is bounded in cost.
+ * The function is named `v1` and serves `POST /samples`, an upload, and `POST /sessions/delete`,
+ * which deletes one session. Both need a valid Firebase Auth ID token, and log only whether the
+ * App Check token was valid. At most 10 instances run and a request is cut off after 30 seconds,
+ * so a flood of requests with valid tokens is bounded in cost.
  */
 export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30 }, async (req, res) => {
-  if (req.path !== "/samples") {
+  const route = ({ "/samples": "upload", "/sessions/delete": "delete" } as const)[req.path];
+  if (!route) {
     res.status(404).json({ error: "not found" });
   } else if (req.method !== "POST") {
     res.status(405).set("Allow", "POST").json({ error: "use POST" });
@@ -89,21 +131,24 @@ export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30 }, async (req
       verifiedUid(req.header("Authorization")),
       appCheckVerdict(req.header("X-Firebase-AppCheck")),
     ]);
-    logger.info("upload", { appCheck });
+    logger.info(route, { appCheck });
     if (uid === undefined) {
       res.status(401).json({ error: "missing or invalid ID token" });
-    } else {
+    } else if (route === "upload") {
       const { status, body } = await ingest(req.body, uid, firestoreStore, Date.now());
       res.status(status).json(body);
+    } else {
+      const response = await deleteSession(req.body, deletionStore);
+      if (response.status === 204) res.status(204).end();
+      else res.status(response.status).json(response.body);
     }
   }
 });
 
-// The hourly job's state and the private cells, keyed by resolution 12 H3 cell. firestore.rules
-// gives clients no access to either; only the functions, through the Admin SDK, use them.
-const hourlyRef = db.collection("aggregation").doc("hourly");
-const privateCells = db.collection("private_cells");
-const signalLogs = db.collection("signal_logs");
+// The hourly job's state. firestore.rules gives clients no access; only the functions, through
+// the Admin SDK, use it. A private cell is stored as `{owner, h3, months}`: its session's key, its
+// H3 cell and its state.
+const hourlyRef = db.collection("aggregation").doc("session_cells");
 
 function stored(doc: QueryDocumentSnapshot): Stored {
   const { expireAt, ...data } = doc.data();
@@ -137,10 +182,19 @@ const aggregationStore: AggregationStore = {
     db.runTransaction(async (tx) => {
       if (!isDeepStrictEqual(hourlyState((await tx.get(hourlyRef)).data()), expected)) return false;
       const refs = ids.map((id) => privateCells.doc(id));
-      const docs = refs.length > 0 ? await tx.getAll(...refs) : [];
-      const cells: Record<string, CellState> = Object.fromEntries(docs.map((doc) => [doc.id, (doc.data() as CellState | undefined) ?? {}]));
-      update(cells);
-      for (const ref of refs) tx.set(ref, cells[ref.id] ?? {});
+      const keys = [...new Set(ids.map((id) => sessionCellOf(id).key))];
+      const [docs, tombstones] = await Promise.all(
+        [refs, keys.map((key) => deletedSessions.doc(key))].map((all) => (all.length > 0 ? tx.getAll(...all) : Promise.resolve([]))),
+      );
+      const deleted = new Set((tombstones ?? []).filter((doc) => doc.exists).map((doc) => doc.id));
+      const cells: Record<string, CellState> = Object.fromEntries(
+        (docs ?? []).map((doc) => [doc.id, (doc.get("months") as CellState | undefined) ?? {}]),
+      );
+      update(cells, deleted);
+      for (const ref of refs) {
+        const { key, h3 } = sessionCellOf(ref.id);
+        if (!deleted.has(key)) tx.set(ref, { owner: key, h3, months: cells[ref.id] ?? {} });
+      }
       tx.set(hourlyRef, next);
       return true;
     }),
@@ -165,7 +219,8 @@ const stagedCells = db.collection("staged_public_cells");
 const bucket = getStorage().bucket();
 
 const publishStore: PublishStore = {
-  privateCells: async () => Object.fromEntries((await privateCells.get()).docs.map((doc) => [doc.id, doc.data() as CellState])),
+  privateCells: async () =>
+    (await privateCells.get()).docs.map((doc) => [doc.get("h3") as string, doc.get("months") as CellState]),
   state: async () => dailyState((await dailyRef.get()).data()),
   publicCells: async () => Object.fromEntries((await publicCells.get()).docs.map((doc) => [doc.id, doc.data() as PublicCell])),
   stage: async (runMs, cells) => {
@@ -175,7 +230,7 @@ const publishStore: PublishStore = {
   },
   staged: async (runMs) =>
     Object.fromEntries(
-      (await stagedCells.where("runMs", "==", runMs).get()).docs.map((doc) => [doc.get("h3") as string, doc.get("cell") as PublicCell]),
+      (await stagedCells.where("runMs", "==", runMs).get()).docs.map((doc) => [doc.get("h3") as string, doc.get("cell") as PublicCell | null]),
     ),
   commit: (expected, next) =>
     db.runTransaction(async (tx) => {
@@ -186,7 +241,10 @@ const publishStore: PublishStore = {
   writePublic: (runMs, cells) =>
     db.runTransaction(async (tx) => {
       if (dailyState((await tx.get(dailyRef)).data()).runMs !== runMs) return false;
-      for (const [h3, cell] of Object.entries(cells)) tx.set(publicCells.doc(h3), cell);
+      for (const [h3, cell] of Object.entries(cells)) {
+        if (cell) tx.set(publicCells.doc(h3), cell);
+        else tx.delete(publicCells.doc(h3));
+      }
       return true;
     }),
   dropStaged: async (runMs) => {

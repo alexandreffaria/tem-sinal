@@ -382,6 +382,14 @@ aggregation reads new samples by `expireAt` (it keeps an ascending index for tha
 one within hours of the end of its session, long before it expires. The aggregates are kept with
 no expiry; they are the public map.
 
+**Deletion.** `POST /v1/sessions/delete` with `{"installId": ..., "sessionId": ...}` deletes one
+session: its raw samples (those with both ids) and its private cells, which are kept per session
+(`session_cells`, keyed by the SHA-256 of the two ids) so they can go whole at any age, also after
+the raw samples expired. The next daily run publishes the map without it, deleting a public cell
+and emptying a tile it alone backed. A tombstone (`deleted_sessions`, the same hash, kept for
+good) stops the upload function storing, and the hourly job aggregating, any later sample of it.
+Only a phone holding the install id can delete; a wrong one deletes nothing.
+
 ## Public cells
 
 A public cell is `{"h3": "8b…", "carriers": {"72406": {...}}, "lastSeen": "2026-01"}`, keyed by
