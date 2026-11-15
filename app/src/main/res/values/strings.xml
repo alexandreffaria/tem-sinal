@@ -26,6 +26,9 @@
     <string name="service_unknown">Service unknown</string>
 
     <string name="indoor_hint">Looks like you\'re indoors. We suggest logging on the trail: it keeps where you live out of the data, and it measures the signal where people will need it.</string>
+    <string name="first_log_warning">Public heatmaps have revealed where people live. Start %1$s away from home.</string>
+    <string name="first_log_start">Start</string>
+    <string name="first_log_cancel">Cancel</string>
     <string name="dismiss">Dismiss</string>
 
     <string name="what_is_shared">What is shared?</string>
