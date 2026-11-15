@@ -80,16 +80,16 @@ fun afterCompletion(job: Job?, action: () -> Unit) {
     if (job == null) action() else job.invokeOnCompletion { action() }
 }
 
-/** The battery percentage at or below which logging stops by itself while the phone isn't charging. */
+/** The battery percentage at or below which logging stops by itself, charging or not. */
 const val LOW_BATTERY_STOP_PERCENT = 10
 
 /**
  * Whether logging stops to keep the battery for calls, from `ACTION_BATTERY_CHANGED`'s [level] out
- * of [scale] and whether the phone is [plugged] in. An unknown level (negative, or a scale of 0 or
+ * of [scale], whether or not the phone is charging. An unknown level (negative, or a scale of 0 or
  * less) never stops it.
  */
-fun stopsForLowBattery(level: Int, scale: Int, plugged: Boolean): Boolean =
-    !plugged && level >= 0 && scale > 0 && level * 100 <= LOW_BATTERY_STOP_PERCENT * scale
+fun stopsForLowBattery(level: Int, scale: Int): Boolean =
+    level >= 0 && scale > 0 && level * 100 <= LOW_BATTERY_STOP_PERCENT * scale
 
 class LoggerService : Service() {
 
@@ -170,7 +170,6 @@ class LoggerService : Service() {
                 Intent.ACTION_BATTERY_CHANGED -> if (!stoppedForLowBattery && stopsForLowBattery(
                         level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
                         scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1),
-                        plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0,
                     )
                 ) {
                     stoppedForLowBattery = true
@@ -219,6 +218,8 @@ class LoggerService : Service() {
         }
 
         LoggerState.serviceStarted()
+        // A low-battery notice from an earlier session is stale once logging runs again.
+        getSystemService(NotificationManager::class.java).cancel(LOW_BATTERY_NOTIFICATION_ID)
         // ACTION_BATTERY_CHANGED is sticky: the receiver gets the current level straight away, so
         // a start on a low battery stops at once.
         ContextCompat.registerReceiver(
