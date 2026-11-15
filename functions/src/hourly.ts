@@ -137,8 +137,10 @@ async function runPage(store: AggregationStore, nowMs: number, random: () => num
   }
   const last = read.at(-1);
   const cursor = last ? { expireAtMs: last.expireAtMs, id: last.id } : state.cursor;
-  // Every sample received up to this time, in expireAt terms, has been read.
-  const readUntilMs = read.length < READ_LIMIT ? untilMs : (cursor?.expireAtMs ?? 0);
+  // Every sample received up to this time, in expireAt terms, has been read. A page that stopped at
+  // its read limit may have left samples at the cursor's expireAt unread, so it counts as read only
+  // up to just before it.
+  const readUntilMs = read.length < READ_LIMIT ? untilMs : (cursor?.expireAtMs ?? 0) - 1;
 
   const trimmed: StoredSample[] = [];
   const ids = new Set<string>();
