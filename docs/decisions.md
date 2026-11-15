@@ -207,6 +207,8 @@ stays 2.
 
 ## 2026-11-13: Checks run on this machine, not on GitHub-hosted runners
 
+Replaced by: The code goes public in a new repo, as Tem Sinal (card `20261113b81p`).
+
 The account has no GitHub Actions minutes. `scripts/check.sh` runs every check; the author runs it
 before opening a pull request and the merging session runs it again on the latest commit. The
 `CI` workflow calls the same script, so moving the checks to the self-hosted runners in Docker on
@@ -265,6 +267,8 @@ read from `NetworkRegistrationInfo` because AOSP reports it as out of service. F
 Issue #11. How long the server keeps raw samples is card `20261113bmjv`.
 
 ## 2026-11-13: Scrub the leaked secrets from git history
+
+Replaced by: The code goes public in a new repo, as Tem Sinal (card `20261113b81p`).
 
 After the keys are rotated, rewrite history to remove the keystore files, the service-account key,
 the app bundle, the debug log and the hardcoded password, then force-push `main` once. Rewriting
