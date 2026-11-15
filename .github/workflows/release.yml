@@ -10,6 +10,7 @@ on:
       - 'docs/**'
       - '.claude/**'
       - 'functions/**'
+      - 'map/**'
       - 'firestore.rules'
       - 'firestore.indexes.json'
       - 'storage.rules'
