@@ -2,10 +2,12 @@ package dev.meuquerido.cellsignalmapper
 
 import com.google.gson.Gson
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 
 class RecordingsTest {
     @get:Rule
@@ -55,5 +57,26 @@ class RecordingsTest {
         assertEquals(empty, readRecordings(file, gson))
         file.writeText("{\"recordings\": [{\"startMs\": 1}]}")
         assertEquals(empty, readRecordings(file, gson))
+    }
+
+    @Test
+    fun recordingsTheServerListsAreAddedUnlessAlreadyListedOrDeleted() {
+        val third = "e6b1d3a8-2f4c-4d9e-a7b0-3c5e8f1d2a69"
+        val list = withDeleted(withSent(empty, sent(first, 1_000L, 5) + sent(third, 4_000L, 1)), third)
+        val listed = listOf(Recording(first, 900L, 3), Recording(second, 2_000L, 7), Recording(third, 4_001L, 1))
+
+        val merged = withListed(list, listed)
+
+        assertEquals(listOf(Recording(second, 2_000L, 7), Recording(first, 1_001L, 5)), newestFirst(merged))
+        assertEquals(merged, withListed(merged, listed))
+    }
+
+    @Test
+    fun theListFunctionsAnswerIsReadAndAFailedOneThrows() {
+        val body = "{\"sessions\": [{\"sessionId\": \"$first\", \"startMs\": 1000, \"samples\": 4}, {\"startMs\": 2}]}"
+        assertEquals(listOf(Recording(first, 1_000L, 4)), listedRecordings(200, body, gson))
+        for ((status, failed) in listOf(500 to body, 200 to "{}", 200 to "not json")) {
+            assertThrows(IOException::class.java) { listedRecordings(status, failed, gson) }
+        }
     }
 }

@@ -39,6 +39,35 @@ fun withSent(list: RecordingList, sent: List<Sample>): RecordingList {
 fun withDeleted(list: RecordingList, sessionId: String): RecordingList =
     RecordingList(list.recordings.filter { it.sessionId != sessionId }, (list.deleted + sessionId).distinct())
 
+/**
+ * [list] with each recording in [listed], which the server holds, added unless its session is
+ * already listed or was deleted; a listed recording keeps its own figures.
+ */
+fun withListed(list: RecordingList, listed: List<Recording>): RecordingList {
+    val known = list.recordings.map { it.sessionId }.toSet() + list.deleted
+    return list.copy(recordings = list.recordings + listed.filter { it.sessionId !in known }.distinctBy { it.sessionId })
+}
+
+/** The list function's answer: the recordings it holds raw samples of. */
+private data class ListAnswer(val sessions: List<Recording?>?)
+
+/**
+ * The recordings in the list function's answer, HTTP [status] and the response [body]. Throws
+ * [IOException] when the answer isn't a 2xx with a list. Gson leaves missing fields null despite
+ * the declared types, so entries without a session id are skipped.
+ */
+fun listedRecordings(status: Int, body: String, gson: Gson): List<Recording> {
+    if (status !in 200..299) throw IOException("List function answered HTTP $status")
+    val answer = try {
+        gson.fromJson(body, ListAnswer::class.java)
+    } catch (e: RuntimeException) {
+        null
+    }
+    val sessions = answer?.sessions ?: throw IOException("List function's answer has no list")
+    @Suppress("SENSELESS_COMPARISON")
+    return sessions.filterNotNull().filter { it.sessionId != null }
+}
+
 /** The recordings in [list], newest first. */
 fun newestFirst(list: RecordingList): List<Recording> = list.recordings.sortedByDescending { it.startMs }
 
@@ -70,6 +99,10 @@ object Recordings {
     /** Adds [sent] as [withSent] does. Throws [IOException] when the list can't be written. */
     @Synchronized
     fun addSent(context: Context, sent: List<Sample>) = update(context) { withSent(it, sent) }
+
+    /** Adds [listed] as [withListed] does. Throws [IOException] when the list can't be written. */
+    @Synchronized
+    fun addListed(context: Context, listed: List<Recording>) = update(context) { withListed(it, listed) }
 
     /** Removes [sessionId] as [withDeleted] does. Throws [IOException] when the list can't be written. */
     @Synchronized
