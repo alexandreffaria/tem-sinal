@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
         if (UploadOnOpen.firstInProcess()) UploadWorker.enqueue(this)
 
 
+        lifecycleScope.launch(Dispatchers.IO) { FirestoreCache.delete(applicationContext) }
         lifecycleScope.launch(Dispatchers.IO) { SignalLogger.publishPendingCount(applicationContext) }
 
 
