@@ -2,7 +2,7 @@
 # Every check a pull request must pass, run on the current checkout. CI runs this same script.
 # Usage: scripts/check.sh [base ref, default origin/main]
 #
-# Needs Node and npm on the PATH for functions/. Its checks run on any recent Node, so a Node
+# Needs Node and npm on the PATH for functions/ and map/. Its checks run on any recent Node, so a Node
 # other than the one functions/package.json deploys on is not an error.
 # Uses JAVA_HOME and ANDROID_HOME when set. Otherwise it uses, and installs on first run without
 # root, JDK 17 in ~/.local/share/jdks and the Android SDK in ~/Android/Sdk.
@@ -58,5 +58,7 @@ fi
 ./gradlew lintDebug testDebugUnitTest assembleDebug
 
 (cd functions && npm ci --engine-strict=false && npm run lint && npm run typecheck && npm test)
+
+(cd map && npm test)
 
 echo "scripts/check.sh passed on $(git rev-parse --short HEAD)"

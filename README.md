@@ -4,3 +4,15 @@ An Android app that crowdsources cell signal across Brazil, so anyone heading in
 can see where each carrier has signal before they go.
 
 Download the latest signed APK from [Releases](https://github.com/alexandreffaria/tem-sinal/releases/latest).
+
+## The map
+
+`map/public/` is the public map: a static page that reads the published cell files from the
+Storage bucket and labels each carrier in each cell (`map/public/label.js`). To try it with the
+made-up cells in `map/fixtures/tiles/`, run `npm start` in `map/` and open the link it prints;
+on `localhost` the page fetches tiles from that server instead of the bucket. `npm test` in
+`map/` tests the labelling rule.
+
+The background map is [OpenFreeMap](https://openfreemap.org/) (OpenStreetMap data): free, with
+no API key and no limit on map views, and commercial use allowed, as long as the attribution
+MapLibre shows stays.

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tem Sinal</title>
+  <meta name="description" content="Onde cada operadora tem sinal no Brasil, medido por quem usa o app Tem Sinal. Where each carrier has signal in Brazil.">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css"
+        integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK" crossorigin="anonymous">
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"
+          integrity="sha384-5+cfbwT0iiub6VsQAdn6yz16nr6sDiQoHx6tm4O8OVYXHYOxcffFmCJBL0dgdvGp" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/h3-js@4.5.0/dist/h3-js.umd.js"
+          integrity="sha384-btAksX4N/Qw1lEPyJQdtZC59TR3dvM7HgYngL8bCs7Dtysie9D3TiJ0GGFZBbXAy" crossorigin="anonymous"></script>
+  <script type="module" src="map.js"></script>
+  <style>
+    :root {
+      --signal: #2c7bb6;
+      --emergency: #fdae61;
+      --none: #b2182b;
+      --panel: rgba(255, 255, 255, 0.95);
+      --text: #1a1a1a;
+      --muted: #555;
+    }
+    html, body { margin: 0; height: 100%; }
+    body { font: 15px/1.35 system-ui, sans-serif; color: var(--text); background: #e8e8e8; }
+    #map { position: absolute; inset: 0; }
+    .panel {
+      position: absolute; top: 10px; left: 10px; max-width: calc(100% - 76px);
+      background: var(--panel); border-radius: 8px; padding: 8px 12px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    }
+    .panel h1 { font-size: 17px; margin: 0 0 6px; }
+    .panel label { display: block; font-size: 13px; color: var(--muted); }
+    .panel select { font: inherit; margin: 2px 0 8px; max-width: 100%; }
+    .legend { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+    .legend li { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+    .swatch { flex: none; width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.4); }
+    .en { color: var(--muted); }
+    #status:empty { display: none; }
+    #status {
+      position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
+      width: max-content; max-width: calc(100% - 32px); text-align: center;
+      background: var(--panel); border-radius: 8px; padding: 8px 12px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    }
+    .maplibregl-popup-content { font: 13px/1.35 system-ui, sans-serif; }
+    .maplibregl-popup-content table { border-collapse: collapse; }
+    .maplibregl-popup-content th, .maplibregl-popup-content td { padding: 3px 4px; vertical-align: top; }
+    .maplibregl-popup-content thead th { font-weight: normal; font-size: 12px; text-align: right; }
+    .maplibregl-popup-content thead th:first-child, .maplibregl-popup-content tbody th { text-align: left; }
+    .maplibregl-popup-content tbody th { font-weight: 600; }
+    .maplibregl-popup-content tbody th .en { font-weight: normal; font-size: 12px; }
+    .maplibregl-popup-content td { text-align: right; font-variant-numeric: tabular-nums; }
+    .maplibregl-popup-content .swatch { display: inline-block; width: 10px; height: 10px; vertical-align: baseline; }
+    .maplibregl-popup-content p { margin: 6px 0 0; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="panel">
+    <h1>Tem Sinal</h1>
+    <label for="carrier">Operadora <span class="en">· Carrier</span></label>
+    <select id="carrier" disabled><option>—</option></select>
+    <ul class="legend">
+      <li><span class="swatch" style="background: var(--signal)"></span><span>Sinal <span class="en">· Signal</span></span></li>
+      <li><span class="swatch" style="background: var(--emergency)"></span><span>Só chamadas de emergência <span class="en">· Emergency calls only</span></span></li>
+      <li><span class="swatch" style="background: var(--none)"></span><span>Sem sinal <span class="en">· No signal</span></span></li>
+    </ul>
+  </div>
+  <div id="status" role="status">Carregando… · Loading…</div>
+</body>
+</html>

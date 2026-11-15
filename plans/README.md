@@ -105,7 +105,7 @@ scripts/check.sh
 
 It fails a branch that adds a keystore, a service-account key, an app bundle, a log file or an
 `.env` file, then runs `./gradlew lintDebug testDebugUnitTest assembleDebug` and, in `functions/`,
-`npm ci && npm run lint && npm run typecheck && npm test`. It needs Node and npm on the `PATH`. The
+`npm ci && npm run lint && npm run typecheck && npm test`, and in `map/`, `npm test`. It needs Node and npm on the `PATH`. The
 first run installs JDK 17 and the Android SDK in your home folder (about 1 GB, no root); a full
 run takes a few minutes. Run one at a time: two Gradle builds at once slow this machine down.
 
@@ -172,7 +172,7 @@ and refuses force pushes and deletion. It doesn't bind the owner's account, whic
 and president's Sync act as, so `--admin` would get past it.
 
 **A merge to `main` publishes a release** (`.github/workflows/release.yml`, except for changes
-that only touch docs, plans, decision cards, `functions/` and the Firebase files): a GitHub Release tagged
+that only touch docs, plans, decision cards, `functions/`, `map/` and the Firebase files): a GitHub Release tagged
 `v<versionCode>` with the signed APK and AAB attached. Merge one pull request at a time and wait
 for its `Release` run (`gh run list --workflow release.yml --branch main`) before the next. If the
 release fails because of the change, fix forward or revert in a new pull request. A release that
