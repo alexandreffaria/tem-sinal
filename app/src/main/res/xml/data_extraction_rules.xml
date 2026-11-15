@@ -2,9 +2,9 @@
 <!--
    Backup and transfer rules for Android 12 and higher. They must exclude the same data as
    backup_rules.xml, which applies on Android 11 and lower.
-   The sample files and the database domain (where earlier versions of the app kept
-   Firestore's cache of the samples written to it) contain exact locations and times, so they go
-   neither to the cloud backup nor to a new phone.
+   The sample files contain exact locations and times, so they go neither to the cloud
+   backup nor to a new phone.
+   The app keeps no databases of its own; any there belong to libraries, so none is backed up.
    The app keeps none of its own state in shared preferences; everything there is Firebase's
    per-install state, including the signed-in anonymous user, so none of it is backed up or
    transferred. An app setting added to shared preferences would not be backed up either.
