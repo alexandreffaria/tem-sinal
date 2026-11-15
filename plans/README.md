@@ -105,7 +105,7 @@ scripts/check.sh
 
 It fails a branch that adds a keystore, a service-account key, an app bundle, a log file or an
 `.env` file, then runs `./gradlew lintDebug testDebugUnitTest assembleDebug` and, in `functions/`,
-`npm ci && npm run lint && npm run typecheck && npm test`, and in `map/`, `npm test`. It needs Node and npm on the `PATH`. The
+`npm ci && npm run lint && npm run typecheck && npm test`, and in `map/`, `npm ci && npm test`. It needs Node and npm on the `PATH`. The
 first run installs JDK 17 and the Android SDK in your home folder (about 1 GB, no root); a full
 run takes a few minutes. Run one at a time: two Gradle builds at once slow this machine down.
 
