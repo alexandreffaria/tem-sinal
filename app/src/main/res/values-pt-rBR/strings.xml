@@ -25,6 +25,9 @@
     <string name="service_unknown">Serviço desconhecido</string>
 
     <string name="indoor_hint">Parece que você está em um lugar fechado. Sugerimos gravar na trilha: assim o lugar onde você mora fica fora dos dados, e o sinal é medido onde as pessoas vão precisar dele.</string>
+    <string name="first_log_warning">Mapas de calor públicos já revelaram onde pessoas moram. Toque em %1$s longe de casa.</string>
+    <string name="first_log_start">Começar</string>
+    <string name="first_log_cancel">Cancelar</string>
     <string name="dismiss">Fechar</string>
 
     <string name="what_is_shared">O que é compartilhado?</string>
