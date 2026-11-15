@@ -1,6 +1,7 @@
 // The public map: fetches the published tiles in view and colours each cell by the chosen
 // carrier's label. maplibregl and h3 are the globals of the scripts index.html loads.
 import { label } from "./label.js";
+import { tilesInView } from "./tiles.js";
 import { tileLoader } from "./loader.js";
 
 const BUCKET = "cellsignalmapper-a9da1.firebasestorage.app";
@@ -9,8 +10,6 @@ const STORAGE = ["localhost", "127.0.0.1"].includes(location.hostname)
   ? location.origin
   : "https://firebasestorage.googleapis.com";
 
-/** The H3 resolution of a published tile file: TILE_RESOLUTION in functions/src/aggregate.ts. */
-const TILE_RESOLUTION = 5;
 /**
  * Below this zoom the view spans too many tiles to fetch, and the cells are too small to see. At
  * this zoom a 1920x1080 view overlaps about 55 tiles; at 9 it overlaps about 190.
@@ -50,15 +49,12 @@ async function fetchTile(tile) {
 
 const { tiles, cells, fetching, load: loadTiles } = tileLoader(fetchTile);
 
-/** The tiles that cover the view: every tile that overlaps it, and no other. */
-function tilesInView(map) {
+/** The tiles that cover the map's current view. */
+function viewTiles(map) {
   const b = map.getBounds();
-  const ring = [
-    [b.getWest(), b.getSouth()], [b.getEast(), b.getSouth()], [b.getEast(), b.getNorth()],
-    [b.getWest(), b.getNorth()], [b.getWest(), b.getSouth()],
-  ];
-  return h3.polygonToCellsExperimental(
-    [ring], TILE_RESOLUTION, h3.POLYGON_TO_CELLS_FLAGS.containmentOverlapping, true);
+  return tilesInView(h3, {
+    west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth(),
+  });
 }
 
 function setStatus(text) {
@@ -108,7 +104,7 @@ function explain(map, view) {
 
 /** Loads the view's tiles and draws them; only the latest load sets the status. */
 async function load(map) {
-  const view = map.getZoom() < MIN_ZOOM ? [] : tilesInView(map);
+  const view = map.getZoom() < MIN_ZOOM ? [] : viewTiles(map);
   const loaded = loadTiles(view);
   if (view.some((tile) => fetching.has(tile))) setStatus("Carregando… · Loading…");
   const { latest, failed } = await loaded;
@@ -188,7 +184,7 @@ map.on("load", () => {
   map.on("moveend", () => load(map));
   select.addEventListener("change", () => {
     render(map);
-    explain(map, map.getZoom() < MIN_ZOOM ? [] : tilesInView(map));
+    explain(map, map.getZoom() < MIN_ZOOM ? [] : viewTiles(map));
   });
   load(map);
 });

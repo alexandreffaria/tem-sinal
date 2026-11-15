@@ -5,5 +5,8 @@
   "scripts": {
     "start": "node serve.js",
     "test": "node --test"
+  },
+  "devDependencies": {
+    "h3-js": "4.5.0"
   }
 }

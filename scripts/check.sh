@@ -59,6 +59,6 @@ fi
 
 (cd functions && npm ci --engine-strict=false && npm run lint && npm run typecheck && npm test)
 
-(cd map && npm test)
+(cd map && npm ci && npm test)
 
 echo "scripts/check.sh passed on $(git rev-parse --short HEAD)"
