@@ -54,6 +54,7 @@
     <string name="deleting">Deleting…</string>
     <string name="delete_recording_title">Delete this recording?</string>
     <string name="delete_recording_text">It is deleted from our server now and from the map at the next daily update. This can\'t be undone.</string>
+    <string name="delete_after_stop">Being recorded now. Press STOP to delete it.</string>
     <string name="delete_failed">Couldn\'t delete. Try again when you\'re online.</string>
 
     <string name="needs_precise_location">Logging needs precise location. Allow precise location for this app in Settings.</string>
