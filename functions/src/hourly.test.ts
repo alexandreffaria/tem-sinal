@@ -81,6 +81,11 @@ function walk(sessionId: string, length: number, fromLat = -15.5, startMs = T - 
   });
 }
 
+/** [samples] moved onto a path back and forth along 2 km from [fromLat], so they cover well under [CELL_LIMIT] private cells. */
+function shuttle(samples: StoredSample[], fromLat = -15.5) {
+  return samples.map((s, i) => ({ ...s, fix: { ...s.fix, lat: fromLat + Math.abs((i % 400) - 200) * 0.00009 } }));
+}
+
 /** The private cells of [sessions], each trimmed by [TRIM_M.min] at both ends. */
 function expected(...sessions: StoredSample[][]): Record<string, CellState> {
   const cells: Record<string, CellState> = {};
@@ -124,7 +129,7 @@ test("samples of a session that arrive after it was aggregated are added on thei
 test("a session is not aggregated while a run that stopped at its read limit may have left some of it unread", async () => {
   const fake = fakeStore();
   const session = walk(randomUUID(), 600);
-  const other = walk(randomUUID(), READ_LIMIT - 300, -16.5);
+  const other = shuttle(walk(randomUUID(), READ_LIMIT - 300), -16.5);
   fake.receive(session.slice(0, 300), T);
   for (let i = 0; i < other.length; i += MAX_BATCH) fake.receive(other.slice(i, i + MAX_BATCH), T + 1 + i / MAX_BATCH);
   fake.receive(session.slice(300), T + HOUR);
@@ -198,8 +203,8 @@ test("ended sessions past the cell limit wait for the next run", async () => {
 
 test("a session too long to read whole is aggregated in parts, without holding up other sessions", async () => {
   const fake = fakeStore();
-  // Uploads of MAX_BATCH samples a minute apart; about one private cell a sample, far over CELL_LIMIT.
-  const huge = walk(randomUUID(), 2 * SESSION_READ_LIMIT);
+  // Uploads of MAX_BATCH samples a minute apart.
+  const huge = shuttle(walk(randomUUID(), 2 * SESSION_READ_LIMIT));
   for (let i = 0; i < huge.length; i += MAX_BATCH) fake.receive(huge.slice(i, i + MAX_BATCH), T + (i / MAX_BATCH) * 60_000);
   const other = walk(randomUUID(), 300, -16.5);
   fake.receive(other, T + HOUR);
@@ -215,6 +220,33 @@ test("a session too long to read whole is aggregated in parts, without holding u
   assert.ok(isDeepStrictEqual(fake.cells, expected(other, ...parts)));
   assert.deepEqual(fake.state().open, {});
   assert.equal(fake.state().cursor?.expireAtMs, T + HOUR + SAMPLE_LIFETIME_MS);
+});
+
+test("no page commits more than an upload's cells past the cell limit, and each sample counts once", async () => {
+  const fake = fakeStore();
+  // Uploads of MAX_BATCH samples a minute apart, 30 m apart, so each sample is in its own private cell.
+  const huge = walk(randomUUID(), SESSION_READ_LIMIT).map((s, i) => ({ ...s, fix: { ...s.fix, lat: -15.5 + i * 0.00027 } }));
+  for (let i = 0; i < huge.length; i += MAX_BATCH) fake.receive(huge.slice(i, i + MAX_BATCH), T + (i / MAX_BATCH) * 60_000);
+  const own: Record<string, CellState> = {};
+  accumulate(own, huge);
+  assert.equal(Object.keys(own).length, huge.length);
+  const written: number[] = [];
+  const store: AggregationStore = {
+    ...fake.store,
+    commit: (expected, next, ids, update) => {
+      written.push(ids.length);
+      return fake.store.commit(expected, next, ids, update);
+    },
+  };
+  for (let hours = SESSION_IDLE_MS / HOUR + 1; Object.keys(fake.state().open).length > 0 || written.length === 0; hours++) {
+    assert.ok(hours < 24);
+    await runHourly(store, T + WRITE_MARGIN_MS + hours * HOUR, Infinity, NO_RANDOM);
+  }
+  assert.ok(written.filter((n) => n > 0).length > 1);
+  for (const n of written) assert.ok(n <= CELL_LIMIT + MAX_BATCH, `${n} cells in one commit`);
+  // Only the trimmed ends of each part are missing, and no cell holds more than its one sample.
+  assert.ok(Object.keys(fake.cells).length > 0.9 * huge.length);
+  for (const [h3, cell] of Object.entries(fake.cells)) assert.deepEqual(cell, own[h3]);
 });
 
 test("more samples of one session than a run reads at one expireAt are skipped, not read again", async (t) => {
