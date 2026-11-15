@@ -7,7 +7,9 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.GnssStatus
 import android.location.Location
+import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -93,6 +95,25 @@ class LoggerService : Service() {
         }
     }
 
+    private lateinit var locationManager: LocationManager
+
+    /**
+     * The number of satellites the GNSS engine last reported as used in its fix; 0 while the
+     * engine is stopped. Written by [gnssStatusCallback], read by the logging loop.
+     */
+    @Volatile
+    private var satellitesUsed = 0
+
+    private val gnssStatusCallback = object : GnssStatus.Callback() {
+        override fun onSatelliteStatusChanged(status: GnssStatus) {
+            satellitesUsed = (0 until status.satelliteCount).count { status.usedInFix(it) }
+        }
+
+        override fun onStopped() {
+            satellitesUsed = 0
+        }
+    }
+
     /**
      * The latest `TelephonyDisplayInfo.getOverrideNetworkType()` per subscription id, written by
      * the listeners in [displayInfoListeners].
@@ -147,6 +168,8 @@ class LoggerService : Service() {
         LoggerState.serviceStarted()
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         startLocationUpdates()
+        locationManager = getSystemService(LocationManager::class.java)
+        locationManager.registerGnssStatusCallback(Executor(Runnable::run), gnssStatusCallback)
         startLoggingLoop()
     }
 
@@ -194,8 +217,8 @@ class LoggerService : Service() {
                 return@launch
             }
 
-            // The accuracy of each of the session's first ticks, for startLooksIndoor.
-            val startAccuracies = mutableListOf<Float?>()
+            // The session's first ticks, for startLooksIndoor.
+            val startTicks = mutableListOf<StartTick>()
             while (isActive) {
                 val tickStartMs = SystemClock.elapsedRealtime()
                 val location = latestLocation?.takeIf {
@@ -234,9 +257,12 @@ class LoggerService : Service() {
                 LoggerState.sample(location?.latitude, location?.longitude, sims, pingResult)
                 // Advice only: the hint is decided after the tick's sample was written and changes
                 // nothing that is logged.
-                if (startAccuracies.size < START_TICKS) {
-                    startAccuracies += location?.takeIf { it.hasAccuracy() }?.accuracy
-                    if (startLooksIndoor(startAccuracies)) LoggerState.indoorHint()
+                if (startTicks.size < START_TICKS) {
+                    startTicks += StartTick(
+                        accuracyM = location?.takeIf { it.hasAccuracy() }?.accuracy,
+                        satellitesUsed = satellitesUsed,
+                    )
+                    if (startLooksIndoor(startTicks)) LoggerState.indoorHint()
                 }
 
                 delay(delayUntilNextTickMs(tickStartMs, SystemClock.elapsedRealtime()))
@@ -399,6 +425,9 @@ class LoggerService : Service() {
     override fun onDestroy() {
         if (::locationClient.isInitialized) {
             locationClient.removeLocationUpdates(locationCallback)
+        }
+        if (::locationManager.isInitialized) {
+            locationManager.unregisterGnssStatusCallback(gnssStatusCallback)
         }
         coroutineScope.cancel()
         synchronized(displayInfoListeners) {
