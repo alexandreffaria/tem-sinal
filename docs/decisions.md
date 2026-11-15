@@ -5,6 +5,16 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-15: The map page is on GitHub Pages
+
+The public map page, `map/public/`, is published at
+<https://alexandreffaria.github.io/tem-sinal/> by the Pages workflow on each merge to `main` that
+changes it, not on Firebase Hosting. Pages is free for a public repo and needs no new Google
+permissions: the deploy service account gets no Hosting role and no Hosting site is created. The
+page still reads the published tiles from the Storage bucket.
+
+Card: `20261115uy0k` (choice: github-pages).
+
 ## 2026-11-14: The upload function checks App Check but doesn't require it
 
 The app gets an App Check token from the Play Integrity provider and sends it with each batch; the
