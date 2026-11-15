@@ -135,6 +135,23 @@ test("a session is not aggregated while a run that stopped at its read limit may
   assert.ok(isDeepStrictEqual(fake.cells, expected(session, other)));
 });
 
+test("a session with samples past a read-limit cursor at that cursor's expireAt is aggregated whole", async () => {
+  const fake = fakeStore();
+  const session = walk(randomUUID(), 600);
+  const other = walk(randomUUID(), READ_LIMIT - 300, -16.5);
+  fake.receive(session.slice(0, 300), T);
+  fake.receive(other, T + SESSION_IDLE_MS);
+  fake.receive(session.slice(300), T + SESSION_IDLE_MS);
+  // The session's later samples share the other upload's expireAt and come after it in read order.
+  for (const doc of fake.docs.slice(-300)) doc.id = `~${doc.id}`;
+  // A deadline already passed: the run reads one page, which stops at the other upload's last sample.
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS, 0, NO_RANDOM);
+  assert.deepEqual(fake.cells, {});
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS, Infinity, NO_RANDOM);
+  assert.ok(isDeepStrictEqual(fake.cells, expected(session, other)));
+  assert.deepEqual(fake.state().open, {});
+});
+
 test("a run reads a backlog of several read limits in pages, each committed on its own", async () => {
   const fake = fakeStore();
   const backlog = walk(randomUUID(), 3 * READ_LIMIT);
