@@ -22,7 +22,9 @@ on:
 permissions:
   contents: write
 
-# Releases run one at a time, in merge order, and none is cancelled.
+# Release runs never overlap. GitHub keeps at most one waiting run per group: a push that
+# arrives while one run is in progress and another is waiting cancels the waiting one, so that
+# merge gets no release. Merging one pull request at a time gives each merge its own release.
 concurrency:
   group: release
   cancel-in-progress: false
