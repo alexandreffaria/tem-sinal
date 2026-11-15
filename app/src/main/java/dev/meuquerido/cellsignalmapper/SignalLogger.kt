@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 
@@ -99,12 +100,13 @@ object SignalLogger {
 
     /**
      * Appends [line] to [log] on a line of its own, even when [log] ends with a line torn by a
-     * killed process. Never runs at the same time as [takePending].
+     * killed process or a power cut, and returns once the line is on storage. Never runs at the
+     * same time as [takePending].
      */
     @Synchronized
     fun appendLine(log: File, line: String) {
         val known = lineCounts.remove(log)
-        log.appendText(startOfLine(log) + line + "\n")
+        appendDurably(log, (startOfLine(log) + line + "\n").toByteArray())
         if (known != null) lineCounts[log] = known + line.lines().count { it.isNotBlank() }
     }
 
@@ -114,6 +116,17 @@ object SignalLogger {
         lines.forEach { appendLine(rejected, it) }
         lineCounts.remove(pending)
         if (pending.delete()) lineCounts[pending] = 0
+    }
+
+    /**
+     * Appends [bytes] to [file] and returns once they are on storage, so a power cut afterwards
+     * keeps them. A power cut during the call can leave a torn last line, which [parseLog] rejects.
+     */
+    private fun appendDurably(file: File, bytes: ByteArray) {
+        FileOutputStream(file, true).use {
+            it.write(bytes)
+            it.fd.sync()
+        }
     }
 
     /** A newline when [file] ends inside a line, so that what is written next starts its own line. */
@@ -138,7 +151,7 @@ object SignalLogger {
             if (!pending.exists()) {
                 check(log.renameTo(pending)) { "Could not rename the log to the pending file" }
             } else {
-                pending.appendBytes(startOfLine(pending).toByteArray() + log.readBytes())
+                appendDurably(pending, startOfLine(pending).toByteArray() + log.readBytes())
                 log.delete()
             }
         }

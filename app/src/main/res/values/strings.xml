@@ -47,4 +47,6 @@
     <string name="notification_title">Signal logging active</string>
     <string name="notification_text">Tracking location and signal strength</string>
     <string name="notification_channel">Logger Service</string>
+    <string name="low_battery_stop_title">Logging stopped: battery low</string>
+    <string name="low_battery_stop_text">Logging stopped to save battery for calls. Everything logged so far is kept on this phone and will be sent.</string>
 </resources>

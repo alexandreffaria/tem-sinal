@@ -58,4 +58,22 @@ class TornLineTest {
         assertEquals(listOf("not json", "{\"timestamp\":1}"), rejected.readLines())
         assertFalse(pending.exists())
     }
+
+    @Test
+    fun tornLastLineIsKeptAndEverySampleBeforeItIsUploaded() {
+        SignalLogger.appendLine(log, gson.toJson(sample("a")))
+        SignalLogger.appendLine(log, gson.toJson(sample("b")))
+        log.appendText(torn("c"))
+        val sent = mutableListOf<Sample>()
+
+        val uploaded = uploadPending(SignalLogger.takePending(log, pending)!!, rejected, gson) {
+            sent += it
+            emptySet()
+        }
+
+        assertEquals(listOf(sample("a"), sample("b")), sent)
+        assertEquals(1, uploaded.unparseable)
+        assertEquals(listOf(torn("c")), rejected.readLines())
+        assertFalse(pending.exists())
+    }
 }
