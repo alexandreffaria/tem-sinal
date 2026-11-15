@@ -12,6 +12,7 @@
     <exclude domain="file" path="signal_log.json" />
     <exclude domain="file" path="signal_log.pending.json" />
     <exclude domain="file" path="signal_log.rejected.json" />
+    <exclude domain="file" path="signal_log.last.json" />
     <exclude domain="database" path="." />
     <exclude domain="sharedpref" path="." />
 </full-backup-content>

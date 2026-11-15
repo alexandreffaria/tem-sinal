@@ -23,10 +23,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /**
- * The pending count, the LOG/STOP button, a dismissible [hint] below it, a link that calls
- * [onShowSharing], and the location and signal lines: stacked, or with the lines beside the button
- * when [sideBySide]. Either way the content scrolls when the
- * window is too short for it; when it fits, it stays centred because the scroll keeps the filled
+ * The pending count, the LOG/STOP button, a dismissible [hint] below it, links that call
+ * [onShowSharing] and [onShowDataSent], and the location and signal lines: stacked, or with the
+ * lines beside the button when [sideBySide]. Either way the content scrolls when the window is too
+ * short for it; when it fits, it stays centred because the scroll keeps the filled
  * height as its minimum.
  */
 @Composable
@@ -41,7 +41,8 @@ fun LoggerButton(
     pendingPoints: Int = 0,
     hint: UiText? = null,
     onDismissHint: () -> Unit = {},
-    onShowSharing: () -> Unit = {}
+    onShowSharing: () -> Unit = {},
+    onShowDataSent: () -> Unit = {}
 ) {
     val scrolling = modifier
         .fillMaxSize()
@@ -55,7 +56,8 @@ fun LoggerButton(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 LoggingControls(
-                    isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing
+                    isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing,
+                    onShowDataSent
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -69,7 +71,8 @@ fun LoggerButton(
             verticalArrangement = Arrangement.Center
         ) {
             LoggingControls(
-                isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing
+                isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing,
+                onShowDataSent
             )
             Spacer(modifier = Modifier.height(32.dp))
             SignalLines(location, signalStrength, service)
@@ -85,7 +88,8 @@ private fun LoggingControls(
     pendingPoints: Int,
     hint: UiText?,
     onDismissHint: () -> Unit,
-    onShowSharing: () -> Unit
+    onShowSharing: () -> Unit,
+    onShowDataSent: () -> Unit
 ) {
     Text(
         if (pendingPoints == 0) {
@@ -114,6 +118,9 @@ private fun LoggingControls(
     }
     TextButton(onClick = onShowSharing) {
         Text(stringResource(R.string.what_is_shared))
+    }
+    TextButton(onClick = onShowDataSent) {
+        Text(stringResource(R.string.see_data_sent))
     }
 }
 

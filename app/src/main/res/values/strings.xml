@@ -36,6 +36,10 @@
     <string name="sharing_personal">The samples themselves are not anonymous: the random app ID links one phone\'s samples, so under Brazil\'s data protection law (LGPD) they are personal data.</string>
     <string name="sharing_map">The public map, at alexandreffaria.github.io/tem-sinal, is anonymous. It shows only totals per small area (hexagons about 50 m across) and carrier: signal strength, network type, how often there was service, emergency calls only or no service, and the month last seen. No app ID, recording, exact time or exact point is published. A random 300 to 800 m or more is left out around where each recording starts and ends, and around where you stop before really setting off. An area seen by only one phone appears only in a monthly batch, so a lone visit shows as “some time that month”.</string>
 
+    <string name="see_data_sent">See the data sent</string>
+    <string name="data_sent_explained">This is exactly what leaves the phone for the most recent sample recorded here: the text the app sends to our server, with the app ID and recording ID. The app keeps a copy of this one sample on the phone to show it here. Samples on the server stay private; only totals per area are ever public.</string>
+    <string name="data_sent_none">No sample has been recorded on this phone yet. Press %1$s, and the next sample will show here.</string>
+
     <string name="needs_precise_location">Logging needs precise location. Allow precise location for this app in Settings.</string>
     <string name="needs_location">Logging needs location access. Allow location for this app in Settings.</string>
     <string name="needs_phone">Logging needs phone access to read your SIM. Allow Phone for this app in Settings.</string>

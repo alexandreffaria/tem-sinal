@@ -18,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import android.content.Intent
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Holds, for the life of the process, whether the app has scheduled its upload on open. */
@@ -129,6 +132,29 @@ class MainActivity : ComponentActivity() {
                 if (showSharing) {
                     SharingDialog(onDismiss = { showSharing = false })
                 }
+                var showDataSent by rememberSaveable { mutableStateOf(false) }
+                if (showDataSent) {
+                    // The dialog opens once the copy of the last sample is read.
+                    var loaded by remember { mutableStateOf(false) }
+                    var preview by remember { mutableStateOf<String?>(null) }
+                    LaunchedEffect(Unit) {
+                        preview = withContext(Dispatchers.IO) {
+                            SignalLogger.lastSample(applicationContext)
+                                ?.let { FirebaseUploader.preview(listOf(it)) }
+                        }
+                        loaded = true
+                    }
+                    if (loaded) {
+                        DataSentDialog(
+                            preview = preview,
+                            onDismiss = { showDataSent = false },
+                            onShowSharing = {
+                                showDataSent = false
+                                showSharing = true
+                            }
+                        )
+                    }
+                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val controls = @Composable { sideBySide: Boolean ->
                         permissionMessage?.let {
@@ -145,7 +171,8 @@ class MainActivity : ComponentActivity() {
                             pendingPoints = loggerState.pendingCount,
                             hint = loggerState.hint,
                             onDismissHint = { LoggerState.dismissHint() },
-                            onShowSharing = { showSharing = true }
+                            onShowSharing = { showSharing = true },
+                            onShowDataSent = { showDataSent = true }
                         )
                     }
                     val pingResult = loggerState.pingResult?.name ?: ""
