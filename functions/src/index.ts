@@ -156,8 +156,9 @@ export const aggregateHourly = onSchedule({ schedule: "every 60 minutes", timeou
 });
 
 // The daily job's state, the public cells keyed by resolution 11 H3 cell, and the public cells
-// each run staged, keyed by `<runMs>_<h3>`. firestore.rules gives clients no access to any; the map is served from tiles made from the public cells, one
-// file per tile at `tiles/<h3>.json` in the default bucket, which storage.rules lets anyone read.
+// each run staged, keyed by `<runMs>_<h3>`. firestore.rules gives clients no access to any; the
+// map is served from tiles made from the public cells, one file per tile at `tiles/<h3>.json` in
+// the default bucket, which storage.rules lets anyone read.
 const dailyRef = db.collection("aggregation").doc("daily");
 const publicCells = db.collection("public_cells");
 const stagedCells = db.collection("staged_public_cells");
