@@ -7,8 +7,10 @@ Download the latest signed APK from [Releases](https://github.com/alexandreffari
 
 ## The map
 
-`map/public/` is the public map: a static page that reads the published cell files from the
-Storage bucket and labels each carrier in each cell (`map/public/label.js`). To try it with the
+`map/public/` is the public map, at <https://alexandreffaria.github.io/tem-sinal/>: a static
+page that reads the published cell files from the Storage bucket and labels each carrier in each
+cell (`map/public/label.js`). The Pages workflow publishes it to GitHub Pages on each merge to
+`main` that changes `map/public/`. To try it with the
 made-up cells in `map/fixtures/tiles/`, run `npm start` in `map/` and open the link it prints;
 on `localhost` the page fetches tiles from that server instead of the bucket. `npm test` in
 `map/` tests the labelling rule.

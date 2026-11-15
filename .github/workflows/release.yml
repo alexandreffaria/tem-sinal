@@ -19,6 +19,7 @@ on:
       - '**.md'
       - '.github/workflows/ci.yml'
       - '.github/workflows/deploy.yml'
+      - '.github/workflows/pages.yml'
 
 permissions:
   contents: write
