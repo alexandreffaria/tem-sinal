@@ -5,6 +5,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldPath, type QueryDocumentSnapshot, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { logger } from "firebase-functions";
+import { setGlobalOptions } from "firebase-functions/v2";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import type { CellState, PublicCell } from "./aggregate.js";
@@ -12,6 +13,12 @@ import { createMissing } from "./create-missing.js";
 import { type DailyState, type PublishStore, runDaily } from "./daily.js";
 import { type AggregationStore, type HourlyState, type Stored, runHourly } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
+
+// Every function runs as this account, which holds only what they use: Firestore through the
+// Admin SDK, object writes in the default bucket, and log writes. Verifying App Check and Auth
+// tokens fetches public keys and needs no role. The scheduled functions' Cloud Scheduler jobs
+// call them with an OIDC token for this account, which is their only invoker.
+setGlobalOptions({ serviceAccount: "functions-runtime@cellsignalmapper-a9da1.iam.gserviceaccount.com" });
 
 initializeApp();
 const db = getFirestore();
