@@ -390,6 +390,12 @@ and emptying a tile it alone backed. A tombstone (`deleted_sessions`, the same h
 good) stops the upload function storing, and the hourly job aggregating, any later sample of it.
 Only a phone holding the install id can delete; a wrong one deletes nothing.
 
+**Listing.** `POST /v1/sessions/list` with `{"installId": ...}` answers
+`{"sessions": [{"sessionId": ..., "startMs": ..., "samples": ...}]}`: each session among the raw
+samples with that install id (at most 200), its earliest `timeMs` and its raw sample count, and no
+coordinates. A session whose raw samples have all expired isn't listed. Like deletion, it needs a
+Firebase Auth ID token, and a wrong install id lists nothing.
+
 ## Public cells
 
 A public cell is `{"h3": "8b…", "carriers": {"72406": {...}}, "lastSeen": "2026-01"}`, keyed by

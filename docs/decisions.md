@@ -44,9 +44,21 @@ recordings the server took samples of, newest first: the first sample's date and
 samples it took, and Delete, which asks once. The phone keeps that list in `recordings.json`
 (session id, first sample time, count; no coordinates), adding to it after each upload the server
 took whole. A deleted recording is dropped from the list and never listed again, even when samples
-of it still on the phone are sent later (the server drops those). The list starts with the update
-that added it, so recordings sent before then aren't listed; the dialog always says so, and
-reaching them is #147. The first-LOG warning and "What is shared?" don't mention it.
+of it still on the phone are sent later (the server drops those). The first-LOG warning and "What
+is shared?" don't mention it.
+
+**Recordings sent before the list existed.** `v1` also serves `POST /sessions/list`, body
+`{installId}`, authenticated as deletion is: for each session among the raw samples with that
+install id (at most 200), its id, first sample time and raw sample count, never coordinates. When
+"My recordings" opens, the app merges that into `recordings.json`, adding the sessions it doesn't
+list and hasn't deleted, so they stay listed after their raw samples expire. It reads only the raw
+samples: `session_cells` are keyed by a hash of both ids, so they can't be found by install id,
+and even an install hash stored beside them wouldn't give back the session id that Delete needs.
+So a session is reachable as long as it has raw samples, 90 days after it was sent, which covers
+every session `session_cells` was rebuilt from when it was introduced; a phone that doesn't open
+"My recordings" in that time can't delete what it sent before the list existed. *Why not "delete
+everything sent from this phone":* it reaches no more than the list (the same raw samples), and
+takes the choice of which recording away. Issue #147.
 
 Asked for by the owner in issue #127; the design is the agents' (plan on the issue); no card.
 

@@ -14,6 +14,7 @@ import { CELLS_PER_WRITE, type PublishStore, dailyState, runDaily } from "./dail
 import { type DeletionStore, deleteSession } from "./delete-session.js";
 import { type AggregationStore, type HourlyState, type Stored, runHourly, sessionCellOf } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
+import { type SessionListStore, listSessions } from "./list-sessions.js";
 
 // Every function runs as this account, which holds only what they use: Firestore through the
 // Admin SDK, object writes in the default bucket, and log writes. Verifying App Check and Auth
@@ -114,14 +115,30 @@ const deletionStore: DeletionStore = {
   deleteSamples: (installId, sessionId) => deleteAll(sessionSamples(installId, sessionId)),
 };
 
+const sessionListStore: SessionListStore = {
+  nextSession: async (installId, after) => {
+    let query = signalLogs.where("installId", "==", installId).orderBy("sessionId");
+    if (after !== null) query = query.startAfter(after);
+    const [doc] = (await query.select("sessionId").limit(1).get()).docs;
+    return doc ? (doc.get("sessionId") as string) : null;
+  },
+  summary: async (installId, sessionId) => {
+    const [count, first] = await Promise.all([
+      sessionSamples(installId, sessionId).count().get(),
+      sessionSamples(installId, sessionId).orderBy("timeMs").select("timeMs").limit(1).get(),
+    ]);
+    return { startMs: (first.docs[0]?.get("timeMs") as number | undefined) ?? 0, samples: count.data().count };
+  },
+};
+
 /**
- * The function is named `v1` and serves `POST /samples`, an upload, and `POST /sessions/delete`,
- * which deletes one session. Both need a valid Firebase Auth ID token, and log only whether the
- * App Check token was valid. At most 10 instances run and a request is cut off after 30 seconds,
+ * The function is named `v1` and serves `POST /samples`, an upload, `POST /sessions/list`, which
+ * lists an install's sessions, and `POST /sessions/delete`, which deletes one session. All need a
+ * valid Firebase Auth ID token, and log only whether the App Check token was valid. At most 10 instances run and a request is cut off after 30 seconds,
  * so a flood of requests with valid tokens is bounded in cost.
  */
 export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30 }, async (req, res) => {
-  const route = ({ "/samples": "upload", "/sessions/delete": "delete" } as const)[req.path];
+  const route = ({ "/samples": "upload", "/sessions/list": "list", "/sessions/delete": "delete" } as const)[req.path];
   if (!route) {
     res.status(404).json({ error: "not found" });
   } else if (req.method !== "POST") {
@@ -136,6 +153,9 @@ export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30 }, async (req
       res.status(401).json({ error: "missing or invalid ID token" });
     } else if (route === "upload") {
       const { status, body } = await ingest(req.body, uid, firestoreStore, Date.now());
+      res.status(status).json(body);
+    } else if (route === "list") {
+      const { status, body } = await listSessions(req.body, sessionListStore);
       res.status(status).json(body);
     } else {
       const response = await deleteSession(req.body, deletionStore);

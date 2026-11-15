@@ -7,6 +7,23 @@
         { "fieldPath": "sessionId", "order": "ASCENDING" },
         { "fieldPath": "expireAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "signal_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "installId", "order": "ASCENDING" },
+        { "fieldPath": "sessionId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "signal_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "installId", "order": "ASCENDING" },
+        { "fieldPath": "sessionId", "order": "ASCENDING" },
+        { "fieldPath": "timeMs", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
