@@ -32,6 +32,13 @@ export const STAYS = [
   { fixes: 120, radiusM: 200 },
 ] as const;
 
+/**
+ * How long, in ms, a rest at a session's end lasts before it is hidden: half an hour. It is longer
+ * than a stop to park, gear up and set off from a trailhead, which is kept, and shorter than an
+ * evening or a night at home, which is hidden.
+ */
+export const LONG_REST_MS = 30 * 60_000;
+
 /** How many distinct fixes outside the cut it takes for the phone to have left an end's resting places: five minutes at the app's 5 s interval. */
 export const DEPARTURE_FIXES = 60;
 
@@ -115,8 +122,10 @@ type Anchor = { fix: StoredSample["fix"]; radiusM: number };
  * Which of [samples], ordered from one end of a session inwards, lie beyond that end's cut. A
  * place the phone may rest at starts at each fix after a step longer than [REST_CUT_M] or faster
  * than [MAX_SPEED_MPS] (the fixes before it may be wrong and hide where the phone rested), and at
- * each stay of either kind in [STAYS]. The end's first fix starts none, so an end where the phone
- * was moving loses nothing. A place after a step cuts [REST_CUT_M] around each of the
+ * each stay of either kind in [STAYS] that is part of a rest of at least [LONG_REST_MS]: stays of
+ * one kind fewer than [ANCHOR_FIXES] fixes apart, timed from the first one's first fix to the last
+ * one's last. The end's first fix starts none, so an end where the phone was moving, or stopped
+ * for less than [LONG_REST_MS], loses nothing. A place after a step cuts [REST_CUT_M] around each of the
  * [ANCHOR_FIXES] fixes from where it starts. A stay of radius r cuts [REST_CUT_M] + s + r / 2
  * around its first fix, s being its fixes' largest distance from that fix, which covers
  * [REST_CUT_M] around every point within r / 2 of any of its fixes. The phone has left the end
@@ -163,6 +172,7 @@ function beyondEnd(samples: StoredSample[]): boolean[] {
   for (const stay of STAYS) {
     let next = 0;
     let marked = 0;
+    const found: ({ from: number; to: number } & Anchor)[] = [];
     fixes.forEach((first, i) => {
       if (i < next) return;
       let j = i + 1;
@@ -173,13 +183,21 @@ function beyondEnd(samples: StoredSample[]): boolean[] {
         spreadM = Math.max(spreadM, metres);
       }
       if (j - i < stay.fixes) return;
-      stays.push({ from: i, fix: first, radiusM: REST_CUT_M + spreadM + stay.radiusM / 2 });
+      found.push({ from: i, to: j, fix: first, radiusM: REST_CUT_M + spreadM + stay.radiusM / 2 });
       inStay.fill(true, i, j);
       next = j;
       j = Math.max(j, marked);
       for (let fix = fixes[j]; fix && metresApart(first, fix) <= spreadM + stay.radiusM; fix = fixes[++j]) inStay[j] = true;
       marked = j;
     });
+    // Stays of a kind fewer than ANCHOR_FIXES fixes apart are one rest, so a few wrong fixes that
+    // break a stay don't shorten it; a rest of at least LONG_REST_MS is a resting place.
+    for (let a = 0, b = 1; a < found.length; a = b++) {
+      while (b < found.length && (found[b]?.from ?? 0) - (found[b - 1]?.to ?? 0) < ANCHOR_FIXES) b++;
+      const fromMs = samples[found[a]?.from ?? 0]?.elapsedRealtimeMs ?? 0;
+      const toMs = samples[(found[b - 1]?.to ?? 0) - 1]?.elapsedRealtimeMs ?? 0;
+      if (Math.abs(toMs - fromMs) >= LONG_REST_MS) stays.push(...found.slice(a, b));
+    }
   }
   // Fixes in cubes of the unit sphere's space whose side is at least the widest cut's straight-line
   // length plus REFERENCE_M, so every fix within that many metres of a point lies in the point's

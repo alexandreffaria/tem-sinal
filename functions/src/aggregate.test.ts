@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { cellToChildren, cellToLatLng, cellToParent, getResolution, greatCircleDistance, latLngToCell } from "h3-js";
 import {
   type CellState, type PublicCell, type StoredSample,
-  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, PRIVATE_RESOLUTION, REST_CUT_M, STAYS, TILE_RESOLUTION, accumulate, distancesComputed, publish,
+  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, LONG_REST_MS, PRIVATE_RESOLUTION, REST_CUT_M, STAYS, TILE_RESOLUTION, accumulate, distancesComputed, publish,
   tiles, trimSession,
 } from "./aggregate.js";
 
@@ -65,13 +65,37 @@ test("a phone left still at either end loses those samples despite GPS jitter", 
   assertClear(trimSession([...still(PLACE.lat, 0), ...between, ...still(end, 390)]), [PLACE.lat, end], REST_CUT_M);
 });
 
+/** [minutes] still at PLACE, a fix every 5 s within about 10 m, then a walk north of 400 fixes 10 m apart. */
+const restThenWalk = (minutes: number) => {
+  const rest = Array.from({ length: minutes * 12 }, (_, i) => sample(ALICE, PLACE.lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + i * 5_000));
+  const away = Array.from({ length: 400 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.00009, JAN_10 + (rest.length + i) * 5_000));
+  return { rest, away };
+};
+
+test("a stop shorter than LONG_REST_MS at a session's start, such as at the car at a trailhead, keeps its samples", () => {
+  assert.equal(LONG_REST_MS, 30 * 60_000);
+  for (const minutes of [5, 25]) {
+    const { rest, away } = restThenWalk(minutes);
+    const session = [...rest, ...away];
+    assert.deepEqual(trimSession(session), session, `${minutes} min`);
+    // The same backwards in time: a walk to the stop, where the session ends.
+    const ending = session.map((s) => ({ ...s, elapsedRealtimeMs: -s.elapsedRealtimeMs }));
+    assert.deepEqual(trimSession(ending), ending.toReversed(), `${minutes} min at the end`);
+  }
+});
+
+test("a rest whose stays a wrong fix keeps breaking still counts as one long rest", () => {
+  // Forty-five minutes still, one fix in 150 lying 220 m off, so no stay lasts 13 minutes, then the walk.
+  const { rest, away } = restThenWalk(45);
+  const broken = rest.map((s, i) => (i % 150 === 149 ? { ...s, fix: { ...s.fix, lat: PLACE.lat + 220 / 111_195 } } : s));
+  assertClear(trimSession([...broken, ...away]), [PLACE.lat], REST_CUT_M);
+});
+
 test("a session that starts after a long rest hides the fixes around the rest and keeps the walk past them", () => {
-  // Ten minutes still at PLACE, a fix every 5 s within about 10 m, then a 4 km walk north.
-  const rest = Array.from({ length: 120 }, (_, i) => sample(ALICE, PLACE.lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + i * 5_000));
-  const away = Array.from({ length: 400 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.00009, JAN_10 + (120 + i) * 5_000));
+  const { rest, away } = restThenWalk(45);
   const kept = trimSession([...rest, ...away]);
   assertClear(kept, [PLACE.lat], REST_CUT_M);
-  // The ten-minute stay takes in the rest and the walk's first 200 m, so it cuts at most 300 + 200 + 100 m.
+  // The rest's indoor stay takes in the walk's first 200 m, so it cuts at most 300 + 200 + 100 m.
   const metres = (s: StoredSample) => greatCircleDistance([PLACE.lat, PLACE.lon], [s.fix.lat, s.fix.lon], "m");
   assert.deepEqual(kept, away.slice(away.length - kept.length));
   assert.ok(kept.includes(away.find((s) => metres(s) > REST_CUT_M + STAYS[1].radiusM * 1.5) as StoredSample));
@@ -117,10 +141,10 @@ test("wrong fixes at either end don't stand in for the place the phone rests", (
     ],
     // One fix 1.2 km off, then an hour still, at each end.
     single: session([[PLACE.lat - 0.011], hour(PLACE.lat), out, hour(end), [end + 0.011]]),
-    // Ten minutes 1 km off, a 100 s glide home in 50 m steps (36 km/h), ten minutes still, at each end.
+    // Ten minutes 1 km off, a 100 s glide home in 50 m steps (36 km/h), half an hour still, at each end.
     glide: session([
-      repeat(120, PLACE.lat - 0.009), glide(PLACE.lat - 0.009, PLACE.lat), hour(PLACE.lat).slice(0, 120), out,
-      hour(end).slice(0, 120), glide(end + 0.009, end).toReversed(), repeat(120, end + 0.009),
+      repeat(120, PLACE.lat - 0.009), glide(PLACE.lat - 0.009, PLACE.lat), hour(PLACE.lat).slice(0, 361), out,
+      hour(end).slice(0, 361), glide(end + 0.009, end).toReversed(), repeat(120, end + 0.009),
     ]),
   };
   for (const [name, s] of Object.entries(cases)) assertClear(trimSession(s), [PLACE.lat, end], REST_CUT_M, name);

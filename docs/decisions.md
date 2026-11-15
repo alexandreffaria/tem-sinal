@@ -5,29 +5,31 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
-## 2026-11-15: A session's ends are cut only where the phone rested
+## 2026-11-15: A session's ends are cut only where the phone rested a long time
 
 The trim of each session's ends is deterministic: the same samples always give the same result,
 and nothing is drawn at random. At each end it hides only the places the phone may have rested at
-before setting off: every **stay** (three minutes of fixes within 50 m, or ten minutes within
-200 m for a phone indoors), cut 300 m plus the stay's spread plus half its radius around its first
-fix (`REST_CUT_M = 300` in `functions/src/aggregate.ts`; 325 to 600 m in all), and the twelve fixes
-after a step too long or too fast to be real, cut 300 m around each, since the fixes before such a
-step may be wrong and hide where the phone was. A session that starts or ends while moving, such as
-one started on the road or on the trail, keeps its first and last samples. A stay counts as a
-destination and is kept once the phone has had 60 moving fixes (five minutes at one fix every 5 s)
-that are in no stay and outside the cut of every place after such a step. The rule withstands a
-wrong glide home shorter than about 410 s from 2 km away (600 s from 1 km). With a minute at the
-car and a 3-minute rest every 10 minutes of walking, a crag is kept from about 490 m from the car.
-300 m is the shortest cut the randomised trim (300 to 800 m) made; the owner chose to keep full data
-at trailheads over hiding a random length at every end. Each part of a session aggregated in parts
-(past `SESSION_READ_LIMIT` samples or `CELL_LIMIT` cells) is still cut at both ends like a whole
-session, since a real end's resting places can lie in a later part (#106); a part that ends while
-the phone is moving loses nothing there. Unchanged: the stays, `DEPARTURE_FIXES = 60`, H3
-resolution 11, the published fields, the month last seen and the 90-day sample TTL. Issue #125.
+for a long time before setting off: every **long rest**, a run of stays (three minutes of fixes
+within 50 m, or ten minutes within 200 m for a phone indoors) fewer than 12 fixes apart that lasts
+at least half an hour (`LONG_REST_MS` in `functions/src/aggregate.ts`), cut 300 m plus each stay's
+spread plus half its radius around its first fix (`REST_CUT_M = 300`; 325 to 600 m in all); and
+the twelve fixes after a step too long or too fast to be real, cut 300 m around each, since the
+fixes before such a step may be wrong and hide where the phone was. Half an hour is longer than a
+stop to park, gear up and set off from a trailhead, which is kept, and shorter than an evening or a
+night at home, which is hidden; the owner judged that people won't log at home, and the app warns
+on the first LOG not to. Stays a few wrong fixes break count as one rest, so they don't shorten it.
+A session that starts or ends while moving, or after a shorter stop, keeps its first and last
+samples. A stay counts as a destination and is kept once the phone has had 60 moving fixes (five
+minutes at one fix every 5 s) that are in no stay and outside the cut of every place after such a
+step. With a minute at the car and a 3-minute rest every 10 minutes of walking, a crag is kept from
+about 490 m from the car. Each part of a session aggregated in parts (past `SESSION_READ_LIMIT`
+samples or `CELL_LIMIT` cells) is still cut at both ends like a whole session, since a real end's
+resting places can lie in a later part (#106); a part that ends while the phone is moving loses
+nothing there. Unchanged: the stays, `DEPARTURE_FIXES = 60`, H3 resolution 11, the published
+fields, the month last seen and the 90-day sample TTL. Issue #125.
 
-Decided by the owner in chat on 2026-11-15 ("trim only where the phone sat still a long time");
-no card.
+Decided by the owner in chat on 2026-11-15 ("trim only where the phone sat still for a long time;
+overnight at home gets trimmed, parking at a trailhead and walking off doesn't"); no card.
 
 ## 2026-11-15: Every cell is published in the next daily run
 
@@ -144,7 +146,7 @@ Card: `20261113mua9` (choice: today).
 
 ## 2026-11-13: A stop counts as a destination after five minutes of travel
 
-Replaced by: A session's ends are cut only where the phone rested (2026-11-15).
+Replaced by: A session's ends are cut only where the phone rested a long time (2026-11-15).
 
 A stay at the start or end of a session is hidden as a possible home, with the trim around it,
 until the phone has had 60 moving fixes (five minutes at one fix every 5 s) that are in no stay and
