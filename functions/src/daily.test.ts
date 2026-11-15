@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { isDeepStrictEqual } from "node:util";
 import { cellToParent, latLngToCell } from "h3-js";
 import { type CellState, type PublicCell, type StoredSample, CELL_RESOLUTION, TILE_RESOLUTION, accumulate, publish } from "./aggregate.js";
-import { CELLS_PER_WRITE, type DailyState, type PublishStore, runDaily } from "./daily.js";
+import { CELLS_PER_WRITE, type DailyState, type PublishStore, dailyState, runDaily } from "./daily.js";
 import { INSTALL_ID, testSample } from "./test-sample.js";
 
 // A made-up second install and place.
@@ -20,12 +20,12 @@ function sample(installId: string, timeMs: number): StoredSample {
 }
 
 /**
- * A [PublishStore] in memory that refuses a write of more than [CELLS_PER_WRITE] cells, and records
+ * A [PublishStore] in memory, from the state [stored], that refuses a write of more than [CELLS_PER_WRITE] cells, and records
  * each commit's state with the public cells staged under it, and each tile file as the text that
  * would be stored.
  */
-function fakeStore(cells: Record<string, CellState>) {
-  let state: DailyState = { held: [], lastBatch: null, runMs: null };
+function fakeStore(cells: Record<string, CellState>, stored: DailyState = { runMs: null }) {
+  let state = stored;
   const published: Record<string, PublicCell> = {};
   const staged = new Map<number, Record<string, PublicCell>>();
   const commits: { next: DailyState; changed: Record<string, PublicCell> }[] = [];
@@ -123,23 +123,32 @@ test("a failed tile write doesn't stop the others, and the run then throws", asy
   assert.ok(!fake.files.has(failing));
 });
 
-test("each run stores held and lastBatch once the public cells that changed are staged under it", async () => {
+test("a cell seen by one install is public after the next run, and gains a later visit the run after", async () => {
   const cells: Record<string, CellState> = {};
   accumulate(cells, [sample(INSTALL_ID, JAN_10)]);
   const fake = fakeStore(cells);
-
   await runDaily(fake.store, JAN_10 + DAY);
-  assert.deepEqual(fake.commits, [{ next: { held: [h3], lastBatch: "2026-01", runMs: JAN_10 + DAY }, changed: {} }]);
-
-  accumulate(cells, [sample(OTHER, JAN_10 + DAY)]);
-  await runDaily(fake.store, Date.UTC(2026, 1, 1, 0, 30));
-  const expected = publish(cells, [h3], {}, "2026-01", Date.UTC(2026, 1, 1, 0, 30));
-  assert.deepEqual(fake.commits[1], {
-    next: { held: expected.held, lastBatch: "2026-02", runMs: Date.UTC(2026, 1, 1, 0, 30) },
-    changed: expected.published,
-  });
+  assert.deepEqual(fake.commits, [{ next: { runMs: JAN_10 + DAY }, changed: publish(cells) }]);
   assert.deepEqual(Object.keys(fake.published), [h3]);
-  assert.deepEqual(fake.state().held, []);
+
+  accumulate(cells, [sample(INSTALL_ID, Date.UTC(2026, 1, 3, 13))]);
+  await runDaily(fake.store, Date.UTC(2026, 1, 4, 0, 30));
+  assert.equal(fake.published[h3]?.lastSeen, "2026-02");
+  assert.deepEqual(fake.published, publish(cells));
+});
+
+test("a stored state that still lists held cells is read as its run, and the next run publishes them", async () => {
+  const runMs = JAN_10 + DAY;
+  assert.deepEqual(dailyState({ held: [h3], lastBatch: "2026-01", runMs }), { runMs });
+  assert.deepEqual(dailyState(undefined), { runMs: null });
+
+  const cells: Record<string, CellState> = {};
+  accumulate(cells, [sample(INSTALL_ID, JAN_10)]);
+  const fake = fakeStore(cells, dailyState({ held: [h3], lastBatch: "2026-01", runMs }));
+  await runDaily(fake.store, runMs + DAY);
+  assert.deepEqual(fake.state(), { runMs: runMs + DAY });
+  assert.deepEqual(Object.keys(fake.published), [h3]);
+  assert.deepEqual(JSON.parse(fake.files.get(cellToParent(h3, TILE_RESOLUTION)) ?? ""), [fake.published[h3]]);
 });
 
 test("a run that changes no public cell writes only the state", async () => {
@@ -149,7 +158,7 @@ test("a run that changes no public cell writes only the state", async () => {
   await runDaily(fake.store, JAN_10 + DAY);
   assert.deepEqual(Object.keys(fake.commits[0]?.changed ?? {}), [h3]);
   await runDaily(fake.store, JAN_10 + 2 * DAY);
-  assert.deepEqual(fake.commits[1], { next: { held: [], lastBatch: "2026-01", runMs: JAN_10 + 2 * DAY }, changed: {} });
+  assert.deepEqual(fake.commits[1], { next: { runMs: JAN_10 + 2 * DAY }, changed: {} });
 });
 
 test("a run writes nothing when another run stored its state first", async () => {
@@ -163,23 +172,14 @@ test("a run writes nothing when another run stored its state first", async () =>
   assert.equal(fake.commits.length, 1);
 });
 
-test("a run writes nothing when publish refuses the stored state", async () => {
-  const cells: Record<string, CellState> = {};
-  accumulate(cells, [sample(INSTALL_ID, JAN_10), sample(OTHER, JAN_10)]);
-  const fake = fakeStore(cells);
-  const late: PublishStore = { ...fake.store, state: async () => ({ held: [], lastBatch: "2026-03", runMs: 0 }) };
-  await assert.rejects(runDaily(late, JAN_10 + DAY));
-  assert.deepEqual(fake.commits, []);
-});
-
 test("a run that changes more cells than one write holds stores the state and public cells publish returned", async () => {
   const cells = manySharedCells(2 * CELLS_PER_WRITE + 1);
   const fake = fakeStore(cells);
   await runDaily(fake.store, JAN_10 + DAY);
-  const expected = publish(cells, [], {}, null, JAN_10 + DAY);
-  assert.equal(Object.keys(expected.published).length, 2 * CELLS_PER_WRITE + 1);
-  assert.deepEqual(fake.state(), { held: expected.held, lastBatch: expected.lastBatch, runMs: JAN_10 + DAY });
-  assert.deepEqual(fake.published, expected.published);
+  const expected = publish(cells);
+  assert.equal(Object.keys(expected).length, 2 * CELLS_PER_WRITE + 1);
+  assert.deepEqual(fake.state(), { runMs: JAN_10 + DAY });
+  assert.deepEqual(fake.published, expected);
   assert.equal(fake.staged.size, 0);
 });
 
@@ -192,12 +192,12 @@ test("a run that stops while staging leaves the state and public cells as they w
     stage: (runMs, written) => (++stages > 1 ? Promise.reject(new Error("unavailable")) : fake.store.stage(runMs, written)),
   };
   await assert.rejects(runDaily(failing, JAN_10 + DAY), /unavailable/);
-  assert.deepEqual(fake.state(), { held: [], lastBatch: null, runMs: null });
+  assert.deepEqual(fake.state(), { runMs: null });
   assert.deepEqual(fake.published, {});
   assert.equal(fake.files.size, 0);
 
   await runDaily(fake.store, JAN_10 + 2 * DAY);
-  assert.deepEqual(fake.published, publish(cells, [], {}, null, JAN_10 + 2 * DAY).published);
+  assert.deepEqual(fake.published, publish(cells));
   assert.equal(fake.staged.size, 0);
 });
 
@@ -210,14 +210,14 @@ test("the next run first finishes copying the cells of a run that stopped after 
     writePublic: (runMs, written) => (++writes > 1 ? Promise.reject(new Error("unavailable")) : fake.store.writePublic(runMs, written)),
   };
   await assert.rejects(runDaily(failing, JAN_10 + DAY), /unavailable/);
-  const expected = publish(cells, [], {}, null, JAN_10 + DAY);
-  assert.deepEqual(fake.state(), { held: expected.held, lastBatch: expected.lastBatch, runMs: JAN_10 + DAY });
+  const expected = publish(cells);
+  assert.deepEqual(fake.state(), { runMs: JAN_10 + DAY });
   assert.equal(Object.keys(fake.published).length, CELLS_PER_WRITE);
 
   let previous: Record<string, PublicCell> = {};
   const reading: PublishStore = { ...fake.store, publicCells: async () => (previous = await fake.store.publicCells()) };
   await runDaily(reading, JAN_10 + 2 * DAY);
-  assert.deepEqual(previous, expected.published);
+  assert.deepEqual(previous, expected);
   assert.deepEqual(fake.commits.at(-1)?.changed, {});
   assert.equal(fake.staged.size, 0);
 });

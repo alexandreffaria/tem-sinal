@@ -16,9 +16,6 @@ export const TILE_RESOLUTION = 5;
 /** The range of the length, in metres, cut from each end of a session; drawn per session and end. */
 export const TRIM_M = { min: 300, max: 800 } as const;
 
-/** How old a single-install cell's first sample must be before a monthly batch publishes it. */
-export const LONE_CELL_AGE_MS = 30 * 86_400_000;
-
 /** How many distinct fixes a resting place is drawn from: a minute at the app's 5 s interval. */
 export const ANCHOR_FIXES = 12;
 
@@ -307,13 +304,11 @@ export function accumulate(cells: Record<string, CellState>, samples: StoredSamp
   }
 }
 
-/** The buckets combined into one; null when there are none. */
-function merge(buckets: Bucket[]): Bucket | null {
+/** The carriers' statistics and the last sample time of the buckets combined; null when there are none. */
+function merge(buckets: Bucket[]): Pick<Bucket, "lastMs" | "carriers"> | null {
   if (buckets.length === 0) return null;
-  const merged: Bucket = { installs: [], firstMs: Infinity, lastMs: -Infinity, carriers: {} };
+  const merged: Pick<Bucket, "lastMs" | "carriers"> = { lastMs: -Infinity, carriers: {} };
   for (const b of buckets) {
-    merged.installs = [...new Set([...merged.installs, ...b.installs])];
-    merged.firstMs = Math.min(merged.firstMs, b.firstMs);
     merged.lastMs = Math.max(merged.lastMs, b.lastMs);
     for (const [plmn, s] of Object.entries(b.carriers)) {
       const m = (merged.carriers[plmn] ??= { strengths: {}, techs: {}, serviceN: 0, emergencyN: 0, noServiceN: 0 });
@@ -344,7 +339,7 @@ function commonTech(techs: Record<string, number>): string | null {
   return ranked[0]?.[0] ?? null;
 }
 
-function toPublic(h3: string, cell: Bucket): PublicCell {
+function toPublic(h3: string, cell: Pick<Bucket, "lastMs" | "carriers">): PublicCell {
   const carriers: Record<string, PublicCarrier> = {};
   for (const [plmn, s] of Object.entries(cell.carriers)) {
     carriers[plmn] = { ...bestAndMedian(s.strengths), tech: commonTech(s.techs), serviceN: s.serviceN, emergencyN: s.emergencyN, noServiceN: s.noServiceN };
@@ -353,62 +348,19 @@ function toPublic(h3: string, cell: Bucket): PublicCell {
 }
 
 /**
- * The daily publication at [nowMs]: the public cells from the previous publication, updated by
- * the rule of card 20261113a7do. A public cell's figures, installs and times are those of the
- * private [cells] it is the parent of, each install counted once however many of them it is in.
- * A cell backed by two or more installs that was never held is updated every day. Any other cell
- * changes only in the monthly batch (UTC): a single-install cell once its first sample is at least
- * [LONE_CELL_AGE_MS] old, a held cell that has since gained a second install at once. The batch
- * runs in the first publication of a month later than [lastBatch], the month ("YYYY-MM") of the
- * previous batch or null if there was none, so a missed run on the 1st doesn't delay it a month.
- * Run later than the 1st, it publishes only what a run at the end of the 1st would: a cell's age
- * is measured at that time at the latest, and a batch publishes such a cell from its samples
- * before the batch's month only, so a lone visit shows as no more than its month. [held] lists the
- * public cells held so far: seen by one install while unpublished, they wait for a batch. Returns
- * the public cells held now, sorted, the new public cells and the month of the latest batch; no
- * input is changed. Throws, publishing nothing, when [lastBatch] doesn't fit the state: null while
- * [previous] holds cells (every publication runs a batch when there was none, so a second batch
- * would run in its month), or a month later than [nowMs]'s (no batch would run until after it).
+ * The daily publication: a public cell for each parent of the private [cells], however many
+ * installs back it, with the figures of every month of every private cell it is the parent of.
+ * No input is changed.
  */
-export function publish(
-  cells: Record<string, CellState>,
-  held: string[],
-  previous: Record<string, PublicCell>,
-  lastBatch: string | null,
-  nowMs: number,
-): { held: string[]; published: Record<string, PublicCell>; lastBatch: string | null } {
-  const month = monthOf(nowMs);
-  if (lastBatch === null && Object.keys(previous).length > 0) {
-    throw new Error("publish: no previous batch, but public cells exist");
+export function publish(cells: Record<string, CellState>): Record<string, PublicCell> {
+  const parents: Record<string, Bucket[]> = {};
+  for (const [h3, months] of Object.entries(cells)) (parents[cellToParent(h3, CELL_RESOLUTION)] ??= []).push(...Object.values(months));
+  const published: Record<string, PublicCell> = {};
+  for (const [h3, buckets] of Object.entries(parents)) {
+    const all = merge(buckets);
+    if (all) published[h3] = toPublic(h3, all);
   }
-  if (lastBatch !== null && lastBatch > month) {
-    throw new Error(`publish: previous batch ${lastBatch} is later than ${month}`);
-  }
-  const batch = lastBatch === null || month > lastBatch;
-  const now = new Date(nowMs);
-  const ageAtMs = Math.min(nowMs, Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 2) - 1);
-  const wasHeld = new Set(held);
-  const parents: Record<string, [string, Bucket][]> = {};
-  for (const [h3, months] of Object.entries(cells)) (parents[cellToParent(h3, CELL_RESOLUTION)] ??= []).push(...Object.entries(months));
-  const nextHeld: string[] = [];
-  const published: Record<string, PublicCell> = { ...previous };
-  for (const [h3, months] of Object.entries(parents)) {
-    const all = merge(months.map(([, b]) => b));
-    if (!all) continue;
-    const shared = all.installs.length >= 2;
-    let waits = wasHeld.has(h3) || (!shared && !previous[h3]);
-    if (shared && !waits) {
-      published[h3] = toPublic(h3, all);
-    } else if (batch) {
-      const before = merge(months.filter(([m]) => m < month).map(([, b]) => b));
-      if (before && (shared || ageAtMs - before.firstMs >= LONE_CELL_AGE_MS)) {
-        published[h3] = toPublic(h3, before);
-        waits = false;
-      }
-    }
-    if (waits) nextHeld.push(h3);
-  }
-  return { held: nextHeld.sort(), published, lastBatch: batch ? month : lastBatch };
+  return published;
 }
 
 /** Public cells grouped by the H3 region tile that holds them, one file per tile. */
