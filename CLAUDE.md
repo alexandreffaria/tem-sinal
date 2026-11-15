@@ -39,6 +39,8 @@ pull request numbers from before the move (in commits, docs and cards) refer to 
 ## Checks
 
 The `CI` workflow runs `scripts/check.sh` on every pull request; a green `CI` run on the latest
-commit is the checks passing, and `main` can't take a merge without it. Run `scripts/check.sh` on
+commit is the checks passing. Branch protection on `main` requires it, but doesn't bind the
+owner's account, which sessions act as, so it holds only because no session ever merges with
+`--admin`. Run `scripts/check.sh` on
 this machine before opening the pull request and before each push (it needs Node and npm, and
 installs JDK 17 and the Android SDK on first use).
