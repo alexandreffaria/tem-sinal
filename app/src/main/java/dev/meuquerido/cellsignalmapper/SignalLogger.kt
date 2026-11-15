@@ -13,6 +13,7 @@ object SignalLogger {
     private const val LOG_FILE_NAME = "signal_log.json"
     private const val PENDING_FILE_NAME = "signal_log.pending.json"
     private const val REJECTED_FILE_NAME = "signal_log.rejected.json"
+    private const val LAST_FILE_NAME = "signal_log.last.json"
 
     /**
      * The number of non-blank lines in each file whose count is known. Every change to a file here
@@ -21,11 +22,32 @@ object SignalLogger {
      */
     private val lineCounts = mutableMapOf<File, Int>()
 
-    /** Appends [entry] to the log and publishes the pending count. Not for the main thread. */
+    /**
+     * Appends [entry] to the log, replaces the copy in [getLastFile] with it, and publishes the
+     * pending count. A failure to write the copy leaves the logged sample as it is. Not for the
+     * main thread.
+     */
     fun logEntry(context: Context, entry: Sample) {
-        appendLine(getLogFile(context), gson.toJson(entry))
+        val line = gson.toJson(entry)
+        appendLine(getLogFile(context), line)
+        try {
+            getLastFile(context).writeText(line + "\n")
+        } catch (e: IOException) {
+            Log.w("SignalLogger", "Could not keep a copy of the last sample", e)
+        }
         publishPendingCount(context)
     }
+
+    /**
+     * The most recently logged sample, or null when none was logged or its copy can't be read.
+     * Reads a file: not for the main thread.
+     */
+    fun lastSample(context: Context): Sample? =
+        try {
+            parseLog(getLastFile(context).readLines(), gson).samples.lastOrNull()
+        } catch (e: IOException) {
+            null
+        }
 
     /**
      * Publishes to [LoggerState] the number of samples not uploaded yet. Counting and publishing
@@ -65,6 +87,12 @@ object SignalLogger {
     fun getLogFile(context: Context): File = File(context.filesDir, LOG_FILE_NAME)
 
     fun getPendingFile(context: Context): File = File(context.filesDir, PENDING_FILE_NAME)
+
+    /**
+     * A copy of the most recently logged sample, kept after it is uploaded so the app can show what
+     * it sends; never uploaded itself.
+     */
+    fun getLastFile(context: Context): File = File(context.filesDir, LAST_FILE_NAME)
 
     /** Lines that are not a sample; never uploaded and never deleted by an upload. */
     fun getRejectedFile(context: Context): File = File(context.filesDir, REJECTED_FILE_NAME)

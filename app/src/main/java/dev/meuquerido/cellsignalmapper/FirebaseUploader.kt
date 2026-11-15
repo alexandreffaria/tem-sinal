@@ -7,6 +7,8 @@ import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -51,6 +53,16 @@ fun parseLog(lines: List<String>, gson: Gson): ParsedLog {
     }
     return ParsedLog(samples, rejected)
 }
+
+/** The body the upload function takes for [samples]: `{"samples": [...]}`. */
+fun uploadBody(samples: List<Sample>, gson: Gson): String = gson.toJson(mapOf("samples" to samples))
+
+/**
+ * [uploadBody] of [samples] indented for reading: the same JSON text, with only whitespace added
+ * between tokens, so every name and value appears exactly as it is sent.
+ */
+fun uploadPreview(samples: List<Sample>, gson: Gson): String =
+    GsonBuilder().setPrettyPrinting().create().toJson(JsonParser.parseString(uploadBody(samples, gson)))
 
 /** The upload function, `v1` in `functions/src/index.ts`, at its `/samples` path. */
 const val UPLOAD_URL = "https://us-central1-cellsignalmapper-a9da1.cloudfunctions.net/v1/samples"
@@ -130,6 +142,9 @@ object FirebaseUploader {
             .installAppCheckProviderFactory(PlayIntegrityAppCheckProviderFactory.getInstance())
     }
 
+    /** [uploadPreview] of [samples], with the Gson the upload serialises them with. */
+    fun preview(samples: List<Sample>): String = uploadPreview(samples, gson)
+
     /**
      * Uploads every logged sample off the main thread, one upload at a time, publishes the pending
      * count, and returns whether the upload succeeded. The pending file is deleted only after the
@@ -167,7 +182,7 @@ object FirebaseUploader {
             val user = checkNotNull(auth.currentUser) { "Not signed in" }
             val log = uploadPending(pending, SignalLogger.getRejectedFile(context), gson) { samples ->
                 val idToken = Tasks.await(user.getIdToken(false), SIGN_IN_TIMEOUT_SECONDS, TimeUnit.SECONDS).token
-                val (status, body) = post(gson.toJson(mapOf("samples" to samples)), checkNotNull(idToken), appCheckToken())
+                val (status, body) = post(uploadBody(samples, gson), checkNotNull(idToken), appCheckToken())
                 rejectedIndexes(status, body, samples.size, gson)
             }
             if (log.unparseable > 0) {

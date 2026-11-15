@@ -35,6 +35,10 @@
     <string name="sharing_personal">As amostras em si não são anônimas: o código aleatório do app liga as amostras de um mesmo celular, então pela LGPD (a lei de proteção de dados) elas são dados pessoais.</string>
     <string name="sharing_map">O mapa público, em alexandreffaria.github.io/tem-sinal, é anônimo. Ele mostra só totais por pequena área (hexágonos de uns 50 m) e operadora: intensidade do sinal, tipo de rede, quantas vezes houve serviço, só chamadas de emergência ou nenhum serviço, e o mês da última medição. Nenhum código do app, gravação, hora exata ou ponto exato é publicado. Fica de fora um trecho aleatório de 300 a 800 m ou mais em volta de onde cada gravação começa e termina, e de onde você para antes de realmente sair. Uma área medida por um só celular aparece só num lote mensal, então uma visita solitária aparece como “algum momento naquele mês”.</string>
 
+    <string name="see_data_sent">Ver os dados enviados</string>
+    <string name="data_sent_explained">Isto é exatamente o que sai do celular para a amostra mais recente gravada aqui: o texto que o app envia ao nosso servidor, com o código do app e o código da gravação. O app guarda uma cópia desta única amostra no celular para mostrá-la aqui. As amostras no servidor ficam privadas; só totais por área são públicos.</string>
+    <string name="data_sent_none">Nenhuma amostra foi gravada neste celular ainda. Toque em %1$s, e a próxima amostra aparece aqui.</string>
+
     <string name="needs_precise_location">Para gravar, o app precisa da localização precisa. Permita a localização precisa para este app nas Configurações.</string>
     <string name="needs_location">Para gravar, o app precisa acessar sua localização. Permita a localização para este app nas Configurações.</string>
     <string name="needs_phone">Para gravar, o app precisa do acesso ao Telefone para ler seu chip. Permita Telefone para este app nas Configurações.</string>
