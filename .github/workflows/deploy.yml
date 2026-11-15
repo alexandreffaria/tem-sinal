@@ -8,6 +8,7 @@ on:
       - 'firestore.rules'
       - 'firestore.indexes.json'
       - 'storage.rules'
+      - 'storage.cors.json'
       - 'firebase.json'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
@@ -23,7 +24,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Functions, Firestore rules and indexes
+    name: Functions, Firestore rules and indexes, Storage rules and CORS
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,3 +50,9 @@ jobs:
       # which the Firebase Storage API answers with 404 for this account.
       - name: Deploy
         run: npx --yes firebase-tools@15.34.2 deploy --only functions,firestore,storage --project cellsignalmapper-a9da1 --non-interactive
+
+      # CORS is a setting of the whole bucket, not of a path: a page on any origin may GET or HEAD
+      # any object in it, and storage.rules still decides which objects anyone may read (the
+      # tiles). gcloud comes with the runner image and uses the credentials the auth step wrote.
+      - name: Set the bucket's CORS
+        run: gcloud storage buckets update gs://cellsignalmapper-a9da1.firebasestorage.app --cors-file=storage.cors.json

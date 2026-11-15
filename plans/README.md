@@ -180,8 +180,9 @@ fails for a reason outside the change (the signing secrets) doesn't block mergin
 issue for the owner.
 
 **A merge to `main` that touches `functions/`, `firestore.rules`, `firestore.indexes.json`,
-`storage.rules` or `firebase.json` deploys them** (`.github/workflows/deploy.yml`): the
-functions, the Firestore rules and indexes with their TTL policies, and the Storage rules, to project `cellsignalmapper-a9da1`. It signs in
+`storage.rules`, `storage.cors.json` or `firebase.json` deploys them** (`.github/workflows/deploy.yml`): the
+functions, the Firestore rules and indexes with their TTL policies, the Storage rules, and the
+bucket's CORS setting (from `storage.cors.json`, so a page on any origin can fetch a tile), to project `cellsignalmapper-a9da1`. It signs in
 through Workload Identity Federation as `github-deploy@`, which only runs from `main` of this
 repo; no key exists. Wait for its `Deploy` run before the next merge too. A change the app and
 the server both depend on ships server first: the function before the app that calls it, and
