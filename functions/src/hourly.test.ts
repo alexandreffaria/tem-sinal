@@ -183,14 +183,29 @@ test("a run whose deadline has passed reads one page", async () => {
   assert.equal(fake.state().cursor?.expireAtMs, T + (READ_LIMIT / MAX_BATCH - 1) + SAMPLE_LIFETIME_MS);
 });
 
-test("ended sessions past the cell limit wait for the next run", async () => {
+test("a run keeps paging until every ended session past the cell limit is aggregated", async () => {
   const fake = fakeStore();
   // About 20 m a fix, so each walk covers well over CELL_LIMIT private cells.
+  const long = (from: number) => walk(randomUUID(), CELL_LIMIT * 2, from).map((s, i) => ({ ...s, fix: { ...s.fix, lat: from + i * 0.00018 } }));
+  const [a, b, c] = [long(-15.5), long(-14.5), long(-13.5)];
+  for (const session of [a, b, c]) {
+    const own: Record<string, CellState> = {};
+    accumulate(own, session);
+    assert.ok(Object.keys(own).length > CELL_LIMIT);
+    fake.receive(session, T);
+  }
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
+  assert.deepEqual(fake.state().open, {});
+  assert.ok(Object.keys(fake.cells).length > 3 * CELL_LIMIT);
+});
+
+test("a run whose deadline has passed leaves the ended sessions past its one page's cell limit open", async () => {
+  const fake = fakeStore();
   const long = (from: number) => walk(randomUUID(), CELL_LIMIT * 2, from).map((s, i) => ({ ...s, fix: { ...s.fix, lat: from + i * 0.00018 } }));
   const [a, b] = [long(-15.5), long(-14.5)];
   fake.receive(a, T);
   fake.receive(b, T);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, 0, NO_RANDOM);
   const open = Object.keys(fake.state().open);
   const first = [a, b].filter((s) => !open.includes(s[0]?.sessionId ?? ""));
   assert.equal(open.length, 1);
@@ -209,14 +224,16 @@ test("a session too long to read whole is aggregated in parts, without holding u
   const other = walk(randomUUID(), 300, -16.5);
   fake.receive(other, T + HOUR);
   const run = (hours: number) => runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, Infinity, NO_RANDOM);
-  for (let hours = 1; hours <= 4; hours++) await run(hours);
+  for (let hours = 1; hours <= 3; hours++) await run(hours);
+  assert.deepEqual(fake.cells, {});
+  // A deadline already passed: the run reads one page, which adds the first part.
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 4 * HOUR, 0, NO_RANDOM);
   // A part ends before the last expireAt it read: the upload there may be only partly read.
   const partLength = SESSION_READ_LIMIT - MAX_BATCH;
   const parts = [huge.slice(0, partLength), huge.slice(partLength, 2 * partLength), huge.slice(2 * partLength)];
   assert.ok(isDeepStrictEqual(fake.cells, expected(other, parts[0] ?? [])));
   assert.deepEqual(Object.keys(fake.state().open), [huge[0]?.sessionId]);
-  await run(5);
-  await run(6);
+  await run(4);
   assert.ok(isDeepStrictEqual(fake.cells, expected(other, ...parts)));
   assert.deepEqual(fake.state().open, {});
   assert.equal(fake.state().cursor?.expireAtMs, T + HOUR + SAMPLE_LIFETIME_MS);
@@ -261,7 +278,7 @@ test("more samples of one session than a run reads at one expireAt are skipped, 
   const run = (hours: number) => runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, Infinity, NO_RANDOM);
   await run(1);
   await run(SESSION_IDLE_MS / HOUR + 1);
-  assert.deepEqual(fake.cells, expected(other));
+  assert.ok(isDeepStrictEqual(fake.cells, expected(other, later)));
   assert.equal(warn.mock.callCount(), 1);
   assert.ok(!String(warn.mock.calls[0]?.arguments[0]).includes(sessionId));
   await run(SESSION_IDLE_MS / HOUR + 2);
