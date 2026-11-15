@@ -5,6 +5,42 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-15: People delete their recordings session by session
+
+The upload function `v1` also serves `POST /sessions/delete`, body `{installId, sessionId}`. It
+needs a valid Firebase Auth ID token and logs only the App Check verdict, as uploads do. What
+makes a request the owner's is the install id: a random UUID the app sends nowhere but in its
+uploads, which no client can read back. A request deletes only the raw samples that carry both
+ids, so a wrong install id deletes nothing, and no other session or install is touched.
+
+**Private cells per session.** Each session's contribution is kept apart: one private cell per
+session and resolution 12 H3 cell, in `session_cells`, keyed by `sessionKey`, the SHA-256 of the
+install id and session id, which names neither. A session aggregated in parts, or whose samples
+arrive late, adds to the same cells, so how uploads arrived doesn't matter. Deleting a session
+deletes its cells whole, so the next daily run publishes exactly what it would have without it,
+at any age: the cells don't expire with the raw samples at 90 days. The daily run merges the
+sessions' cells per public cell, deletes a public cell nothing backs any more, and keeps the list
+of tiles it has written, writing each one every run (`[]` once empty), so an emptied tile is
+retried like any other. *Why not the others:* subtracting a session from shared cells is exact
+for the counts but not for `installs`, `firstMs` and `lastMs`; recomputing its contribution from
+recorded part boundaries can't reach a session whose raw samples expired. The cost: one private
+cell per session in each H3 cell instead of one per H3 cell, so the private state, and what the
+daily run reads, grows with how many sessions overlap.
+
+**Tombstones.** Deleting first stores `deleted_sessions/<sessionKey>`, with no fields, kept for
+good, and only when something of the session is stored. The upload function's write transaction
+reads the tombstones of a batch's sessions and doesn't store their samples, answering them as
+accepted so the phone drops them; the hourly job's commit transaction reads them too and skips
+those sessions. A session deleted while still on the phone, arriving late or being aggregated is
+never stored or aggregated again.
+
+**Moving to it.** The hourly job keeps its state in `aggregation/session_cells`, which starts with
+no cursor, so its first run aggregates again every stored raw sample (all younger than 90 days)
+into `session_cells`. The old `private_cells` and `aggregation/hourly` are then unused and are
+deleted by hand. Issue #127.
+
+Asked for by the owner in issue #127; the design is the agents' (plan on the issue); no card.
+
 ## 2026-11-15: A session's ends are cut only where the phone rested a long time
 
 The trim of each session's ends is deterministic: the same samples always give the same result,

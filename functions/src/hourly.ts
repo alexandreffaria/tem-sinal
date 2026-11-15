@@ -1,6 +1,6 @@
 // The hourly job: reads newly received samples and adds each ended session, trimmed, to the
 // private cells. Its storage is behind [AggregationStore]; nothing here is public.
-import { type CellState, type StoredSample, accumulate, trimSession } from "./aggregate.js";
+import { type CellState, type StoredSample, accumulate, sessionKey, trimSession } from "./aggregate.js";
 import { SAMPLE_LIFETIME_MS } from "./ingest.js";
 import { sampleErrors } from "./sample.js";
 
@@ -75,15 +75,51 @@ export interface AggregationStore {
   sessionSamples(sessionId: string, fromMs: number, notAfterMs: number, limit: number): Promise<Stored[]>;
   /**
    * In one transaction, if the stored state still equals [expected]: reads the private cells [ids]
-   * (one that doesn't exist as `{}`), lets [update] change them, and writes them and [next].
-   * Returns whether it wrote anything.
+   * (one that doesn't exist as `{}`) and which of their sessions were deleted, lets [update] change
+   * the cells, given the [sessionKey]s of those deleted, and writes [next] and the cells of every
+   * session not deleted. Returns whether it wrote anything.
    */
   commit(
     expected: HourlyState,
     next: HourlyState,
     ids: string[],
-    update: (cells: Record<string, CellState>) => void,
+    update: (cells: Record<string, CellState>, deleted: Set<string>) => void,
   ): Promise<boolean>;
+}
+
+/**
+ * The id of the private cell that holds the contribution of the session with [sessionKey] [key] to
+ * the H3 cell [h3]: each session's contribution is kept apart, so that it can be deleted whole.
+ */
+export const sessionCellId = (key: string, h3: string) => `${key}_${h3}`;
+
+/** The session key and the H3 cell of the private cell [id]. */
+export function sessionCellOf(id: string): { key: string; h3: string } {
+  const [key = "", h3 = ""] = id.split("_");
+  return { key, h3 };
+}
+
+/**
+ * Adds trimmed samples to [cells] as [accumulate] does, each session's to the private cells of its
+ * own, keyed by [sessionCellId]. Changes [cells] in place.
+ */
+export function accumulateSessions(cells: Record<string, CellState>, samples: StoredSample[]): void {
+  const sessions = new Map<string, StoredSample[]>();
+  for (const s of samples) {
+    const key = sessionKey(s.installId, s.sessionId);
+    const own = sessions.get(key) ?? [];
+    own.push(s);
+    sessions.set(key, own);
+  }
+  for (const [key, own] of sessions) {
+    const view: Record<string, CellState> = {};
+    for (const [id, cell] of Object.entries(cells)) {
+      const of = sessionCellOf(id);
+      if (of.key === key) view[of.h3] = cell;
+    }
+    accumulate(view, own);
+    for (const [h3, cell] of Object.entries(view)) cells[sessionCellId(key, h3)] = cell;
+  }
 }
 
 /**
@@ -124,7 +160,8 @@ export async function runHourly(
  * part of it is added the same way and the rest stays open; [SESSION_READ_LIMIT] or more samples of one session sharing one `expireAt` (more
  * than any upload stores) are skipped, and their count logged. A session whose samples keep
  * arriving after it was aggregated is aggregated again from those samples only, and trimmed again,
- * so no sample is counted twice. Samples whose `expireAt` has passed are never read. Throws,
+ * so no sample is counted twice. Each session goes to private cells of its own, [sessionCellId],
+ * and nothing of a deleted session is added. Samples whose `expireAt` has passed are never read. Throws,
  * writing nothing, when another run changed the state since this page read it. Returns whether it
  * read [READ_LIMIT] samples or left an ended session open. A page that leaves one open has added
  * part of an ended session or skipped samples of one, so the next page starts further on.
@@ -152,7 +189,7 @@ async function runPage(store: AggregationStore, nowMs: number): Promise<boolean>
   const add = (samples: StoredSample[]) => {
     const kept = trimSession(samples);
     const cells: Record<string, CellState> = {};
-    accumulate(cells, kept);
+    accumulateSessions(cells, kept);
     for (const id of Object.keys(cells)) ids.add(id);
     trimmed.push(...kept);
   };
@@ -169,7 +206,7 @@ async function runPage(store: AggregationStore, nowMs: number): Promise<boolean>
       let next = end + 1;
       while (docs[next]?.expireAtMs === docs[end]?.expireAtMs) next++;
       const cells: Record<string, CellState> = {};
-      accumulate(cells, validSamples(docs.slice(end, next), cursor));
+      accumulateSessions(cells, validSamples(docs.slice(end, next), cursor));
       for (const id of Object.keys(cells)) seen.add(id);
       end = next;
     }
@@ -205,7 +242,9 @@ async function runPage(store: AggregationStore, nowMs: number): Promise<boolean>
   }
 
   const next = { cursor, open: Object.fromEntries(Object.entries(open).filter(([id]) => !done.has(id))) };
-  if (!(await store.commit(state, next, [...ids], (cells) => accumulate(cells, trimmed)))) {
+  const update = (cells: Record<string, CellState>, deleted: Set<string>) =>
+    accumulateSessions(cells, trimmed.filter((s) => !deleted.has(sessionKey(s.installId, s.sessionId))));
+  if (!(await store.commit(state, next, [...ids], update))) {
     throw new Error("runHourly: the state changed during the run; this page wrote nothing");
   }
   return read.length === READ_LIMIT || Object.values(next.open).some((session) => readUntilMs - session.lastMs >= SESSION_IDLE_MS);

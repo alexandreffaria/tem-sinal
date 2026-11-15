@@ -3,82 +3,27 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { isDeepStrictEqual } from "node:util";
 import { cellToLatLng, getResolution, greatCircleDistance } from "h3-js";
-import { type CellState, LONG_REST_MS, PRIVATE_RESOLUTION, REST_CUT_M, type StoredSample, accumulate, trimSession } from "./aggregate.js";
+import { type CellState, LONG_REST_MS, PRIVATE_RESOLUTION, REST_CUT_M, type StoredSample, sessionKey, trimSession } from "./aggregate.js";
 import {
   CELL_LIMIT,
   type AggregationStore,
-  type HourlyState,
   READ_LIMIT,
   SESSION_IDLE_MS,
   SESSION_READ_LIMIT,
-  type Stored,
   WRITE_MARGIN_MS,
+  accumulateSessions,
   runHourly,
+  sessionCellOf,
 } from "./hourly.js";
 import { SAMPLE_LIFETIME_MS, WRITE_DEADLINE_MS } from "./ingest.js";
 import { MAX_BATCH } from "./sample.js";
 import { TRANSACTION_LIFETIME_MS } from "./create-missing.js";
 import { testSample } from "./test-sample.js";
-
-const T = Date.UTC(2026, 0, 10, 12);
-const HOUR = 3_600_000;
+import { HOUR, T, fakeAggregation as fakeStore, walk } from "./test-stores.js";
 
 test("every sample is stored before the job reads past its expireAt", () => {
   assert.ok(WRITE_DEADLINE_MS + TRANSACTION_LIFETIME_MS < WRITE_MARGIN_MS);
 });
-
-/** An [AggregationStore] in memory, ordering and filtering samples as the Firestore queries do. */
-function fakeStore() {
-  const docs: Stored[] = [];
-  const cells: Record<string, CellState> = {};
-  let state: HourlyState = { cursor: null, open: {} };
-  const order = (a: { expireAtMs: number; id: string }, b: { expireAtMs: number; id: string }) =>
-    a.expireAtMs - b.expireAtMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  const store: AggregationStore = {
-    state: async () => structuredClone(state),
-    samplesAfter: async (after, notBeforeMs, notAfterMs, limit) =>
-      structuredClone(
-        docs
-          .filter((d) => d.expireAtMs > notBeforeMs && d.expireAtMs <= notAfterMs && (!after || order(d, after) > 0))
-          .sort(order)
-          .slice(0, limit),
-      ),
-    sessionSamples: async (sessionId, fromMs, notAfterMs, limit) =>
-      structuredClone(
-        docs
-          .filter((d) => (d.data as StoredSample).sessionId === sessionId && d.expireAtMs >= fromMs && d.expireAtMs <= notAfterMs)
-          .sort((a, b) => a.expireAtMs - b.expireAtMs)
-          .slice(0, limit),
-      ),
-    commit: async (expected, next, ids, update) => {
-      if (!isDeepStrictEqual(state, expected)) return false;
-      const read = Object.fromEntries(ids.map((id) => [id, structuredClone(cells[id] ?? {})]));
-      update(read);
-      Object.assign(cells, read);
-      state = structuredClone(next);
-      return true;
-    },
-  };
-  /** Stores [samples] as received at [receivedMs]. */
-  const receive = (samples: object[], receivedMs: number) => {
-    for (const data of samples) docs.push({ id: randomUUID(), expireAtMs: receivedMs + SAMPLE_LIFETIME_MS, data: structuredClone(data) });
-  };
-  return { store, receive, docs, cells, state: () => state };
-}
-
-/** A walk north of [length] valid samples 5 s and about 10 m apart, from [fromLat] at [startMs]. */
-function walk(sessionId: string, length: number, fromLat = -15.5, startMs = T - HOUR) {
-  return Array.from({ length }, (_, i) => {
-    const s = testSample() as unknown as StoredSample;
-    return {
-      ...s,
-      sessionId,
-      timeMs: startMs + i * 5_000,
-      elapsedRealtimeMs: 1_000_000 + i * 5_000,
-      fix: { ...s.fix, lat: fromLat + i * 0.00009, timeMs: startMs + i * 5_000, elapsedRealtimeMs: 1_000_000 + i * 5_000 },
-    };
-  });
-}
 
 /** [samples] moved onto a path back and forth along 2 km from [fromLat], so they cover well under [CELL_LIMIT] private cells. */
 function shuttle(samples: StoredSample[], fromLat = -15.5) {
@@ -88,7 +33,7 @@ function shuttle(samples: StoredSample[], fromLat = -15.5) {
 /** The private cells of [sessions], each trimmed with [trimSession]. */
 function expected(...sessions: StoredSample[][]): Record<string, CellState> {
   const cells: Record<string, CellState> = {};
-  for (const session of sessions) accumulate(cells, trimSession(session));
+  for (const session of sessions) accumulateSessions(cells, trimSession(session));
   return cells;
 }
 
@@ -104,7 +49,10 @@ test("a session is added to the private cells, trimmed, once no sample of it has
   await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity);
   assert.ok(Object.keys(fake.cells).length > 0);
   assert.deepEqual(fake.cells, expected(session));
-  for (const h3 of Object.keys(fake.cells)) assert.equal(getResolution(h3), PRIVATE_RESOLUTION);
+  for (const id of Object.keys(fake.cells)) {
+    assert.equal(getResolution(sessionCellOf(id).h3), PRIVATE_RESOLUTION);
+    assert.equal(sessionCellOf(id).key, sessionKey(session[0]?.installId ?? "", session[0]?.sessionId ?? ""));
+  }
   assert.deepEqual(fake.state().open, {});
   assert.equal(fake.state().cursor?.expireAtMs, T + SAMPLE_LIFETIME_MS);
 });
@@ -189,7 +137,7 @@ test("a run keeps paging until every ended session past the cell limit is aggreg
   const [a, b, c] = [long(-15.5), long(-14.5), long(-13.5)];
   for (const session of [a, b, c]) {
     const own: Record<string, CellState> = {};
-    accumulate(own, session);
+    accumulateSessions(own, session);
     assert.ok(Object.keys(own).length > CELL_LIMIT);
     fake.receive(session, T);
   }
@@ -266,7 +214,7 @@ test("no page commits more than an upload's cells past the cell limit, and each 
   const huge = walk(randomUUID(), SESSION_READ_LIMIT).map((s, i) => ({ ...s, fix: { ...s.fix, lat: -15.5 + i * 0.00027 } }));
   for (let i = 0; i < huge.length; i += MAX_BATCH) fake.receive(huge.slice(i, i + MAX_BATCH), T + (i / MAX_BATCH) * 60_000);
   const own: Record<string, CellState> = {};
-  accumulate(own, huge);
+  accumulateSessions(own, huge);
   assert.equal(Object.keys(own).length, huge.length);
   const written: number[] = [];
   const store: AggregationStore = {
@@ -323,7 +271,8 @@ test("a long session aggregated in parts hides a long rest its parts end during"
   }
   assert.ok(Object.keys(fake.cells).length > 0);
   // A cell's centre is within a few metres of every sample in it.
-  for (const cell of Object.keys(fake.cells)) {
+  for (const id of Object.keys(fake.cells)) {
+    const cell = sessionCellOf(id).h3;
     assert.ok(greatCircleDistance(cellToLatLng(cell), [rest.lat, rest.lon], "m") > REST_CUT_M - 10, `${cell} near the rest`);
   }
 });
