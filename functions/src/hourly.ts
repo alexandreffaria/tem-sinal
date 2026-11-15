@@ -24,15 +24,16 @@ export const READ_LIMIT = 10_000;
 /**
  * The most samples of one session a page reads, about 14 hours of logging. A session with more
  * samples left than this is aggregated in parts, one part a page, each ending before the last
- * `expireAt` read and each trimmed at both ends like a whole session.
+ * `expireAt` read and each trimmed at both ends like a whole session; so is one whose cells would
+ * pass [CELL_LIMIT].
  */
 export const SESSION_READ_LIMIT = 10_000;
 
 /**
  * About the most private cells one page writes, so that its transaction stays well under Firestore's
- * 10 MiB request limit. Sessions are added until this many cells are written; the last one, or a
- * part of a session added after them, writes at most [SESSION_READ_LIMIT] more. A page always
- * aggregates at least one ended session or part of one.
+ * 10 MiB request limit. Samples are added an `expireAt` at a time while their cells before trimming
+ * are fewer than this, so a page writes at most one upload's samples ([MAX_BATCH]) past it. A page
+ * always aggregates at least one ended session or part of one.
  */
 export const CELL_LIMIT = 2_000;
 
@@ -115,9 +116,10 @@ export async function runHourly(
  * to [WRITE_MARGIN_MS] ago, and each session that has had no new sample for [SESSION_IDLE_MS] is
  * read whole, from its first sample not yet aggregated to the last one read, trimmed at both ends
  * with [trimLengths] and added to the private cells, until about [CELL_LIMIT] cells are written;
- * the other sessions stay open for a later page. A session too long to read whole is left for after the others, and then,
- * if fewer than [CELL_LIMIT] cells are written, one part of it is added the same way and the rest
- * stays open; [SESSION_READ_LIMIT] or more samples of one session sharing one `expireAt` (more
+ * the session that reaches the limit is added only up to it, as a part trimmed the same way, and
+ * the rest of it and the other sessions stay open for a later page. A session too long to read
+ * whole is left for after the others, and then, if fewer than [CELL_LIMIT] cells are written, one
+ * part of it is added the same way and the rest stays open; [SESSION_READ_LIMIT] or more samples of one session sharing one `expireAt` (more
  * than any upload stores) are skipped, and their count logged. A session whose samples keep
  * arriving after it was aggregated is aggregated again from those samples only, and trimmed again,
  * so no sample is counted twice. Samples whose `expireAt` has passed are never read. Throws,
@@ -152,27 +154,48 @@ async function runPage(store: AggregationStore, nowMs: number, random: () => num
     for (const id of Object.keys(cells)) ids.add(id);
     trimmed.push(...kept);
   };
+  // Whether the cells of the samples added so far, before trimming, reached CELL_LIMIT.
+  let full = false;
+  /**
+   * Adds [docs], in `expireAt` order, from the first up to the first `expireAt` reached once the
+   * cells of the samples added before trimming are [CELL_LIMIT] or more. Returns how many it added.
+   */
+  const addFitting = (docs: Stored[], cursor: Cursor) => {
+    const seen = new Set(ids);
+    let end = 0;
+    while (end < docs.length && seen.size < CELL_LIMIT) {
+      let next = end + 1;
+      while (docs[next]?.expireAtMs === docs[end]?.expireAtMs) next++;
+      const cells: Record<string, CellState> = {};
+      accumulate(cells, validSamples(docs.slice(end, next), cursor));
+      for (const id of Object.keys(cells)) seen.add(id);
+      end = next;
+    }
+    full = seen.size >= CELL_LIMIT;
+    add(validSamples(docs.slice(0, end), cursor));
+    return end;
+  };
   const done = new Set<string>();
   let oversized: { sessionId: string; session: OpenSession; docs: Stored[] } | undefined;
   for (const [sessionId, session] of Object.entries(open)) {
     if (readUntilMs - session.lastMs < SESSION_IDLE_MS) continue;
-    if (ids.size >= CELL_LIMIT || !cursor) break;
+    if (full || !cursor) break;
     const docs = await store.sessionSamples(sessionId, Math.max(session.fromMs, nowMs + 1), cursor.expireAtMs, SESSION_READ_LIMIT);
     if (docs.length < SESSION_READ_LIMIT) {
-      add(validSamples(docs, cursor));
-      done.add(sessionId);
+      const end = addFitting(docs, cursor);
+      if (end === docs.length) done.add(sessionId);
+      else open[sessionId] = { ...session, fromMs: docs[end]?.expireAtMs ?? session.fromMs };
     } else {
       oversized ??= { sessionId, session, docs };
     }
   }
-  if (oversized && cursor && ids.size < CELL_LIMIT) {
+  if (oversized && cursor && !full) {
     const { sessionId, session, docs } = oversized;
     // More samples may share the last expireAt read, so the part ends before it.
     const endMs = docs.at(-1)?.expireAtMs ?? session.fromMs;
-    const part = docs.filter((doc) => doc.expireAtMs < endMs);
-    if (part.length > 0) {
-      add(validSamples(part, cursor));
-      open[sessionId] = { ...session, fromMs: endMs };
+    const end = addFitting(docs.filter((doc) => doc.expireAtMs < endMs), cursor);
+    if (end > 0) {
+      open[sessionId] = { ...session, fromMs: docs[end]?.expireAtMs ?? endMs };
     } else {
       console.warn(`runHourly: skipped at least ${docs.length} samples of one session that share one expireAt`);
       open[sessionId] = { ...session, fromMs: endMs + 1 };
