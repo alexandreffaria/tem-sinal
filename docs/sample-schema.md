@@ -385,7 +385,9 @@ no expiry; they are the public map.
 ## Public cells
 
 A public cell is `{"h3": "8b…", "carriers": {"72406": {...}}, "lastSeen": "2026-01"}`, keyed by
-the SIM's PLMN, and published in the next daily run whatever its install count. Per carrier:
+the SIM's PLMN, and published in the next daily run whatever its install count. A cell changes the
+day after its samples arrive, so comparing the map day to day shows roughly the day of a visit.
+Per carrier:
 
 | Field | Meaning |
 |---|---|
