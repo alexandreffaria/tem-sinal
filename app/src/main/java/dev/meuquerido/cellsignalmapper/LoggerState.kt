@@ -11,19 +11,32 @@ import kotlinx.coroutines.flow.update
  */
 enum class PingResult { SUCCESS, BAD }
 
-/** How often, in milliseconds, a logging tick starts. */
+/** How often, in milliseconds, the location request delivers a fix, each of which starts a tick. */
 const val TICK_INTERVAL_MS = 5_000L
 
 /**
- * How long to wait, from [nowMs], before the next tick, after one that started at [tickStartMs].
- * [tickOnFix] is whether that tick started on a delivered fix, and [fixDelivered] whether one was
- * delivered since it started. A fix delivered after a tick that started on one starts the next at
- * once, since the location request already spaces fixes [TICK_INTERVAL_MS] apart. Otherwise the
- * next tick starts [TICK_INTERVAL_MS] after that one started, at once when that has passed. Both
- * times are on the elapsed-realtime clock, which keeps counting while the CPU sleeps.
+ * The least time, in milliseconds, between the starts of two ticks. A little under
+ * [TICK_INTERVAL_MS], so a fix delivered slightly early still starts its own tick.
  */
-fun msUntilNextTick(tickStartMs: Long, tickOnFix: Boolean, fixDelivered: Boolean, nowMs: Long): Long =
-    if (tickOnFix && fixDelivered) 0L else (TICK_INTERVAL_MS - (nowMs - tickStartMs)).coerceAtLeast(0L)
+const val MIN_TICK_GAP_MS = 4_500L
+
+/**
+ * How long, in milliseconds, after a tick started the next one starts when no fix is delivered.
+ * Past [TICK_INTERVAL_MS], so a fix delivered slightly late starts the tick instead of following a
+ * no-fix tick by a fraction of a second.
+ */
+const val NO_FIX_TICK_AFTER_MS = 6_500L
+
+/**
+ * How long to wait, from [nowMs], before the next tick, after one that started at [tickStartMs];
+ * [fixDelivered] is whether a fix was delivered since it started. With a fix, the next tick
+ * starts [MIN_TICK_GAP_MS] after that one started; without, [NO_FIX_TICK_AFTER_MS] after; at once
+ * when that has passed. Both times are on the elapsed-realtime clock, which keeps counting while
+ * the CPU sleeps.
+ */
+fun msUntilNextTick(tickStartMs: Long, fixDelivered: Boolean, nowMs: Long): Long =
+    ((if (fixDelivered) MIN_TICK_GAP_MS else NO_FIX_TICK_AFTER_MS) - (nowMs - tickStartMs))
+        .coerceAtLeast(0L)
 
 /** Each SIM's service state in plain words, one line per SIM, such as "SIM 1: No service". */
 fun serviceText(sims: List<SimReading>): List<UiText> =

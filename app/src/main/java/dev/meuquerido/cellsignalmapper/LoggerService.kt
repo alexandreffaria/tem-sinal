@@ -296,19 +296,15 @@ class LoggerService : Service() {
 
             // The session's first ticks, for startLooksIndoor.
             val startTicks = mutableListOf<StartTick>()
-            // When the previous tick started, and whether it started on a delivered fix; null
-            // before the first tick, which starts at once.
+            // When the previous tick started; null before the first tick, which starts at once.
             var previousStartMs: Long? = null
-            var previousOnFix = false
             while (isActive) {
-                // Waits for a delivered fix, or for the interval to pass without one: a tick
-                // without a fix still shows each SIM's state and counts for startLooksIndoor.
+                // Waits for a delivered fix, or for longer without one: a tick without a fix still
+                // shows each SIM's state and counts for startLooksIndoor.
                 var fixDelivered = false
                 while (previousStartMs != null) {
                     if (fixDeliveries.tryReceive().isSuccess) fixDelivered = true
-                    val waitMs = msUntilNextTick(
-                        previousStartMs, previousOnFix, fixDelivered, SystemClock.elapsedRealtime(),
-                    )
+                    val waitMs = msUntilNextTick(previousStartMs, fixDelivered, SystemClock.elapsedRealtime())
                     if (waitMs == 0L) break
                     withTimeoutOrNull(waitMs) {
                         fixDeliveries.receive()
@@ -316,7 +312,6 @@ class LoggerService : Service() {
                     }
                 }
                 previousStartMs = SystemClock.elapsedRealtime()
-                previousOnFix = fixDelivered
                 val location = latestLocation?.takeIf {
                     isFixFresh(
                         it.elapsedRealtimeNanos / 1_000_000,
