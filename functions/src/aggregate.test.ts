@@ -551,6 +551,9 @@ test("public cells are those the same samples give when kept per public cell", (
   // aggregate.public.json lists, for each day from 3 January to 2 May 2026 whose publication
   // changed a public cell, that cell as published from the same visits with the private state kept
   // per resolution 11 cell. The visits avoid the points whose private cell has another parent.
+  // After an intended change to publish or accumulate, rewrite the file from this test's changes,
+  // one entry per line: "[\n" + changes.map((c) => JSON.stringify(c)).join(",\n") + "\n]\n",
+  // and review its diff as the change in the public cells.
   const expected = JSON.parse(readFileSync(new URL("../src/aggregate.public.json", import.meta.url), "utf8")) as [string, PublicCell][];
   const cells: Record<string, CellState> = {};
   let held: string[] = [];
