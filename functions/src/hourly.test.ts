@@ -199,6 +199,28 @@ test("a run keeps paging until every ended session past the cell limit is aggreg
   assert.ok(Object.keys(fake.cells).length > 3 * CELL_LIMIT);
 });
 
+test("a run ends when an ended session's samples have expired before it was aggregated", async () => {
+  const fake = fakeStore();
+  const session = walk(randomUUID(), 10);
+  fake.receive(session, T);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS, Infinity, NO_RANDOM);
+  assert.deepEqual(Object.keys(fake.state().open), [session[0]?.sessionId]);
+  // Removed as Firestore's TTL would.
+  fake.docs.length = 0;
+  let pages = 0;
+  const store: AggregationStore = {
+    ...fake.store,
+    commit: (...args) => {
+      if (++pages > 2) throw new Error("the run kept paging");
+      return fake.store.commit(...args);
+    },
+  };
+  await runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
+  assert.equal(pages, 1);
+  assert.deepEqual(fake.state().open, {});
+  assert.deepEqual(fake.cells, {});
+});
+
 test("a run whose deadline has passed leaves the ended sessions past its one page's cell limit open", async () => {
   const fake = fakeStore();
   const long = (from: number) => walk(randomUUID(), CELL_LIMIT * 2, from).map((s, i) => ({ ...s, fix: { ...s.fix, lat: from + i * 0.00018 } }));
