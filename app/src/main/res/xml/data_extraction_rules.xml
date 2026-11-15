@@ -8,6 +8,9 @@
    The app keeps none of its own state in shared preferences; everything there is Firebase's
    per-install state, including the signed-in anonymous user, so none of it is backed up or
    transferred. An app setting added to shared preferences would not be backed up either.
+   The one file of app state in filesDir, first_log_warning_shown, is backed up and
+   transferred on purpose: it holds no location data, and a restored phone need not show the
+   first-LOG warning again.
 -->
 <data-extraction-rules>
     <cloud-backup>
