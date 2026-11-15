@@ -5,11 +5,15 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -27,6 +31,7 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -73,6 +78,17 @@ fun <T> recordWhileRegistered(
 fun afterCompletion(job: Job?, action: () -> Unit) {
     if (job == null) action() else job.invokeOnCompletion { action() }
 }
+
+/** The battery percentage at or below which logging stops by itself while the phone isn't charging. */
+const val LOW_BATTERY_STOP_PERCENT = 10
+
+/**
+ * Whether logging stops to keep the battery for calls, from `ACTION_BATTERY_CHANGED`'s [level] out
+ * of [scale] and whether the phone is [plugged] in. An unknown level (negative, or a scale of 0 or
+ * less) never stops it.
+ */
+fun stopsForLowBattery(level: Int, scale: Int, plugged: Boolean): Boolean =
+    !plugged && level >= 0 && scale > 0 && level * 100 <= LOW_BATTERY_STOP_PERCENT * scale
 
 class LoggerService : Service() {
 
@@ -131,6 +147,34 @@ class LoggerService : Service() {
     /** The logging loop; null when [onCreate] stopped before starting it. */
     private var loggingJob: Job? = null
 
+    /**
+     * Stops the service the way STOP does when the phone shuts down or the battery gets low, so
+     * the session ends with its samples kept and an upload scheduled. Runs on the main thread.
+     */
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SHUTDOWN -> {
+                    Log.i("LoggerService", "Phone shutting down; stopping")
+                    stopSelf()
+                }
+                Intent.ACTION_BATTERY_CHANGED -> if (!stoppedForLowBattery && stopsForLowBattery(
+                        level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
+                        scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1),
+                        plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0,
+                    )
+                ) {
+                    stoppedForLowBattery = true
+                    Log.i("LoggerService", "Battery low; stopping")
+                    notifyLowBatteryStop()
+                    stopSelf()
+                }
+            }
+        }
+    }
+    private var powerReceiverRegistered = false
+    private var stoppedForLowBattery = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -166,6 +210,18 @@ class LoggerService : Service() {
         }
 
         LoggerState.serviceStarted()
+        // ACTION_BATTERY_CHANGED is sticky: the receiver gets the current level straight away, so
+        // a start on a low battery stops at once.
+        ContextCompat.registerReceiver(
+            this,
+            powerReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SHUTDOWN)
+                addAction(Intent.ACTION_BATTERY_CHANGED)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        powerReceiverRegistered = true
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         startLocationUpdates()
         locationManager = getSystemService(LocationManager::class.java)
@@ -174,10 +230,9 @@ class LoggerService : Service() {
     }
 
     private fun startForegroundService() {
-        val channelId = "LoggerChannel"
-        createNotificationChannel(channelId)
+        createNotificationChannel(CHANNEL_ID)
 
-        val notification: Notification = NotificationCompat.Builder(this, channelId)
+        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(getString(R.string.notification_text))
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
@@ -185,6 +240,18 @@ class LoggerService : Service() {
             .build()
 
         startForeground(1, notification)
+    }
+
+    /** Tells the user that logging stopped by itself to keep the battery for calls. */
+    private fun notifyLowBatteryStop() {
+        val text = getString(R.string.low_battery_stop_text)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(getString(R.string.low_battery_stop_title))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setSmallIcon(android.R.drawable.ic_lock_idle_low_battery)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(LOW_BATTERY_NOTIFICATION_ID, notification)
     }
 
     private fun createNotificationChannel(channelId: String) {
@@ -417,12 +484,18 @@ class LoggerService : Service() {
     private companion object {
         /** How long a tick waits for each subscription's modem to report its cells. */
         const val CELL_INFO_TIMEOUT_MS = 3_000L
+
+        const val CHANNEL_ID = "LoggerChannel"
+
+        /** Not the foreground notification's id, so it stays after the service stops. */
+        const val LOW_BATTERY_NOTIFICATION_ID = 2
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
         START_STICKY
 
     override fun onDestroy() {
+        if (powerReceiverRegistered) unregisterReceiver(powerReceiver)
         if (::locationClient.isInitialized) {
             locationClient.removeLocationUpdates(locationCallback)
         }

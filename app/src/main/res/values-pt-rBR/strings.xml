@@ -46,4 +46,6 @@
     <string name="notification_title">Gravação de sinal ativa</string>
     <string name="notification_text">Registrando localização e intensidade do sinal</string>
     <string name="notification_channel">Serviço de gravação</string>
+    <string name="low_battery_stop_title">Gravação parada: bateria fraca</string>
+    <string name="low_battery_stop_text">A gravação parou para poupar bateria para chamadas. Tudo o que foi gravado até agora fica no telefone e será enviado.</string>
 </resources>
