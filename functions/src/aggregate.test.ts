@@ -4,8 +4,8 @@ import { test } from "node:test";
 import { cellToChildren, cellToLatLng, cellToParent, getResolution, greatCircleDistance, latLngToCell } from "h3-js";
 import {
   type CellState, type PublicCell, type StoredSample,
-  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, PRIVATE_RESOLUTION, STAYS, TILE_RESOLUTION, TRIM_M, accumulate, distancesComputed, publish, tiles,
-  trimLengths, trimSession,
+  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, PRIVATE_RESOLUTION, REST_CUT_M, STAYS, TILE_RESOLUTION, accumulate, distancesComputed, publish,
+  tiles, trimSession,
 } from "./aggregate.js";
 
 // Made-up installs, sessions and places; 0.001 degrees of latitude is about 111 m.
@@ -44,33 +44,50 @@ const walk = (length: number) =>
 const still = (lat: number, from: number, length = 360) =>
   Array.from({ length }, (_, i) => sample(ALICE, lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + (from + i) * 30_000));
 
-/** Asserts that [kept] is not empty and that none of it lies within [trimM] of the latitudes [places]. */
-function assertClear(kept: StoredSample[], places: number[], trimM: number, message?: string) {
+/** Asserts that [kept] is not empty and that none of it lies within [metres] of the latitudes [places]. */
+function assertClear(kept: StoredSample[], places: number[], metres: number, message?: string) {
   assert.ok(kept.length > 0, message);
   for (const { fix } of kept) {
-    for (const lat of places) assert.ok(greatCircleDistance([lat, PLACE.lon], [fix.lat, fix.lon], "m") > trimM, message);
+    for (const lat of places) assert.ok(greatCircleDistance([lat, PLACE.lon], [fix.lat, fix.lon], "m") > metres, message);
   }
 }
 
-test("a session loses the samples within its trim lengths of either end and of the fixes there", () => {
-  const fixes = walk(401);
-  const kept = trimSession(fixes.toReversed(), 555, 345);
-  // The first and last ANCHOR_FIXES fixes (about 110 m) widen each straight-line cut by their spread.
-  assert.equal(ANCHOR_FIXES, 12);
-  assert.deepEqual(kept, fixes.slice(67, 355));
-
-  const cells: Record<string, CellState> = {};
-  accumulate(cells, kept);
-  for (const end of [...fixes.slice(0, 50), ...fixes.slice(-30)]) {
-    assert.equal(cells[latLngToCell(end.fix.lat, PLACE.lon, PRIVATE_RESOLUTION)], undefined);
-  }
+test("a session that starts and ends while moving keeps its first and last samples", () => {
+  // A walk, and a drive at 72 km/h (100 m every 5 s), each logged from the first fix to the last.
+  const drive = Array.from({ length: 400 }, (_, i) => sample(ALICE, PLACE.lat + i * 0.0009, JAN_10 + i * 5_000));
+  for (const session of [walk(401), drive]) assert.deepEqual(trimSession(session.toReversed()), session);
 });
 
 test("a phone left still at either end loses those samples despite GPS jitter", () => {
   // Three hours still at each end, a fix every 30 s within about 10 m, and a 3 km walk between.
   const end = PLACE.lat + 0.027;
   const between = Array.from({ length: 30 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.0009, JAN_10 + (360 + i) * 30_000));
-  assertClear(trimSession([...still(PLACE.lat, 0), ...between, ...still(end, 390)], TRIM_M.max, TRIM_M.max), [PLACE.lat, end], TRIM_M.max);
+  assertClear(trimSession([...still(PLACE.lat, 0), ...between, ...still(end, 390)]), [PLACE.lat, end], REST_CUT_M);
+});
+
+test("a session that starts after a long rest hides the fixes around the rest and keeps the walk past them", () => {
+  // Ten minutes still at PLACE, a fix every 5 s within about 10 m, then a 4 km walk north.
+  const rest = Array.from({ length: 120 }, (_, i) => sample(ALICE, PLACE.lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + i * 5_000));
+  const away = Array.from({ length: 400 }, (_, i) => sample(ALICE, PLACE.lat + (i + 1) * 0.00009, JAN_10 + (120 + i) * 5_000));
+  const kept = trimSession([...rest, ...away]);
+  assertClear(kept, [PLACE.lat], REST_CUT_M);
+  // The ten-minute stay takes in the rest and the walk's first 200 m, so it cuts at most 300 + 200 + 100 m.
+  const metres = (s: StoredSample) => greatCircleDistance([PLACE.lat, PLACE.lon], [s.fix.lat, s.fix.lon], "m");
+  assert.deepEqual(kept, away.slice(away.length - kept.length));
+  assert.ok(kept.includes(away.find((s) => metres(s) > REST_CUT_M + STAYS[1].radiusM * 1.5) as StoredSample));
+});
+
+test("trimming draws nothing at random and gives the same samples for the same session", () => {
+  const session = [...still(PLACE.lat, 0), ...walk(300).map((s) => ({ ...s, elapsedRealtimeMs: s.elapsedRealtimeMs + 20_000_000 }))];
+  const random = Math.random;
+  Math.random = () => assert.fail("trimSession drew a random number");
+  try {
+    const kept = trimSession(session);
+    assert.ok(kept.length > 0);
+    assert.deepEqual(trimSession([...session].reverse()), kept);
+  } finally {
+    Math.random = random;
+  }
 });
 
 test("wrong fixes at either end don't stand in for the place the phone rests", () => {
@@ -82,33 +99,31 @@ test("wrong fixes at either end don't stand in for the place the phone rests", (
   const out = Array.from({ length: 300 }, (_, i) => PLACE.lat + (i + 1) * 0.00009);
   // The fixes strictly between [from] and [to], a twentieth of the way apart.
   const glide = (from: number, to: number) => Array.from({ length: 19 }, (_, i) => from + ((i + 1) * (to - from)) / 20);
-  for (const trimM of [TRIM_M.min, TRIM_M.max]) {
-    const off = (1.3 * trimM) / 111_195;
-    const cases = {
-      // Twelve repeats of a network fix 1.3 trims off, then an hour still with jitter, at each end.
-      network: session([repeat(ANCHOR_FIXES, PLACE.lat - off), hour(PLACE.lat), out, hour(end), repeat(ANCHOR_FIXES, end + off)]),
-      // An hour of Wi-Fi fixes 1 km off, then GPS at the door and the walk at once, at each end.
-      wifi: session([repeat(720, PLACE.lat - 0.009), out, repeat(720, end + 0.009)]),
-      // Ten minutes of scattered fixes 1.2 km off, ten minutes without a fix, then an hour still.
-      scattered: [
-        ...session([Array.from({ length: 120 }, (_, i) => PLACE.lat - 0.011 + 0.004 * Math.sin(i))]),
-        ...session([hour(PLACE.lat), out, hour(end)]).map((s) => ({ ...s, elapsedRealtimeMs: s.elapsedRealtimeMs + 1_200_000 })),
-      ],
-      // Ten minutes of fixes 1.2 km off, ten minutes without a fix, then GPS at the door and the walk at once.
-      gap: [
-        ...session([repeat(120, PLACE.lat - 0.011)]),
-        ...session([out, repeat(120, end + 0.011)]).map((s) => ({ ...s, elapsedRealtimeMs: s.elapsedRealtimeMs + 1_200_000 })),
-      ],
-      // One fix 1.2 km off, then an hour still, at each end.
-      single: session([[PLACE.lat - 0.011], hour(PLACE.lat), out, hour(end), [end + 0.011]]),
-      // Ten minutes 1 km off, a 100 s glide home in 50 m steps (36 km/h), ten minutes still, at each end.
-      glide: session([
-        repeat(120, PLACE.lat - 0.009), glide(PLACE.lat - 0.009, PLACE.lat), hour(PLACE.lat).slice(0, 120), out,
-        hour(end).slice(0, 120), glide(end + 0.009, end).toReversed(), repeat(120, end + 0.009),
-      ]),
-    };
-    for (const [name, s] of Object.entries(cases)) assertClear(trimSession(s, trimM, trimM), [PLACE.lat, end], trimM, `${name} ${trimM}`);
-  }
+  const off = (1.3 * REST_CUT_M) / 111_195;
+  const cases = {
+    // Twelve repeats of a network fix 1.3 cuts off, then an hour still with jitter, at each end.
+    network: session([repeat(ANCHOR_FIXES, PLACE.lat - off), hour(PLACE.lat), out, hour(end), repeat(ANCHOR_FIXES, end + off)]),
+    // An hour of Wi-Fi fixes 1 km off, then GPS at the door and the walk at once, at each end.
+    wifi: session([repeat(720, PLACE.lat - 0.009), out, repeat(720, end + 0.009)]),
+    // Ten minutes of scattered fixes 1.2 km off, ten minutes without a fix, then an hour still.
+    scattered: [
+      ...session([Array.from({ length: 120 }, (_, i) => PLACE.lat - 0.011 + 0.004 * Math.sin(i))]),
+      ...session([hour(PLACE.lat), out, hour(end)]).map((s) => ({ ...s, elapsedRealtimeMs: s.elapsedRealtimeMs + 1_200_000 })),
+    ],
+    // Ten minutes of fixes 1.2 km off, ten minutes without a fix, then GPS at the door and the walk at once.
+    gap: [
+      ...session([repeat(120, PLACE.lat - 0.011)]),
+      ...session([out, repeat(120, end + 0.011)]).map((s) => ({ ...s, elapsedRealtimeMs: s.elapsedRealtimeMs + 1_200_000 })),
+    ],
+    // One fix 1.2 km off, then an hour still, at each end.
+    single: session([[PLACE.lat - 0.011], hour(PLACE.lat), out, hour(end), [end + 0.011]]),
+    // Ten minutes 1 km off, a 100 s glide home in 50 m steps (36 km/h), ten minutes still, at each end.
+    glide: session([
+      repeat(120, PLACE.lat - 0.009), glide(PLACE.lat - 0.009, PLACE.lat), hour(PLACE.lat).slice(0, 120), out,
+      hour(end).slice(0, 120), glide(end + 0.009, end).toReversed(), repeat(120, end + 0.009),
+    ]),
+  };
+  for (const [name, s] of Object.entries(cases)) assertClear(trimSession(s), [PLACE.lat, end], REST_CUT_M, name);
 });
 
 test("a home whose fixes jitter 50 to 100 m, reached by a glide, is cut out at either end", () => {
@@ -129,7 +144,7 @@ test("a home whose fixes jitter 50 to 100 m, reached by a glide, is cut out at e
     ...jitter(end, 2160), ...line(glide(end + 0.009, end).toReversed()), ...line(Array(120).fill(end + 0.009)),
   ];
   const session = points.map(([lat = 0, lon = 0], i) => ({ ...sample(ALICE, lat, JAN_10 + i * 5_000), fix: { lat, lon, mock: false } }));
-  for (const trimM of [TRIM_M.min, TRIM_M.max]) assertClear(trimSession(session, trimM, trimM), [PLACE.lat, end], trimM, `${trimM}`);
+  assertClear(trimSession(session), [PLACE.lat, end], REST_CUT_M);
 });
 
 test("a stay is cut out unless the phone first moves away from the end for DEPARTURE_FIXES", () => {
@@ -140,19 +155,19 @@ test("a stay is cut out unless the phone first moves away from the end for DEPAR
     return ms.map((m: number, i) => sample(ALICE, PLACE.lat + m / 111_195, JAN_10 + i * 5_000));
   };
   const atCrag = (metres: number) =>
-    trimSession(session(metres), TRIM_M.max, TRIM_M.max).filter((s) => s.fix.lat === PLACE.lat + metres / 111_195).length;
-  // The start's first fixes cut 800 m; its ten-minute stay, which takes in the walk's first 200 m, and
-  // the walk on to 400 m don't move. DEPARTURE_FIXES at 2 m/s take the walk from 800 m to 1400 m;
-  // the crag's ten-minute stay starts 200 m short of it.
+    trimSession(session(metres)).filter((s) => s.fix.lat === PLACE.lat + metres / 111_195).length;
+  // The start's ten-minute stay takes in the walk to 190 m, and the walk on to 380 m doesn't
+  // move. DEPARTURE_FIXES at 2 m/s take the walk from 390 m to 980 m; the crag's ten-minute stay
+  // starts at the first fix less than 200 m from it.
   assert.deepEqual([DEPARTURE_FIXES, STAYS[1]], [60, { fixes: 120, radiusM: 200 }]);
-  assert.equal(atCrag(1600), 0);
-  assert.equal(atCrag(1700), 1440);
+  assert.equal(atCrag(1170), 0);
+  assert.equal(atCrag(1180), 1440);
 });
 
 test("rests every ten minutes on the walk from an end don't chain its cut to the crag", () => {
   // A minute still, a walk north at 1.2 m/s (6 m a fix) resting 3 minutes after every 10 minutes of
   // walking, two hours at a crag [metres] away, the same walk back, a minute still. Still fixes
-  // jitter about 4 m. Each trim keeps the whole crag from the distance listed with it to 5 km.
+  // jitter about 4 m. The whole crag is kept from 490 m to 5 km.
   const session = (metres: number) => {
     const leg: number[] = [];
     for (let m = 6, walked = 1; m < metres; m += 6, walked++) leg.push(...Array<number>(walked % 120 === 0 ? 37 : 1).fill(m));
@@ -163,13 +178,11 @@ test("rests every ten minutes on the walk from an end don't chain its cut to the
     });
     return { samples, crag: new Set(samples.filter((_, i) => ms[i] === metres)) };
   };
-  const keptAtCrag = (metres: number, trimM: number) => {
+  const keptAtCrag = (metres: number) => {
     const { samples, crag } = session(metres);
-    return trimSession(samples, trimM, trimM).filter((s) => crag.has(s)).length;
+    return trimSession(samples).filter((s) => crag.has(s)).length;
   };
-  for (const [trimM, metres] of [[TRIM_M.min, 860], [550, 1320], [TRIM_M.max, 1940]] as const) {
-    for (const crag of [metres, metres + 70, metres + 360, 5_000]) assert.equal(keptAtCrag(crag, trimM), 1440, `${trimM} ${crag}`);
-  }
+  for (const crag of [490, 560, 850, 5_000]) assert.equal(keptAtCrag(crag), 1440, `${crag}`);
 });
 
 /** A tick every 5 s; the listed latitude i is a fix held for [held](i) ticks, three unless given. */
@@ -185,14 +198,16 @@ test("wrong fixes repeated over three ticks don't bring an end's departure soone
   const session = repeatedFixes([
     ...steps(PLACE.lat - 0.1, 40, 200), ...hour(PLACE.lat), ...steps(PLACE.lat, 499, 200), ...hour(end), ...steps(end + 0.1, 40, -200).toReversed(),
   ]);
-  for (const trimM of [TRIM_M.min, TRIM_M.max]) assertClear(trimSession(session, trimM, trimM), [PLACE.lat, end], trimM, `${trimM}`);
+  assertClear(trimSession(session), [PLACE.lat, end], REST_CUT_M);
 });
 
-test("an end's first fixes repeated over three ticks still cut ANCHOR_FIXES distinct fixes", () => {
+test("fixes repeated over three ticks after a step from a wrong fix still cut ANCHOR_FIXES distinct fixes", () => {
   const end = PLACE.lat + 0.1;
-  // Four wrong fixes glide to the phone at 200 m a fix, and it drives off at the same pace; the same mirrored.
-  const session = repeatedFixes([...steps(PLACE.lat, 4, -200).toReversed(), PLACE.lat, ...steps(PLACE.lat, 499, 200), end, ...steps(end, 4, 200)]);
-  for (const trimM of [TRIM_M.min, TRIM_M.max]) assertClear(trimSession(session, trimM, trimM), [PLACE.lat, end], trimM, `${trimM}`);
+  // One fix 5 km off, four wrong fixes glide to the phone at 200 m a fix, and it drives off at the same pace; the same mirrored.
+  const session = repeatedFixes([
+    PLACE.lat - 0.045, ...steps(PLACE.lat, 4, -200).toReversed(), PLACE.lat, ...steps(PLACE.lat, 499, 200), end, ...steps(end, 4, 200), end + 0.045,
+  ]);
+  assertClear(trimSession(session), [PLACE.lat, end], REST_CUT_M);
 });
 
 test("fixes held for different numbers of ticks don't change which wrong fixes stay", () => {
@@ -211,18 +226,14 @@ test("fixes held for different numbers of ticks don't change which wrong fixes s
     ...home(end), ...clusters(end + 0.03, end).toReversed(), end + 0.045,
   ];
   const helds = { 1: () => 1, 2: () => 2, 3: () => 3, "1-3": (i: number) => [1, 3, 2, 3, 1, 2, 2, 1, 3][i % 9] ?? 1 };
-  for (const [name, held] of Object.entries(helds)) {
-    for (const trimM of [TRIM_M.min, (TRIM_M.min + TRIM_M.max) / 2, TRIM_M.max]) {
-      assertClear(trimSession(repeatedFixes(lats, held), trimM, trimM), [PLACE.lat, end], trimM, `${name} ${trimM}`);
-    }
-  }
+  for (const [name, held] of Object.entries(helds)) assertClear(trimSession(repeatedFixes(lats, held)), [PLACE.lat, end], REST_CUT_M, name);
 });
 
-test("a step faster than any phone moves after an end's cut doesn't restart it", () => {
+test("a step faster than any phone moves, once the phone has left an end, cuts nothing", () => {
   const fixes = walk(401);
-  // One fix 1 km off in the middle: two steps longer than either trim, both after the cuts.
+  // One fix 1 km off in the middle: two steps longer than the cut, long after the phone left either end.
   fixes[200] = { ...sample(ALICE, PLACE.lat + 200 * 0.00009, JAN_10 + 200 * 5_000), fix: { lat: PLACE.lat, lon: PLACE.lon + 0.01, mock: false } };
-  assert.deepEqual(trimSession(fixes, 555, 345), fixes.slice(67, 355));
+  assert.deepEqual(trimSession(fixes), fixes);
 });
 
 test("a 14 h session that never leaves its start costs a bounded number of distances per fix", () => {
@@ -230,11 +241,9 @@ test("a 14 h session that never leaves its start costs a bounded number of dista
   // About 5 000 places' anchors each cut around them; testing each against every fix would take about 10 000 distances per fix.
   const session = Array.from({ length: 10_080 }, (_, i) =>
     sample(ALICE, i % 50 === 49 ? PLACE.lat - 0.011 : PLACE.lat + 0.00009 * Math.sin(i * 1.7), JAN_10 + i * 5_000));
-  for (const trimM of [TRIM_M.min, TRIM_M.max]) {
-    const before = distancesComputed;
-    assert.deepEqual(trimSession(session, trimM, trimM), []);
-    assert.ok(distancesComputed - before < 100 * session.length, `${trimM}: ${distancesComputed - before}`);
-  }
+  const before = distancesComputed;
+  assert.deepEqual(trimSession(session), []);
+  assert.ok(distancesComputed - before < 100 * session.length, `${distancesComputed - before}`);
 });
 
 test("a 14 h session whose short stays keep breaking costs a bounded number of distances per fix", () => {
@@ -242,18 +251,15 @@ test("a 14 h session whose short stays keep breaking costs a bounded number of d
   // first kind, and the fixes after it lie within that stay's spread plus its radius.
   const session = Array.from({ length: 10_080 }, (_, i) =>
     sample(ALICE, PLACE.lat + (i % 40 === 39 ? 52.5 : 2 * Math.sin(i * 1.7)) / 111_195, JAN_10 + i * 5_000));
-  for (const trimM of [TRIM_M.min, TRIM_M.max]) {
-    const before = distancesComputed;
-    assert.deepEqual(trimSession(session, trimM, trimM), []);
-    assert.ok(distancesComputed - before < 100 * session.length, `${trimM}: ${distancesComputed - before}`);
-  }
+  const before = distancesComputed;
+  assert.deepEqual(trimSession(session), []);
+  assert.ok(distancesComputed - before < 100 * session.length, `${distancesComputed - before}`);
 });
 
 test("a session that flaps between two places costs a bounded number of distances per fix", () => {
   // 4 000 fixes alternating between PLACE and a point 1.2 km south: each jump starts a place, so the
   // start never departs and has about 48 000 anchors near two spots, at the same two coordinates or,
-  // jittered, each up to 10 m off. Then a walk 1.7 km north and a rest there; at the longest trim
-  // the cuts around the start and the rest meet.
+  // jittered, each up to 10 m off. Then a walk 1.7 km north and a rest there.
   const rest = PLACE.lat + 1_700 / 111_195;
   for (const jitter of [0, 0.00009]) {
     const lats = [
@@ -262,32 +268,18 @@ test("a session that flaps between two places costs a bounded number of distance
       ...Array.from({ length: 4_000 }, (_, i) => rest + 0.00009 * Math.sin(i * 1.7)),
     ];
     const session = lats.map((lat, i) => sample(ALICE, lat, JAN_10 + i * 5_000));
-    for (const trimM of [TRIM_M.min, TRIM_M.max]) {
-      const before = distancesComputed;
-      const kept = trimSession(session, trimM, trimM);
-      if (trimM === TRIM_M.min) assertClear(kept, [PLACE.lat, PLACE.lat - 0.011, rest], trimM - jitter * 111_195, `${jitter} ${trimM}`);
-      else assert.deepEqual(kept, [], `${jitter} ${trimM}`);
-      assert.ok(distancesComputed - before < 100 * session.length, `${jitter} ${trimM}: ${distancesComputed - before}`);
-    }
+    const before = distancesComputed;
+    const kept = trimSession(session);
+    assertClear(kept, [PLACE.lat, PLACE.lat - 0.011, rest], REST_CUT_M - jitter * 111_195, `${jitter}`);
+    assert.ok(distancesComputed - before < 100 * session.length, `${jitter}: ${distancesComputed - before}`);
   }
 });
 
-test("mock fixes are dropped and a session shorter than both trims keeps nothing", () => {
+test("mock fixes are dropped and count for nothing", () => {
   const fixes = walk(211);
   const mocked = { ...fixes[105], fix: { lat: PLACE.lat + 0.009, lon: PLACE.lon, mock: true } } as StoredSample;
   fixes[105] = mocked;
-  const kept = trimSession(fixes, 355, 355);
-  assert.equal(kept.includes(mocked), false);
-  assert.deepEqual(kept, [...fixes.slice(47, 105), ...fixes.slice(106, 164)]);
-  assert.deepEqual(trimSession(fixes, 1100, 1100), []);
-});
-
-test("trim lengths are drawn in the configured range", () => {
-  assert.deepEqual(trimLengths(() => 0), { startM: TRIM_M.min, endM: TRIM_M.min });
-  const values = [0.25, 0.999];
-  const { startM, endM } = trimLengths(() => values.shift() ?? 0);
-  assert.equal(startM, TRIM_M.min + 0.25 * (TRIM_M.max - TRIM_M.min));
-  assert.ok(endM < TRIM_M.max && endM > startM);
+  assert.deepEqual(trimSession(fixes), [...fixes.slice(0, 105), ...fixes.slice(106)]);
 });
 
 test("a two-install cell is public the next day with per-carrier aggregates only", () => {

@@ -13,8 +13,11 @@ export const PRIVATE_RESOLUTION = 12;
 /** The H3 resolution of the region tile that groups public cells into one file. */
 export const TILE_RESOLUTION = 5;
 
-/** The range of the length, in metres, cut from each end of a session; drawn per session and end. */
-export const TRIM_M = { min: 300, max: 800 } as const;
+/**
+ * How far, in metres, a session's end is cut around each place the phone may have rested at there:
+ * about six public cells across, so the published track stops well short of the place.
+ */
+export const REST_CUT_M = 300;
 
 /** How many distinct fixes a resting place is drawn from: a minute at the app's 5 s interval. */
 export const ANCHOR_FIXES = 12;
@@ -98,12 +101,6 @@ export type PublicCarrier = {
 /** A public cell: aggregates and the month last seen only. */
 export type PublicCell = { h3: string; carriers: Record<string, PublicCarrier>; lastSeen: string };
 
-/** The lengths in metres to cut from the start and the end of one session. */
-export function trimLengths(random: () => number = Math.random): { startM: number; endM: number } {
-  const draw = () => TRIM_M.min + random() * (TRIM_M.max - TRIM_M.min);
-  return { startM: draw(), endM: draw() };
-}
-
 /** How many distances between fixes this process has computed: a measure of the trim's work that doesn't depend on the machine. */
 export let distancesComputed = 0;
 
@@ -115,16 +112,17 @@ const metresApart = (a: StoredSample["fix"], b: StoredSample["fix"]) => {
 type Anchor = { fix: StoredSample["fix"]; radiusM: number };
 
 /**
- * Which of [samples], ordered from one end of a session inwards, lie beyond that end's cut of
- * [trimM] metres. A place the phone may rest at starts at the end's first fix, at each fix after a
- * step longer than [trimM] or faster than [MAX_SPEED_MPS] (the fixes before it may be wrong), and
- * at each stay of either kind in [STAYS]. The first two cut [trimM] around each of the
- * [ANCHOR_FIXES] fixes from where they start. A stay of radius r cuts [trimM] + s + r / 2 around
- * its first fix, s being its fixes' largest distance from that fix, which covers [trimM] around
- * every point within r / 2 of any of its fixes. The phone has left the end once [DEPARTURE_FIXES]
- * fixes have moved: lain in no run of consecutive fixes long enough for a stay, and outside the cut
- * of every place of the first two kinds that started by then. A stay's cut doesn't stop a fix
- * moving, so rests along the way don't keep the phone from leaving. Every place that starts before
+ * Which of [samples], ordered from one end of a session inwards, lie beyond that end's cut. A
+ * place the phone may rest at starts at each fix after a step longer than [REST_CUT_M] or faster
+ * than [MAX_SPEED_MPS] (the fixes before it may be wrong and hide where the phone rested), and at
+ * each stay of either kind in [STAYS]. The end's first fix starts none, so an end where the phone
+ * was moving loses nothing. A place after a step cuts [REST_CUT_M] around each of the
+ * [ANCHOR_FIXES] fixes from where it starts. A stay of radius r cuts [REST_CUT_M] + s + r / 2
+ * around its first fix, s being its fixes' largest distance from that fix, which covers
+ * [REST_CUT_M] around every point within r / 2 of any of its fixes. The phone has left the end
+ * once [DEPARTURE_FIXES] fixes have moved: lain in no run of consecutive fixes long enough for a
+ * stay, and outside the cut of every place after a step that started by then. A stay's cut
+ * doesn't stop a fix moving, so rests along the way don't keep the phone from leaving. Every place that starts before
  * the phone has left is one of the end's resting places, and a sample is beyond the cut if it lies
  * outside every resting place's cut. So ten minutes of consecutive fixes within 100 m of where the
  * phone rests (or three minutes within 25 m) cut that place out, whatever wrong fixes come before
@@ -144,7 +142,7 @@ type Anchor = { fix: StoredSample["fix"]; radiusM: number };
  * every run long enough for a stay without it still is one, and makes the step after it shorter in
  * time. So a repeated wrong fix neither narrows a cut nor brings departure sooner.
  */
-function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
+function beyondEnd(samples: StoredSample[]): boolean[] {
   const fixes = samples.map((s) => s.fix);
   const repeat = fixes.map((fix, i) => fix.lat === fixes[i - 1]?.lat && fix.lon === fixes[i - 1]?.lon);
   const places: { from: number; anchors: Anchor[] }[] = [];
@@ -152,11 +150,12 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   const inStay = fixes.map(() => false);
   samples.forEach((s, i) => {
     const before = samples[i - 1];
-    const metres = before ? metresApart(before.fix, s.fix) : Infinity;
-    if (metres > trimM || metres > (MAX_SPEED_MPS * Math.abs(s.elapsedRealtimeMs - (before?.elapsedRealtimeMs ?? 0))) / 1000) {
+    if (!before) return;
+    const metres = metresApart(before.fix, s.fix);
+    if (metres > REST_CUT_M || metres > (MAX_SPEED_MPS * Math.abs(s.elapsedRealtimeMs - before.elapsedRealtimeMs)) / 1000) {
       const anchors: Anchor[] = [];
       for (let k = i, fix = fixes[k]; fix && anchors.length < ANCHOR_FIXES; fix = fixes[++k]) {
-        if (k === i || !repeat[k]) anchors.push({ fix, radiusM: trimM });
+        if (k === i || !repeat[k]) anchors.push({ fix, radiusM: REST_CUT_M });
       }
       places.push({ from: i, anchors });
     }
@@ -174,7 +173,7 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
         spreadM = Math.max(spreadM, metres);
       }
       if (j - i < stay.fixes) return;
-      stays.push({ from: i, fix: first, radiusM: trimM + spreadM + stay.radiusM / 2 });
+      stays.push({ from: i, fix: first, radiusM: REST_CUT_M + spreadM + stay.radiusM / 2 });
       inStay.fill(true, i, j);
       next = j;
       j = Math.max(j, marked);
@@ -186,7 +185,7 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
   // length plus REFERENCE_M, so every fix within that many metres of a point lies in the point's
   // cube or the 26 next to it. 6 300 km is below the Earth's radius in h3-js, 6 371 km, which only
   // widens the cubes. A fix leaves its cube once cut.
-  let widestM = trimM;
+  let widestM = REST_CUT_M;
   for (const { radiusM } of stays) widestM = Math.max(widestM, radiusM);
   const cubeOf = ({ lat, lon }: StoredSample["fix"], side: number) => {
     const [φ, λ] = [(lat * Math.PI) / 180, (lon * Math.PI) / 180];
@@ -248,14 +247,14 @@ function beyondEnd(samples: StoredSample[], trimM: number): boolean[] {
 }
 
 /**
- * The samples of one whole session that lie beyond the cut of [startM] metres at its first end and
- * of [endM] at its last, in `elapsedRealtimeMs` order. Mock fixes are dropped first and count for
- * nothing.
+ * The samples of one whole session that lie beyond the cuts of both its ends, in
+ * `elapsedRealtimeMs` order. Mock fixes are dropped first and count for nothing. The same samples
+ * always give the same result: nothing in the trim is drawn at random.
  */
-export function trimSession(session: StoredSample[], startM: number, endM: number): StoredSample[] {
+export function trimSession(session: StoredSample[]): StoredSample[] {
   const samples = session.filter((s) => !s.fix.mock).sort((a, b) => a.elapsedRealtimeMs - b.elapsedRealtimeMs);
-  const fromStart = beyondEnd(samples, startM);
-  const fromEnd = beyondEnd(samples.toReversed(), endM).toReversed();
+  const fromStart = beyondEnd(samples);
+  const fromEnd = beyondEnd(samples.toReversed()).toReversed();
   return samples.filter((_, i) => fromStart[i] && fromEnd[i]);
 }
 

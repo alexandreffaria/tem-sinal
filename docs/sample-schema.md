@@ -74,7 +74,7 @@ A pseudonymous id for this installation of the app, so the server can throttle u
 
 A random UUID (version 4) made when `LoggerService` starts (`onCreate`) and kept in memory only. It
 ends when the service stops; a service the system restarts gets a new one. Every sample of one
-logging session shares it, so the aggregation job can drop the randomised start and end of each
+logging session shares it, so the aggregation job can drop the places where the phone rested at the start and end of each
 session before aggregating (card `20261113a7do`). A session can be uploaded in several batches and
 reach the server days late, so the job treats a session as finished only once it has had no new
 sample for a while; that is the job's rule to set (#16).

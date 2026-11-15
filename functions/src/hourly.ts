@@ -1,6 +1,6 @@
 // The hourly job: reads newly received samples and adds each ended session, trimmed, to the
 // private cells. Its storage is behind [AggregationStore]; nothing here is public.
-import { type CellState, type StoredSample, accumulate, trimLengths, trimSession } from "./aggregate.js";
+import { type CellState, type StoredSample, accumulate, trimSession } from "./aggregate.js";
 import { SAMPLE_LIFETIME_MS } from "./ingest.js";
 import { sampleErrors } from "./sample.js";
 
@@ -25,7 +25,9 @@ export const READ_LIMIT = 10_000;
  * The most samples of one session a page reads, about 14 hours of logging. A session with more
  * samples left than this is aggregated in parts, one part a page, each ending before the last
  * `expireAt` read and each trimmed at both ends like a whole session; so is one whose cells would
- * pass [CELL_LIMIT].
+ * pass [CELL_LIMIT]. Where a real end's resting places lie is known only from the whole session,
+ * and one can lie past a part's end, so each part's ends are cut as if they were real ones; a part
+ * that ends while the phone is moving loses nothing there.
  */
 export const SESSION_READ_LIMIT = 10_000;
 
@@ -104,10 +106,9 @@ export async function runHourly(
   store: AggregationStore,
   nowMs: number,
   deadlineMs: number,
-  random: () => number = Math.random,
 ): Promise<void> {
   for (;;) {
-    const more = await runPage(store, nowMs, random);
+    const more = await runPage(store, nowMs);
     if (!more || Date.now() >= deadlineMs) return;
   }
 }
@@ -116,7 +117,7 @@ export async function runHourly(
  * One page of a run at [nowMs]. Reads up to [READ_LIMIT] samples received since the last page up
  * to [WRITE_MARGIN_MS] ago, and each session that has had no new sample for [SESSION_IDLE_MS] is
  * read whole, from its first sample not yet aggregated to the last one read, trimmed at both ends
- * with [trimLengths] and added to the private cells, until about [CELL_LIMIT] cells are written;
+ * with [trimSession] and added to the private cells, until about [CELL_LIMIT] cells are written;
  * the session that reaches the limit is added only up to it, as a part trimmed the same way, and
  * the rest of it and the other sessions stay open for a later page. A session too long to read
  * whole is left for after the others, and then, if fewer than [CELL_LIMIT] cells are written, one
@@ -128,7 +129,7 @@ export async function runHourly(
  * read [READ_LIMIT] samples or left an ended session open. A page that leaves one open has added
  * part of an ended session or skipped samples of one, so the next page starts further on.
  */
-async function runPage(store: AggregationStore, nowMs: number, random: () => number): Promise<boolean> {
+async function runPage(store: AggregationStore, nowMs: number): Promise<boolean> {
   const state = await store.state();
   const untilMs = nowMs - WRITE_MARGIN_MS + SAMPLE_LIFETIME_MS;
   const read = await store.samplesAfter(state.cursor, nowMs, untilMs, READ_LIMIT);
@@ -149,8 +150,7 @@ async function runPage(store: AggregationStore, nowMs: number, random: () => num
   const trimmed: StoredSample[] = [];
   const ids = new Set<string>();
   const add = (samples: StoredSample[]) => {
-    const { startM, endM } = trimLengths(random);
-    const kept = trimSession(samples, startM, endM);
+    const kept = trimSession(samples);
     const cells: Record<string, CellState> = {};
     accumulate(cells, kept);
     for (const id of Object.keys(cells)) ids.add(id);
