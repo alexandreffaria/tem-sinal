@@ -68,6 +68,9 @@ fun uploadPreview(samples: List<Sample>, gson: Gson): String =
 /** The upload function, `v1` in `functions/src/index.ts`, at its `/samples` path. */
 const val UPLOAD_URL = "https://us-central1-cellsignalmapper-a9da1.cloudfunctions.net/v1/samples"
 
+/** The same function at its `/sessions/list` path, which lists the recordings the server holds of this phone. */
+const val LIST_URL = "https://us-central1-cellsignalmapper-a9da1.cloudfunctions.net/v1/sessions/list"
+
 /** The same function at its `/sessions/delete` path, which deletes one recording from the server. */
 const val DELETE_URL = "https://us-central1-cellsignalmapper-a9da1.cloudfunctions.net/v1/sessions/delete"
 
@@ -205,6 +208,22 @@ object FirebaseUploader {
         } catch (e: Exception) {
             Log.e("FirebaseUploader", "Upload failed", e)
             return false
+        }
+    }
+
+    /**
+     * Asks the server off the main thread for the recordings it holds raw samples of from this
+     * phone, adds them to [Recordings] as [withListed] does, and returns whether it did.
+     */
+    suspend fun listRecordings(context: Context): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val installId = installId(File(context.noBackupFilesDir, INSTALL_ID_FILE_NAME))
+            val (status, body) = post(LIST_URL, gson.toJson(mapOf("installId" to installId)), idToken(signedInUser()), appCheckToken())
+            Recordings.addListed(context, listedRecordings(status, body, gson))
+            true
+        } catch (e: Exception) {
+            Log.e("FirebaseUploader", "Listing recordings failed", e)
+            false
         }
     }
 

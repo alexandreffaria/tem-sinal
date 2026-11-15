@@ -43,8 +43,9 @@
     <string name="data_sent_none">Nenhuma amostra foi gravada neste celular ainda. Toque em %1$s, e a próxima amostra aparece aqui.</string>
 
     <string name="my_recordings">Minhas gravações</string>
-    <string name="no_recordings">Nada enviado desde esta atualização.</string>
-    <string name="recordings_before_update">Gravações enviadas antes desta atualização do app não aparecem aqui e ainda não dá para apagá-las por aqui.</string>
+    <string name="no_recordings">Nada enviado deste celular.</string>
+    <string name="checking_recordings">Buscando gravações mais antigas no servidor…</string>
+    <string name="list_failed">Não deu para buscar gravações mais antigas no servidor. Tente de novo quando estiver com internet.</string>
     <plurals name="recording_points">
         <item quantity="one">%d ponto</item>
         <item quantity="many">%d pontos</item>

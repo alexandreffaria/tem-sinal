@@ -31,9 +31,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The recordings sent from this phone, newest first, each with its date, its sample count and a
- * Delete button that asks once before deleting it from the server. The recording being logged
- * can't be deleted until logging stops. The list scrolls when the window is too short for it.
+ * The recordings sent from this phone, newest first, with those the server still holds of it
+ * added once it answers, each with its date, its sample count and a Delete button that asks once
+ * before deleting it from the server. The recording being logged can't be deleted until logging
+ * stops. The list scrolls when the window is too short for it.
  */
 @Composable
 fun RecordingsDialog(onDismiss: () -> Unit) {
@@ -44,7 +45,13 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
     var confirming by rememberSaveable { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { recordings = withContext(Dispatchers.IO) { Recordings.list(context) } }
+    // Null while the server is being asked, then whether it answered.
+    var checked by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) {
+        recordings = withContext(Dispatchers.IO) { Recordings.list(context) }
+        checked = FirebaseUploader.listRecordings(context)
+        recordings = withContext(Dispatchers.IO) { Recordings.list(context) }
+    }
 
     confirming?.let { sessionId ->
         AlertDialog(
@@ -80,9 +87,11 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 if (failed) Text(stringResource(R.string.delete_failed))
                 val list = recordings
-                if (list != null && list.isEmpty()) Text(stringResource(R.string.no_recordings))
-                // The list starts with the update that added it; older uploads were never listed.
-                Text(stringResource(R.string.recordings_before_update), style = MaterialTheme.typography.bodySmall)
+                when (checked) {
+                    null -> Text(stringResource(R.string.checking_recordings), style = MaterialTheme.typography.bodySmall)
+                    false -> Text(stringResource(R.string.list_failed), style = MaterialTheme.typography.bodySmall)
+                    true -> if (list != null && list.isEmpty()) Text(stringResource(R.string.no_recordings))
+                }
                 val format = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
                 list?.forEach { recording ->
                     Row(
