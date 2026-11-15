@@ -10,8 +10,11 @@ const STORAGE = ["localhost", "127.0.0.1"].includes(location.hostname)
 
 /** The H3 resolution of a published tile file: TILE_RESOLUTION in functions/src/aggregate.ts. */
 const TILE_RESOLUTION = 5;
-/** Below this zoom the view spans too many tiles to fetch, and the cells are too small to see. */
-const MIN_ZOOM = 9;
+/**
+ * Below this zoom the view spans too many tiles to fetch, and the cells are too small to see. At
+ * this zoom a 1920x1080 view overlaps about 55 tiles; at 9 it overlaps about 190.
+ */
+const MIN_ZOOM = 10;
 
 /** Carrier names by PLMN (MCC 724, Brazil); any other code is shown as is. */
 const CARRIERS = {
@@ -50,17 +53,15 @@ async function fetchTile(tile) {
   return response.json();
 }
 
-/** The tiles that cover the view: those whose centres are in it, and their neighbours. */
+/** The tiles that cover the view: every tile that overlaps it, and no other. */
 function tilesInView(map) {
   const b = map.getBounds();
   const ring = [
     [b.getWest(), b.getSouth()], [b.getEast(), b.getSouth()], [b.getEast(), b.getNorth()],
     [b.getWest(), b.getNorth()], [b.getWest(), b.getSouth()],
   ];
-  const centre = map.getCenter();
-  const inside = h3.polygonToCells([ring], TILE_RESOLUTION, true);
-  inside.push(h3.latLngToCell(centre.lat, centre.lng, TILE_RESOLUTION));
-  return [...new Set(inside.flatMap((tile) => h3.gridDisk(tile, 1)))];
+  return h3.polygonToCellsExperimental(
+    [ring], TILE_RESOLUTION, h3.POLYGON_TO_CELLS_FLAGS.containmentOverlapping, true);
 }
 
 function setStatus(text) {
