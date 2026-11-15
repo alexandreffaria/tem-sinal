@@ -163,6 +163,10 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+                var showRecordings by rememberSaveable { mutableStateOf(false) }
+                if (showRecordings) {
+                    RecordingsDialog(onDismiss = { showRecordings = false })
+                }
                 var showDataSent by rememberSaveable { mutableStateOf(false) }
                 if (showDataSent) {
                     // The dialog opens once the copy of the last sample is read.
@@ -203,7 +207,8 @@ class MainActivity : ComponentActivity() {
                             hint = loggerState.hint,
                             onDismissHint = { LoggerState.dismissHint() },
                             onShowSharing = { showSharing = true },
-                            onShowDataSent = { showDataSent = true }
+                            onShowDataSent = { showDataSent = true },
+                            onShowRecordings = { showRecordings = true }
                         )
                     }
                     val pingResult = loggerState.pingResult?.name ?: ""

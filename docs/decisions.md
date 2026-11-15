@@ -39,6 +39,15 @@ no cursor, so its first run aggregates again every stored raw sample (all younge
 into `session_cells`. The old `private_cells` and `aggregation/hourly` are then unused and are
 deleted by hand. Issue #127.
 
+**In the app.** "My recordings", a link on the main screen beside "See the data sent", lists the
+recordings the server took samples of, newest first: the first sample's date and time, how many
+samples it took, and Delete, which asks once. The phone keeps that list in `recordings.json`
+(session id, first sample time, count; no coordinates), adding to it after each upload the server
+took whole. A deleted recording is dropped from the list and never listed again, even when samples
+of it still on the phone are sent later (the server drops those). The list starts with the update
+that added it, so recordings sent before then aren't listed; the dialog always says so, and
+reaching them is #147. The first-LOG warning and "What is shared?" don't mention it.
+
 Asked for by the owner in issue #127; the design is the agents' (plan on the issue); no card.
 
 ## 2026-11-15: A session's ends are cut only where the phone rested a long time
