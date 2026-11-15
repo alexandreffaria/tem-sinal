@@ -54,11 +54,34 @@ class TickSampleTest {
         assertNull(sampleOf())
     }
 
+    private fun wait(tickOnFix: Boolean, fixDelivered: Boolean, nowMs: Long) =
+        msUntilNextTick(tickStartMs = 10_000L, tickOnFix = tickOnFix, fixDelivered = fixDelivered, nowMs = nowMs)
+
     @Test
-    fun theNextTickStartsAFixedIntervalAfterThisOneStarted() {
-        assertEquals(TICK_INTERVAL_MS, delayUntilNextTickMs(tickStartMs = 10_000L, nowMs = 10_000L))
-        assertEquals(1_500L, delayUntilNextTickMs(tickStartMs = 10_000L, nowMs = 13_500L))
-        assertEquals(0L, delayUntilNextTickMs(tickStartMs = 10_000L, nowMs = 15_000L))
-        assertEquals(0L, delayUntilNextTickMs(tickStartMs = 10_000L, nowMs = 18_000L))
+    fun withoutAFixTheNextTickStartsAFixedIntervalAfterThisOneStarted() {
+        for (tickOnFix in listOf(false, true)) {
+            assertEquals(TICK_INTERVAL_MS, wait(tickOnFix, fixDelivered = false, nowMs = 10_000L))
+            assertEquals(1_500L, wait(tickOnFix, fixDelivered = false, nowMs = 13_500L))
+            assertEquals(0L, wait(tickOnFix, fixDelivered = false, nowMs = 15_000L))
+            assertEquals(0L, wait(tickOnFix, fixDelivered = false, nowMs = 18_000L))
+        }
+    }
+
+    @Test
+    fun aFixAfterATickOnAFixStartsTheNextAtOnce() {
+        assertEquals(0L, wait(tickOnFix = true, fixDelivered = true, nowMs = 14_990L))
+        assertEquals(0L, wait(tickOnFix = true, fixDelivered = true, nowMs = 15_200L))
+    }
+
+    @Test
+    fun aFixSoonAfterATickWithoutOneWaitsForTheInterval() {
+        assertEquals(4_000L, wait(tickOnFix = false, fixDelivered = true, nowMs = 11_000L))
+        assertEquals(0L, wait(tickOnFix = false, fixDelivered = true, nowMs = 15_000L))
+    }
+
+    @Test
+    fun aTickLateFromASleepingCpuStartsAtOnce() {
+        // The elapsed-realtime clock counted the sleep, so the interval has passed.
+        assertEquals(0L, wait(tickOnFix = false, fixDelivered = false, nowMs = 40_000L))
     }
 }

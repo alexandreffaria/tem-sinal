@@ -15,12 +15,15 @@ enum class PingResult { SUCCESS, BAD }
 const val TICK_INTERVAL_MS = 5_000L
 
 /**
- * How long to wait after a tick that started at [tickStartMs] and ended at [nowMs] so the next
- * tick starts [TICK_INTERVAL_MS] after it started; 0 when the tick took longer than that. Both
- * times are on the elapsed-realtime clock, which never jumps.
+ * How long to wait, from [nowMs], before the next tick, after one that started at [tickStartMs].
+ * [tickOnFix] is whether that tick started on a delivered fix, and [fixDelivered] whether one was
+ * delivered since it started. A fix delivered after a tick that started on one starts the next at
+ * once, since the location request already spaces fixes [TICK_INTERVAL_MS] apart. Otherwise the
+ * next tick starts [TICK_INTERVAL_MS] after that one started, at once when that has passed. Both
+ * times are on the elapsed-realtime clock, which keeps counting while the CPU sleeps.
  */
-fun delayUntilNextTickMs(tickStartMs: Long, nowMs: Long): Long =
-    (TICK_INTERVAL_MS - (nowMs - tickStartMs)).coerceAtLeast(0L)
+fun msUntilNextTick(tickStartMs: Long, tickOnFix: Boolean, fixDelivered: Boolean, nowMs: Long): Long =
+    if (tickOnFix && fixDelivered) 0L else (TICK_INTERVAL_MS - (nowMs - tickStartMs)).coerceAtLeast(0L)
 
 /** Each SIM's service state in plain words, one line per SIM, such as "SIM 1: No service". */
 fun serviceText(sims: List<SimReading>): List<UiText> =

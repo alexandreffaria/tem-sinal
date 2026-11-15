@@ -39,6 +39,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -105,9 +106,17 @@ class LoggerService : Service() {
     @Volatile
     private var latestLocation: Location? = null
 
+    /**
+     * Holds one element after [locationCallback] delivers a fix, until the logging loop takes it.
+     * A delivery wakes the CPU, so ticks started from deliveries keep running with the screen
+     * off, where a coroutine `delay` doesn't count the time the CPU sleeps.
+     */
+    private val fixDeliveries = Channel<Unit>(Channel.CONFLATED)
+
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             latestLocation = result.lastLocation ?: return
+            fixDeliveries.trySend(Unit)
         }
     }
 
@@ -266,7 +275,8 @@ class LoggerService : Service() {
 
     @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     private fun startLocationUpdates() {
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000L)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, TICK_INTERVAL_MS)
+            .setMinUpdateIntervalMillis(TICK_INTERVAL_MS)
             .setWaitForAccurateLocation(true)
             .setMaxUpdateDelayMillis(0)
             .build()
@@ -286,8 +296,27 @@ class LoggerService : Service() {
 
             // The session's first ticks, for startLooksIndoor.
             val startTicks = mutableListOf<StartTick>()
+            // When the previous tick started, and whether it started on a delivered fix; null
+            // before the first tick, which starts at once.
+            var previousStartMs: Long? = null
+            var previousOnFix = false
             while (isActive) {
-                val tickStartMs = SystemClock.elapsedRealtime()
+                // Waits for a delivered fix, or for the interval to pass without one: a tick
+                // without a fix still shows each SIM's state and counts for startLooksIndoor.
+                var fixDelivered = false
+                while (previousStartMs != null) {
+                    if (fixDeliveries.tryReceive().isSuccess) fixDelivered = true
+                    val waitMs = msUntilNextTick(
+                        previousStartMs, previousOnFix, fixDelivered, SystemClock.elapsedRealtime(),
+                    )
+                    if (waitMs == 0L) break
+                    withTimeoutOrNull(waitMs) {
+                        fixDeliveries.receive()
+                        fixDelivered = true
+                    }
+                }
+                previousStartMs = SystemClock.elapsedRealtime()
+                previousOnFix = fixDelivered
                 val location = latestLocation?.takeIf {
                     isFixFresh(
                         it.elapsedRealtimeNanos / 1_000_000,
@@ -331,8 +360,6 @@ class LoggerService : Service() {
                     )
                     if (startLooksIndoor(startTicks)) LoggerState.indoorHint()
                 }
-
-                delay(delayUntilNextTickMs(tickStartMs, SystemClock.elapsedRealtime()))
             }
         }
     }
