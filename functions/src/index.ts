@@ -146,10 +146,14 @@ const aggregationStore: AggregationStore = {
     }),
 };
 
-/** Adds the sessions that have ended to the private cells, every hour. */
-export const aggregateHourly = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 540 }, () =>
-  runHourly(aggregationStore, Date.now()),
-);
+/**
+ * Adds the sessions that have ended to the private cells, every hour. A run starts no page later
+ * than 5 minutes after it began, which leaves its last page 4 minutes before the timeout.
+ */
+export const aggregateHourly = onSchedule({ schedule: "every 60 minutes", timeoutSeconds: 540 }, () => {
+  const nowMs = Date.now();
+  return runHourly(aggregationStore, nowMs, nowMs + 5 * 60_000);
+});
 
 // The daily job's state and the public cells, keyed by resolution 11 H3 cell. firestore.rules
 // gives clients no access to either; the map is served from tiles made from the public cells, one

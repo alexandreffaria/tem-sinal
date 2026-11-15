@@ -18,20 +18,20 @@ export const SESSION_IDLE_MS = 3 * 3_600_000;
  */
 export const WRITE_MARGIN_MS = 10 * 60_000;
 
-/** The most samples one run reads past the cursor; the next run reads on from where it stopped. */
+/** The most samples one page reads past the cursor; the next page reads on from where it stopped. */
 export const READ_LIMIT = 10_000;
 
 /**
- * The most samples of one session a run reads, about 14 hours of logging. A session with more
- * samples left than this is aggregated in parts, one part a run, each ending before the last
+ * The most samples of one session a page reads, about 14 hours of logging. A session with more
+ * samples left than this is aggregated in parts, one part a page, each ending before the last
  * `expireAt` read and each trimmed at both ends like a whole session.
  */
 export const SESSION_READ_LIMIT = 10_000;
 
 /**
- * About the most private cells one run writes, so that its transaction stays well under Firestore's
+ * About the most private cells one page writes, so that its transaction stays well under Firestore's
  * 10 MiB request limit. Sessions are added until this many cells are written; the last one, or a
- * part of a session added after them, writes at most [SESSION_READ_LIMIT] more. A run always
+ * part of a session added after them, writes at most [SESSION_READ_LIMIT] more. A page always
  * aggregates at least one ended session or part of one.
  */
 export const CELL_LIMIT = 2_000;
@@ -93,19 +93,38 @@ function validSamples(docs: Stored[], cursor: Cursor): StoredSample[] {
 }
 
 /**
- * One run at [nowMs]. Reads the samples received since the last run up to [WRITE_MARGIN_MS] ago,
- * and each session that has had no new sample for [SESSION_IDLE_MS] is read whole, from its first
- * sample not yet aggregated to the last one read, trimmed at both ends with [trimLengths] and
- * added to the private cells, until about [CELL_LIMIT] cells are written; the other sessions stay
- * open for a later run. A session too long to read whole is left for after the others, and then,
+ * One run at [nowMs]: pages, each read and committed on its own, until a page reads fewer than
+ * [READ_LIMIT] samples, so the run has read every sample received up to [WRITE_MARGIN_MS] ago, or
+ * until a page ends at or after [deadlineMs] by `Date.now()`. Always runs at least one page. Throws
+ * when another run changed the state since a page read it; the pages before that one stay written.
+ */
+export async function runHourly(
+  store: AggregationStore,
+  nowMs: number,
+  deadlineMs: number,
+  random: () => number = Math.random,
+): Promise<void> {
+  for (;;) {
+    const caughtUp = await runPage(store, nowMs, random);
+    if (caughtUp || Date.now() >= deadlineMs) return;
+  }
+}
+
+/**
+ * One page of a run at [nowMs]. Reads up to [READ_LIMIT] samples received since the last page up
+ * to [WRITE_MARGIN_MS] ago, and each session that has had no new sample for [SESSION_IDLE_MS] is
+ * read whole, from its first sample not yet aggregated to the last one read, trimmed at both ends
+ * with [trimLengths] and added to the private cells, until about [CELL_LIMIT] cells are written;
+ * the other sessions stay open for a later page. A session too long to read whole is left for after the others, and then,
  * if fewer than [CELL_LIMIT] cells are written, one part of it is added the same way and the rest
  * stays open; [SESSION_READ_LIMIT] or more samples of one session sharing one `expireAt` (more
  * than any upload stores) are skipped, and their count logged. A session whose samples keep
  * arriving after it was aggregated is aggregated again from those samples only, and trimmed again,
  * so no sample is counted twice. Samples whose `expireAt` has passed are never read. Throws,
- * writing nothing, when another run changed the state since this one read it.
+ * writing nothing, when another run changed the state since this page read it. Returns whether it
+ * read fewer than [READ_LIMIT] samples.
  */
-export async function runHourly(store: AggregationStore, nowMs: number, random: () => number = Math.random): Promise<void> {
+async function runPage(store: AggregationStore, nowMs: number, random: () => number): Promise<boolean> {
   const state = await store.state();
   const untilMs = nowMs - WRITE_MARGIN_MS + SAMPLE_LIFETIME_MS;
   const read = await store.samplesAfter(state.cursor, nowMs, untilMs, READ_LIMIT);
@@ -160,6 +179,7 @@ export async function runHourly(store: AggregationStore, nowMs: number, random: 
 
   const next = { cursor, open: Object.fromEntries(Object.entries(open).filter(([id]) => !done.has(id))) };
   if (!(await store.commit(state, next, [...ids], (cells) => accumulate(cells, trimmed)))) {
-    throw new Error("runHourly: the state changed during the run; nothing was written");
+    throw new Error("runHourly: the state changed during the run; this page wrote nothing");
   }
+  return read.length < READ_LIMIT;
 }

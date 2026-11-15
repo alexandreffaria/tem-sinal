@@ -93,11 +93,11 @@ test("a session is added to the private cells, trimmed, once no sample of it has
   const session = walk(randomUUID(), 400);
   fake.receive(session, T);
 
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + HOUR, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + HOUR, Infinity, NO_RANDOM);
   assert.deepEqual(fake.cells, {});
   assert.deepEqual(Object.keys(fake.state().open), [session[0]?.sessionId]);
 
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
   assert.ok(Object.keys(fake.cells).length > 0);
   assert.deepEqual(fake.cells, expected(session));
   for (const h3 of Object.keys(fake.cells)) assert.equal(getResolution(h3), PRIVATE_RESOLUTION);
@@ -111,13 +111,13 @@ test("samples of a session that arrive after it was aggregated are added on thei
   const first = walk(sessionId, 300);
   const later = walk(sessionId, 300, -15.45, T);
   fake.receive(first, T);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
   fake.receive(later, T + 5 * HOUR);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + 6 * HOUR, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 6 * HOUR, Infinity, NO_RANDOM);
   assert.deepEqual(fake.cells, expected(first));
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + 5 * HOUR + SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 5 * HOUR + SESSION_IDLE_MS, Infinity, NO_RANDOM);
   assert.deepEqual(fake.cells, expected(first, later));
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + 24 * HOUR, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 24 * HOUR, Infinity, NO_RANDOM);
   assert.deepEqual(fake.cells, expected(first, later));
 });
 
@@ -128,10 +128,37 @@ test("a session is not aggregated while a run that stopped at its read limit may
   fake.receive(session.slice(0, 300), T);
   for (let i = 0; i < other.length; i += MAX_BATCH) fake.receive(other.slice(i, i + MAX_BATCH), T + 1 + i / MAX_BATCH);
   fake.receive(session.slice(300), T + HOUR);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS, NO_RANDOM);
+  // A deadline already passed: the run reads one page.
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS, 0, NO_RANDOM);
   assert.deepEqual(fake.cells, {});
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS + HOUR, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS + HOUR, Infinity, NO_RANDOM);
   assert.ok(isDeepStrictEqual(fake.cells, expected(session, other)));
+});
+
+test("a run reads a backlog of several read limits in pages, each committed on its own", async () => {
+  const fake = fakeStore();
+  const backlog = walk(randomUUID(), 3 * READ_LIMIT);
+  for (let i = 0; i < backlog.length; i += MAX_BATCH) fake.receive(backlog.slice(i, i + MAX_BATCH), T + i / MAX_BATCH);
+  const [newest] = [...fake.docs].sort((a, b) => b.expireAtMs - a.expireAtMs || (a.id < b.id ? 1 : -1));
+  let commits = 0;
+  const store: AggregationStore = {
+    ...fake.store,
+    commit: (...args) => {
+      commits++;
+      return fake.store.commit(...args);
+    },
+  };
+  await runHourly(store, T + WRITE_MARGIN_MS + HOUR, Infinity, NO_RANDOM);
+  assert.equal(commits, 4);
+  assert.deepEqual(fake.state().cursor, { expireAtMs: newest?.expireAtMs, id: newest?.id });
+});
+
+test("a run whose deadline has passed reads one page", async () => {
+  const fake = fakeStore();
+  const backlog = walk(randomUUID(), 2 * READ_LIMIT);
+  for (let i = 0; i < backlog.length; i += MAX_BATCH) fake.receive(backlog.slice(i, i + MAX_BATCH), T + i / MAX_BATCH);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + HOUR, 0, NO_RANDOM);
+  assert.equal(fake.state().cursor?.expireAtMs, T + (READ_LIMIT / MAX_BATCH - 1) + SAMPLE_LIFETIME_MS);
 });
 
 test("ended sessions past the cell limit wait for the next run", async () => {
@@ -141,13 +168,13 @@ test("ended sessions past the cell limit wait for the next run", async () => {
   const [a, b] = [long(-15.5), long(-14.5)];
   fake.receive(a, T);
   fake.receive(b, T);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
   const open = Object.keys(fake.state().open);
   const first = [a, b].filter((s) => !open.includes(s[0]?.sessionId ?? ""));
   assert.equal(open.length, 1);
   assert.equal(first.length, 1);
   assert.ok(isDeepStrictEqual(fake.cells, expected(...first)));
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS + HOUR, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS + HOUR, Infinity, NO_RANDOM);
   assert.ok(isDeepStrictEqual(fake.cells, expected(a, b)));
   assert.deepEqual(fake.state().open, {});
 });
@@ -159,7 +186,7 @@ test("a session too long to read whole is aggregated in parts, without holding u
   for (let i = 0; i < huge.length; i += MAX_BATCH) fake.receive(huge.slice(i, i + MAX_BATCH), T + (i / MAX_BATCH) * 60_000);
   const other = walk(randomUUID(), 300, -16.5);
   fake.receive(other, T + HOUR);
-  const run = (hours: number) => runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, NO_RANDOM);
+  const run = (hours: number) => runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, Infinity, NO_RANDOM);
   for (let hours = 1; hours <= 4; hours++) await run(hours);
   // A part ends before the last expireAt it read: the upload there may be only partly read.
   const partLength = SESSION_READ_LIMIT - MAX_BATCH;
@@ -182,7 +209,7 @@ test("more samples of one session than a run reads at one expireAt are skipped, 
   fake.receive(later, T + 1);
   const other = walk(randomUUID(), 300, -16.5);
   fake.receive(other, T + 2);
-  const run = (hours: number) => runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, NO_RANDOM);
+  const run = (hours: number) => runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, Infinity, NO_RANDOM);
   await run(1);
   await run(SESSION_IDLE_MS / HOUR + 1);
   assert.deepEqual(fake.cells, expected(other));
@@ -197,7 +224,7 @@ test("samples whose expiry has passed and documents that aren't valid samples ar
   const fake = fakeStore();
   fake.receive(walk(randomUUID(), 300), T - SAMPLE_LIFETIME_MS - HOUR);
   fake.receive([{ sessionId: randomUUID(), fix: null }], T);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
   assert.deepEqual(fake.cells, {});
   assert.deepEqual(fake.state().open, {});
   assert.equal(fake.state().cursor?.expireAtMs, T + SAMPLE_LIFETIME_MS);
@@ -207,7 +234,7 @@ test("a run writes nothing when the state changed after it read it", async () =>
   const fake = fakeStore();
   fake.receive(walk(randomUUID(), 300), T);
   const store: AggregationStore = { ...fake.store, commit: (_expected, ...rest) => fake.store.commit({ cursor: null, open: { x: { fromMs: 0, lastMs: 0 } } }, ...rest) };
-  await assert.rejects(runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM));
+  await assert.rejects(runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM));
   assert.deepEqual(fake.cells, {});
   assert.deepEqual(fake.state(), { cursor: null, open: {} });
 });
@@ -217,11 +244,11 @@ test("a run reads no sample received less than the write margin ago, nor one wit
   const session = walk(randomUUID(), 300);
   fake.receive(session, T);
   fake.receive(walk(randomUUID(), 300), T + 1000 * 86_400_000);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS - 1, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS - 1, Infinity, NO_RANDOM);
   assert.deepEqual(fake.state(), { cursor: null, open: {} });
-  await runHourly(fake.store, T + WRITE_MARGIN_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS, Infinity, NO_RANDOM);
   assert.equal(fake.state().cursor?.expireAtMs, T + SAMPLE_LIFETIME_MS);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
   assert.deepEqual(fake.cells, expected(session));
   assert.equal(fake.state().cursor?.expireAtMs, T + SAMPLE_LIFETIME_MS);
 });
@@ -240,21 +267,21 @@ test("samples of an ended session that arrive after the run's read are aggregate
       return fake.store.sessionSamples(...args);
     },
   };
-  await runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
   assert.deepEqual(fake.cells, expected(first));
-  await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS + 2 * SESSION_IDLE_MS, Infinity, NO_RANDOM);
   assert.deepEqual(fake.cells, expected(first, later));
 });
 
 test("a second run over the same state with no new sample writes nothing", async () => {
   const fake = fakeStore();
   fake.receive(walk(randomUUID(), 300), T);
-  await runHourly(fake.store, T + WRITE_MARGIN_MS, NO_RANDOM);
+  await runHourly(fake.store, T + WRITE_MARGIN_MS, Infinity, NO_RANDOM);
   const before = fake.state();
   const store: AggregationStore = { ...fake.store, state: async () => structuredClone(before) };
-  await runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM);
+  await runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM);
   const cells = structuredClone(fake.cells);
   assert.ok(Object.keys(cells).length > 0);
-  await assert.rejects(runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, NO_RANDOM));
+  await assert.rejects(runHourly(store, T + WRITE_MARGIN_MS + SESSION_IDLE_MS, Infinity, NO_RANDOM));
   assert.deepEqual(fake.cells, cells);
 });
