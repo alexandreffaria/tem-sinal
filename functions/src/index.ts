@@ -10,7 +10,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import type { CellState, PublicCell } from "./aggregate.js";
 import { createMissing } from "./create-missing.js";
-import { CELLS_PER_WRITE, type DailyState, type PublishStore, runDaily } from "./daily.js";
+import { CELLS_PER_WRITE, type PublishStore, dailyState, runDaily } from "./daily.js";
 import { type AggregationStore, type HourlyState, type Stored, runHourly } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
 
@@ -163,8 +163,6 @@ const dailyRef = db.collection("aggregation").doc("daily");
 const publicCells = db.collection("public_cells");
 const stagedCells = db.collection("staged_public_cells");
 const bucket = getStorage().bucket();
-
-const dailyState = (data: unknown) => (data as DailyState | undefined) ?? { held: [], lastBatch: null, runMs: null };
 
 const publishStore: PublishStore = {
   privateCells: async () => Object.fromEntries((await privateCells.get()).docs.map((doc) => [doc.id, doc.data() as CellState])),
