@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { isDeepStrictEqual } from "node:util";
-import { getResolution } from "h3-js";
-import { type CellState, type StoredSample, PRIVATE_RESOLUTION, sessionKey, trimSession } from "./aggregate.js";
+import { cellToLatLng, getResolution, greatCircleDistance } from "h3-js";
+import { type CellState, LONG_REST_MS, PRIVATE_RESOLUTION, REST_CUT_M, type StoredSample, sessionKey, trimSession } from "./aggregate.js";
 import {
   CELL_LIMIT,
   type AggregationStore,
@@ -18,6 +18,7 @@ import {
 import { SAMPLE_LIFETIME_MS, WRITE_DEADLINE_MS } from "./ingest.js";
 import { MAX_BATCH } from "./sample.js";
 import { TRANSACTION_LIFETIME_MS } from "./create-missing.js";
+import { testSample } from "./test-sample.js";
 import { HOUR, T, fakeAggregation as fakeStore, walk } from "./test-stores.js";
 
 test("every sample is stored before the job reads past its expireAt", () => {
@@ -249,6 +250,31 @@ test("a long session aggregated in parts loses nothing where its parts end while
   }
   assert.ok(Object.keys(fake.cells).length > CELL_LIMIT);
   assert.ok(isDeepStrictEqual(fake.cells, expected(session)));
+});
+
+test("a long session aggregated in parts hides a long rest its parts end during", async () => {
+  const fake = fakeStore();
+  // A shuttle, then a rest of three times LONG_REST_MS over 1 km north of it, centred where the
+  // first part ends, then the shuttle again; each upload of MAX_BATCH samples a minute after the
+  // one before. Each part then ends in a rest longer than LONG_REST_MS.
+  const partLength = SESSION_READ_LIMIT - MAX_BATCH;
+  const restFixes = (3 * LONG_REST_MS) / 5_000;
+  const rest = { lat: -15.47, lon: (testSample() as unknown as StoredSample).fix.lon };
+  const session = shuttle(walk(randomUUID(), 2 * SESSION_READ_LIMIT)).map((s, i) =>
+    Math.abs(i - partLength) < restFixes / 2 ? { ...s, fix: { ...s.fix, lat: rest.lat + 0.00009 * Math.sin(i * 1.7) } } : s,
+  );
+  for (let i = 0; i < session.length; i += MAX_BATCH) fake.receive(session.slice(i, i + MAX_BATCH), T + (i / MAX_BATCH) * 60_000);
+  const first = SESSION_IDLE_MS / HOUR + 1;
+  for (let hours = first; hours === first || Object.keys(fake.state().open).length > 0; hours++) {
+    assert.ok(hours < 24);
+    await runHourly(fake.store, T + WRITE_MARGIN_MS + hours * HOUR, Infinity);
+  }
+  assert.ok(Object.keys(fake.cells).length > 0);
+  // A cell's centre is within a few metres of every sample in it.
+  for (const id of Object.keys(fake.cells)) {
+    const cell = sessionCellOf(id).h3;
+    assert.ok(greatCircleDistance(cellToLatLng(cell), [rest.lat, rest.lon], "m") > REST_CUT_M - 10, `${cell} near the rest`);
+  }
 });
 
 test("more samples of one session than a run reads at one expireAt are skipped, not read again", async (t) => {
