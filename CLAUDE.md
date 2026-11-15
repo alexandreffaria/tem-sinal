@@ -1,4 +1,4 @@
-# CellSignalMapper
+# Tem Sinal
 
 An Android app that crowdsources cell signal across Brazil, so climbers and anyone heading into the
 backcountry can see, before they go, where each carrier has signal and where only emergency calls
