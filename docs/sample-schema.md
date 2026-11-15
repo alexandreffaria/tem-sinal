@@ -50,8 +50,7 @@ the same sample twice is harmless.
 
 ### Install id
 
-A pseudonymous id for this installation of the app, so the server can count how many installs back
-a map cell (the lone-contributor rule of card `20261113a7do`) and throttle uploads per install
+A pseudonymous id for this installation of the app, so the server can throttle uploads per install
 (#15).
 
 - **Generated** on first use as `UUID.randomUUID().toString()` (a version 4 UUID from a
@@ -61,9 +60,7 @@ a map cell (the lone-contributor rule of card `20261113a7do`) and throttle uploa
   on, and Auto Backup copies `filesDir` and shared preferences to the user's Google account; a
   restored id would make a second phone count as the same install. Files in `noBackupFilesDir` are
   never backed up.
-- **Lifetime:** until the app's data is cleared or the app is uninstalled. It is never rotated:
-  a new id every month would make one person count as several installs and publish their solo cells
-  as if two people had logged them, defeating the monthly rule.
+- **Lifetime:** until the app's data is cleared or the app is uninstalled. It is never rotated.
 - **Not the Android ID** (`Settings.Secure.ANDROID_ID`). On Android 8 and later it is "unique to
   each combination of app-signing key, user, and device" and changes only "if a factory reset is
   performed on the device or if an APK signing key changes". It survives uninstalling and clearing
@@ -319,7 +316,7 @@ The manifest already declares all of them. The logger checks them before it star
 Card `20261113a7do` fixes what the public map shows: H3 resolution 11 cells with, per carrier, the
 best and median strength, the network type, how many readings were in service, emergency-only
 and out of service, and the month last seen (see **Public cells**). Raw samples stay private; session starts and ends are dropped
-before aggregation; single-install cells are published in monthly batches.
+before aggregation; every cell is published in the next daily run, however many installs back it.
 
 **Personal data.** A sample as a whole is personal data under LGPD art. 5 I: an exact position and
 time, linked by `installId` and `sessionId` to every other sample from the same person, is a trace
@@ -372,8 +369,8 @@ The "What is shared?" dialog says this in `sharing_firebase`.
 **The server must never publish** a raw sample or any field of one: no coordinates, no
 `installId`, `sessionId` or sample `id`, no exact time (`timeMs`, `elapsedRealtimeMs`,
 `timestampMs`; the public files carry the month only), no cell identity. The install id is used
-only to count distinct installs per map cell and to throttle uploads, and stays on the private
-side. Public files hold only the aggregates the card lists.
+to throttle uploads and is listed in the private cells; it stays on the private side. Public files
+hold only the aggregates the card lists.
 
 **Retention.** The server keeps a raw sample 90 days after it received it (card `20261113bmjv`).
 The upload function stores each sample with `expireAt`, a server-side timestamp 90 days after
@@ -388,7 +385,7 @@ no expiry; they are the public map.
 ## Public cells
 
 A public cell is `{"h3": "8b…", "carriers": {"72406": {...}}, "lastSeen": "2026-01"}`, keyed by
-the SIM's PLMN, and published under the install-count rules of card `20261113a7do`. Per carrier:
+the SIM's PLMN, and published in the next daily run whatever its install count. Per carrier:
 
 | Field | Meaning |
 |---|---|

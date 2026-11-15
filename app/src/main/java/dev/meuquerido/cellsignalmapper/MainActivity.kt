@@ -88,12 +88,32 @@ class MainActivity : ComponentActivity() {
         phoneStateGranted = isGranted(Manifest.permission.READ_PHONE_STATE),
     )
 
+    /** Set when the first LOG on this install waits for the at-home warning to be answered. */
+    private var showFirstLogWarning by mutableStateOf(false)
+
+    private val firstLogWarningFile get() = java.io.File(filesDir, FIRST_LOG_WARNING_FILE_NAME)
+
     private fun toggleLogging() {
-        val serviceIntent = Intent(this, LoggerService::class.java)
         if (LoggerState.state.value.isLogging) {
-            stopService(serviceIntent)
+            stopService(Intent(this, LoggerService::class.java))
             return
         }
+        if (firstLogWarningDue(firstLogWarningFile)) {
+            showFirstLogWarning = true
+            return
+        }
+        startLogging()
+    }
+
+    /** Answers the first-LOG warning; it never shows again either way. */
+    private fun answerFirstLogWarning(start: Boolean) {
+        showFirstLogWarning = false
+        markFirstLogWarningShown(firstLogWarningFile)
+        if (start) startLogging()
+    }
+
+    private fun startLogging() {
+        val serviceIntent = Intent(this, LoggerService::class.java)
         permissionMessage = currentDeniedMessage()
         if (permissionMessage == null) {
             startForegroundService(serviceIntent)
@@ -131,6 +151,12 @@ class MainActivity : ComponentActivity() {
                 var showSharing by rememberSaveable { mutableStateOf(false) }
                 if (showSharing) {
                     SharingDialog(onDismiss = { showSharing = false })
+                }
+                if (showFirstLogWarning) {
+                    FirstLogWarningDialog(
+                        onStart = { answerFirstLogWarning(start = true) },
+                        onCancel = { answerFirstLogWarning(start = false) }
+                    )
                 }
                 var showDataSent by rememberSaveable { mutableStateOf(false) }
                 if (showDataSent) {
