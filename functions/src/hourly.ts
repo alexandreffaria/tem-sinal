@@ -95,9 +95,10 @@ function validSamples(docs: Stored[], cursor: Cursor): StoredSample[] {
 
 /**
  * One run at [nowMs]: pages, each read and committed on its own, until a page reads fewer than
- * [READ_LIMIT] samples, so the run has read every sample received up to [WRITE_MARGIN_MS] ago, or
- * until a page ends at or after [deadlineMs] by `Date.now()`. Always runs at least one page. Throws
- * when another run changed the state since a page read it; the pages before that one stay written.
+ * [READ_LIMIT] samples and leaves no ended session open, so the run has read every sample received
+ * up to [WRITE_MARGIN_MS] ago and aggregated every session that had ended by then, or until a page
+ * ends at or after [deadlineMs] by `Date.now()`. Always runs at least one page. Throws when another
+ * run changed the state since a page read it; the pages before that one stay written.
  */
 export async function runHourly(
   store: AggregationStore,
@@ -106,8 +107,8 @@ export async function runHourly(
   random: () => number = Math.random,
 ): Promise<void> {
   for (;;) {
-    const caughtUp = await runPage(store, nowMs, random);
-    if (caughtUp || Date.now() >= deadlineMs) return;
+    const more = await runPage(store, nowMs, random);
+    if (!more || Date.now() >= deadlineMs) return;
   }
 }
 
@@ -124,7 +125,8 @@ export async function runHourly(
  * arriving after it was aggregated is aggregated again from those samples only, and trimmed again,
  * so no sample is counted twice. Samples whose `expireAt` has passed are never read. Throws,
  * writing nothing, when another run changed the state since this page read it. Returns whether it
- * read fewer than [READ_LIMIT] samples.
+ * read [READ_LIMIT] samples or left an ended session open. A page that leaves one open has added
+ * part of an ended session or skipped samples of one, so the next page starts further on.
  */
 async function runPage(store: AggregationStore, nowMs: number, random: () => number): Promise<boolean> {
   const state = await store.state();
@@ -206,5 +208,5 @@ async function runPage(store: AggregationStore, nowMs: number, random: () => num
   if (!(await store.commit(state, next, [...ids], (cells) => accumulate(cells, trimmed)))) {
     throw new Error("runHourly: the state changed during the run; this page wrote nothing");
   }
-  return read.length < READ_LIMIT;
+  return read.length === READ_LIMIT || Object.values(next.open).some((session) => readUntilMs - session.lastMs >= SESSION_IDLE_MS);
 }
