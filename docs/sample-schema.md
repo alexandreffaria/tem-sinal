@@ -74,7 +74,7 @@ A pseudonymous id for this installation of the app, so the server can throttle u
 
 A random UUID (version 4) made when `LoggerService` starts (`onCreate`) and kept in memory only. It
 ends when the service stops; a service the system restarts gets a new one. Every sample of one
-logging session shares it, so the aggregation job can drop the randomised start and end of each
+logging session shares it, so the aggregation job can drop the places where the phone rested half an hour or more at the start and end of each
 session before aggregating (card `20261113a7do`). A session can be uploaded in several batches and
 reach the server days late, so the job treats a session as finished only once it has had no new
 sample for a while; that is the job's rule to set (#16).
@@ -315,8 +315,8 @@ The manifest already declares all of them. The logger checks them before it star
 
 Card `20261113a7do` fixes what the public map shows: H3 resolution 11 cells with, per carrier, the
 best and median strength, the network type, how many readings were in service, emergency-only
-and out of service, and the month last seen (see **Public cells**). Raw samples stay private; session starts and ends are dropped
-before aggregation; every cell is published in the next daily run, however many installs back it.
+and out of service, and the month last seen (see **Public cells**). Raw samples stay private; the places where a session's phone rested half an hour or more at its
+start or end are dropped before aggregation; every cell is published in the next daily run, however many installs back it.
 
 **Personal data.** A sample as a whole is personal data under LGPD art. 5 I: an exact position and
 time, linked by `installId` and `sessionId` to every other sample from the same person, is a trace
