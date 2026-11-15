@@ -261,9 +261,26 @@ test("no page commits more than an upload's cells past the cell limit, and each 
   }
   assert.ok(written.filter((n) => n > 0).length > 1);
   for (const n of written) assert.ok(n <= CELL_LIMIT + MAX_BATCH, `${n} cells in one commit`);
-  // Only the trimmed ends of each part are missing, and no cell holds more than its one sample.
-  assert.ok(Object.keys(fake.cells).length > 0.9 * huge.length);
-  for (const [h3, cell] of Object.entries(fake.cells)) assert.deepEqual(cell, own[h3]);
+  // The written samples fall into parts split by trimmed ends, and each gap between parts holds
+  // exactly one upload boundary: the parts split there cover every sample once, in order, and
+  // the cells are exactly those of each part trimmed at both ends.
+  const kept = huge.flatMap((s, i) => {
+    const one: Record<string, CellState> = {};
+    accumulate(one, [s]);
+    return Object.keys(one).some((h3) => h3 in fake.cells) ? [i] : [];
+  });
+  const bounds = [0];
+  for (let k = 1; k < kept.length; k++) {
+    const [before, after] = [kept[k - 1] ?? 0, kept[k] ?? 0];
+    if (after === before + 1) continue;
+    const uploads = Array.from({ length: after - before }, (_, j) => before + 1 + j).filter((i) => i % MAX_BATCH === 0);
+    assert.equal(uploads.length, 1, `samples ${before + 1} to ${after - 1} missing across ${uploads.length} upload boundaries`);
+    bounds.push(uploads[0] ?? 0);
+  }
+  bounds.push(huge.length);
+  const parts = bounds.slice(1).map((end, k) => huge.slice(bounds[k], end));
+  assert.equal(parts.length, written.filter((n) => n > 0).length);
+  assert.ok(isDeepStrictEqual(fake.cells, expected(...parts)));
 });
 
 test("more samples of one session than a run reads at one expireAt are skipped, not read again", async (t) => {
