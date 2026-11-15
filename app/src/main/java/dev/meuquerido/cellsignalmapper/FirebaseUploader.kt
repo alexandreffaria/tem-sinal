@@ -6,6 +6,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
@@ -67,6 +68,9 @@ fun uploadPreview(samples: List<Sample>, gson: Gson): String =
 /** The upload function, `v1` in `functions/src/index.ts`, at its `/samples` path. */
 const val UPLOAD_URL = "https://us-central1-cellsignalmapper-a9da1.cloudfunctions.net/v1/samples"
 
+/** The same function at its `/sessions/delete` path, which deletes one recording from the server. */
+const val DELETE_URL = "https://us-central1-cellsignalmapper-a9da1.cloudfunctions.net/v1/sessions/delete"
+
 /** How long connecting to the upload function may take. */
 const val CONNECT_TIMEOUT_SECONDS = 15L
 
@@ -114,8 +118,11 @@ fun rejectedIndexes(status: Int, body: String, batchSize: Int, gson: Gson): Set<
     return rejected
 }
 
-/** How many lines of an uploaded log were not a sample, and how many samples the server rejected. */
-data class UploadedLog(val unparseable: Int, val refused: Int)
+/**
+ * How many lines of an uploaded log were not a sample, how many samples the server rejected, and
+ * the samples it took.
+ */
+data class UploadedLog(val unparseable: Int, val refused: Int, val sent: List<Sample>)
 
 /**
  * Sends the samples in [pending] batch by batch with [send], which returns the positions in its
@@ -125,12 +132,14 @@ data class UploadedLog(val unparseable: Int, val refused: Int)
  */
 fun uploadPending(pending: File, rejected: File, gson: Gson, send: (List<Sample>) -> Set<Int>): UploadedLog {
     val log = parseLog(pending.readLines(), gson)
-    val refused = uploadBatches(log.samples).flatMap { batch ->
+    val refused = mutableListOf<Sample>()
+    val sent = mutableListOf<Sample>()
+    for (batch in uploadBatches(log.samples)) {
         val indexes = send(batch)
-        batch.filterIndexed { i, _ -> i in indexes }
+        batch.forEachIndexed { i, sample -> if (i in indexes) refused += sample else sent += sample }
     }
     SignalLogger.keepRejected(pending, rejected, log.rejected + refused.map { gson.toJson(it) })
-    return UploadedLog(log.rejected.size, refused.size)
+    return UploadedLog(log.rejected.size, refused.size, sent)
 }
 
 object FirebaseUploader {
@@ -175,15 +184,15 @@ object FirebaseUploader {
                 return false
             }
 
-            val auth = FirebaseAuth.getInstance()
-            if (auth.currentUser == null) {
-                Tasks.await(auth.signInAnonymously(), SIGN_IN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            }
-            val user = checkNotNull(auth.currentUser) { "Not signed in" }
+            val user = signedInUser()
             val log = uploadPending(pending, SignalLogger.getRejectedFile(context), gson) { samples ->
-                val idToken = Tasks.await(user.getIdToken(false), SIGN_IN_TIMEOUT_SECONDS, TimeUnit.SECONDS).token
-                val (status, body) = post(uploadBody(samples, gson), checkNotNull(idToken), appCheckToken())
+                val (status, body) = post(UPLOAD_URL, uploadBody(samples, gson), idToken(user), appCheckToken())
                 rejectedIndexes(status, body, samples.size, gson)
+            }
+            try {
+                Recordings.addSent(context, log.sent)
+            } catch (e: IOException) {
+                Log.e("FirebaseUploader", "Could not add the sent samples to My recordings", e)
             }
             if (log.unparseable > 0) {
                 Log.w("FirebaseUploader", "Kept ${log.unparseable} unparseable lines in the rejected file.")
@@ -200,8 +209,40 @@ object FirebaseUploader {
     }
 
     /**
+     * Asks the server to delete the recording [sessionId] off the main thread, and returns whether
+     * it did; then the recording is dropped from [Recordings] and never listed again. The server
+     * deletes only what carries this phone's install id, and answers the same when it had nothing
+     * left of the recording, so asking again is harmless.
+     */
+    suspend fun deleteRecording(context: Context, sessionId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val installId = installId(File(context.noBackupFilesDir, INSTALL_ID_FILE_NAME))
+            val body = gson.toJson(mapOf("installId" to installId, "sessionId" to sessionId))
+            val (status, _) = post(DELETE_URL, body, idToken(signedInUser()), appCheckToken())
+            if (status !in 200..299) throw IOException("Delete function answered HTTP $status")
+            Recordings.markDeleted(context, sessionId)
+            true
+        } catch (e: Exception) {
+            Log.e("FirebaseUploader", "Delete failed", e)
+            false
+        }
+    }
+
+    /** The signed-in Firebase user, signing in anonymously first when no user is signed in. */
+    private fun signedInUser(): FirebaseUser {
+        val auth = FirebaseAuth.getInstance()
+        if (auth.currentUser == null) {
+            Tasks.await(auth.signInAnonymously(), SIGN_IN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        }
+        return checkNotNull(auth.currentUser) { "Not signed in" }
+    }
+
+    private fun idToken(user: FirebaseUser): String =
+        checkNotNull(Tasks.await(user.getIdToken(false), SIGN_IN_TIMEOUT_SECONDS, TimeUnit.SECONDS).token)
+
+    /**
      * An App Check token, or null when there is none. The server logs whether a request carries a
-     * valid one but doesn't require it, so a batch is sent either way.
+     * valid one but doesn't require it, so a request is sent either way.
      */
     private fun appCheckToken(): String? =
         try {
@@ -215,9 +256,9 @@ object FirebaseUploader {
             null
         }
 
-    /** POSTs [json] to [UPLOAD_URL] and returns the HTTP status and the response body. */
-    private fun post(json: String, idToken: String, appCheckToken: String?): Pair<Int, String> {
-        val connection = URL(UPLOAD_URL).openConnection() as HttpURLConnection
+    /** POSTs [json] to [url] and returns the HTTP status and the response body. */
+    private fun post(url: String, json: String, idToken: String, appCheckToken: String?): Pair<Int, String> {
+        val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
             connection.connectTimeout = TimeUnit.SECONDS.toMillis(CONNECT_TIMEOUT_SECONDS).toInt()

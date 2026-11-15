@@ -27,7 +27,7 @@
     <string name="indoor_hint">Parece que você está em um lugar fechado. Sugerimos gravar na trilha: assim o lugar onde você mora fica fora dos dados, e o sinal é medido onde as pessoas vão precisar dele.</string>
     <string name="first_log_warning">Mapas de calor públicos já revelaram onde pessoas moram. Toque em %1$s longe de casa.</string>
     <string name="first_log_start">Começar</string>
-    <string name="first_log_cancel">Cancelar</string>
+    <string name="cancel">Cancelar</string>
     <string name="dismiss">Fechar</string>
 
     <string name="what_is_shared">O que é compartilhado?</string>
@@ -41,6 +41,19 @@
     <string name="see_data_sent">Ver os dados enviados</string>
     <string name="data_sent_explained">Isto é exatamente o que sai do celular para a amostra mais recente gravada aqui: o texto que o app envia ao nosso servidor, com o código do app e o código da gravação. O app guarda uma cópia desta única amostra no celular para mostrá-la aqui. As amostras no servidor ficam privadas; só totais por área são públicos.</string>
     <string name="data_sent_none">Nenhuma amostra foi gravada neste celular ainda. Toque em %1$s, e a próxima amostra aparece aqui.</string>
+
+    <string name="my_recordings">Minhas gravações</string>
+    <string name="no_recordings">Nada enviado ainda.</string>
+    <plurals name="recording_points">
+        <item quantity="one">%d ponto</item>
+        <item quantity="many">%d pontos</item>
+        <item quantity="other">%d pontos</item>
+    </plurals>
+    <string name="delete">Apagar</string>
+    <string name="deleting">Apagando…</string>
+    <string name="delete_recording_title">Apagar esta gravação?</string>
+    <string name="delete_recording_text">Ela é apagada do nosso servidor agora e do mapa na próxima atualização diária. Não dá para desfazer.</string>
+    <string name="delete_failed">Não deu para apagar. Tente de novo quando estiver com internet.</string>
 
     <string name="needs_precise_location">Para gravar, o app precisa da localização precisa. Permita a localização precisa para este app nas Configurações.</string>
     <string name="needs_location">Para gravar, o app precisa acessar sua localização. Permita a localização para este app nas Configurações.</string>

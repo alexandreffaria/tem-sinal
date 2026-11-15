@@ -68,7 +68,10 @@ class UploadPendingTest {
 
         val uploaded = uploadPending(pending, rejected, gson) { if (++batches == 1) setOf(0) else setOf(1) }
 
-        assertEquals(UploadedLog(unparseable = 0, refused = 2), uploaded)
+        assertEquals(
+            UploadedLog(unparseable = 0, refused = 2, sent = lines.drop(1).dropLast(1).map { gson.fromJson(it, Sample::class.java) }),
+            uploaded,
+        )
         assertEquals(listOf(lines[0], lines[UPLOAD_BATCH_LIMIT + 1]), rejected.readLines())
         assertFalse(pending.exists())
     }

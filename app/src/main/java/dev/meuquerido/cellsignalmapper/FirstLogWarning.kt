@@ -30,7 +30,7 @@ fun FirstLogWarningDialog(onStart: () -> Unit, onCancel: () -> Unit) {
         },
         dismissButton = {
             TextButton(onClick = onCancel) {
-                Text(stringResource(R.string.first_log_cancel))
+                Text(stringResource(R.string.cancel))
             }
         },
         text = { Text(UiText(R.string.first_log_warning, listOf(UiText(R.string.log))).resolve()) }

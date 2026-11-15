@@ -24,8 +24,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * The pending count, the LOG/STOP button, a dismissible [hint] below it, links that call
- * [onShowSharing] and [onShowDataSent], and the location and signal lines: stacked, or with the
- * lines beside the button when [sideBySide]. Either way the content scrolls when the window is too
+ * [onShowSharing], [onShowDataSent] and [onShowRecordings], and the location and signal lines:
+ * stacked, or with the lines beside the button when [sideBySide]. Either way the content scrolls when the window is too
  * short for it; when it fits, it stays centred because the scroll keeps the filled
  * height as its minimum.
  */
@@ -42,7 +42,8 @@ fun LoggerButton(
     hint: UiText? = null,
     onDismissHint: () -> Unit = {},
     onShowSharing: () -> Unit = {},
-    onShowDataSent: () -> Unit = {}
+    onShowDataSent: () -> Unit = {},
+    onShowRecordings: () -> Unit = {}
 ) {
     val scrolling = modifier
         .fillMaxSize()
@@ -57,7 +58,7 @@ fun LoggerButton(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 LoggingControls(
                     isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing,
-                    onShowDataSent
+                    onShowDataSent, onShowRecordings
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -72,7 +73,7 @@ fun LoggerButton(
         ) {
             LoggingControls(
                 isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing,
-                onShowDataSent
+                onShowDataSent, onShowRecordings
             )
             Spacer(modifier = Modifier.height(32.dp))
             SignalLines(location, signalStrength, service)
@@ -89,7 +90,8 @@ private fun LoggingControls(
     hint: UiText?,
     onDismissHint: () -> Unit,
     onShowSharing: () -> Unit,
-    onShowDataSent: () -> Unit
+    onShowDataSent: () -> Unit,
+    onShowRecordings: () -> Unit
 ) {
     Text(
         if (pendingPoints == 0) {
@@ -121,6 +123,9 @@ private fun LoggingControls(
     }
     TextButton(onClick = onShowDataSent) {
         Text(stringResource(R.string.see_data_sent))
+    }
+    TextButton(onClick = onShowRecordings) {
+        Text(stringResource(R.string.my_recordings))
     }
 }
 
