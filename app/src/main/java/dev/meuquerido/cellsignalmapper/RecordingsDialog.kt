@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -77,6 +78,8 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
                 if (failed) Text(stringResource(R.string.delete_failed))
                 val list = recordings
                 if (list != null && list.isEmpty()) Text(stringResource(R.string.no_recordings))
+                // The list starts with the update that added it; older uploads were never listed.
+                Text(stringResource(R.string.recordings_before_update), style = MaterialTheme.typography.bodySmall)
                 val format = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
                 list?.forEach { recording ->
                     Row(

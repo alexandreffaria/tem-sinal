@@ -44,7 +44,8 @@
     <string name="data_sent_none">No sample has been recorded on this phone yet. Press %1$s, and the next sample will show here.</string>
 
     <string name="my_recordings">My recordings</string>
-    <string name="no_recordings">Nothing sent yet.</string>
+    <string name="no_recordings">Nothing sent since this update.</string>
+    <string name="recordings_before_update">Recordings sent before this update of the app aren\'t listed and can\'t be deleted here yet.</string>
     <plurals name="recording_points">
         <item quantity="one">%d point</item>
         <item quantity="other">%d points</item>

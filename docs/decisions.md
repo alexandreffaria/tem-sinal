@@ -44,8 +44,9 @@ recordings the server took samples of, newest first: the first sample's date and
 samples it took, and Delete, which asks once. The phone keeps that list in `recordings.json`
 (session id, first sample time, count; no coordinates), adding to it after each upload the server
 took whole. A deleted recording is dropped from the list and never listed again, even when samples
-of it still on the phone are sent later (the server drops those). The first-LOG warning and "What
-is shared?" don't mention it.
+of it still on the phone are sent later (the server drops those). The list starts with the update
+that added it, so recordings sent before then aren't listed; the dialog always says so, and
+reaching them is #147. The first-LOG warning and "What is shared?" don't mention it.
 
 Asked for by the owner in issue #127; the design is the agents' (plan on the issue); no card.
 
