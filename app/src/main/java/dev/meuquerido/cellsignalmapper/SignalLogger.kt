@@ -39,17 +39,6 @@ object SignalLogger {
     }
 
     /**
-     * Replaces [file] with [text] through a temporary file beside it and a rename, so a crash or a
-     * read mid-write sees either the earlier content or [text], never a mix. Throws [IOException]
-     * when the write or the rename fails; [file] then keeps its earlier content.
-     */
-    fun replaceFile(file: File, text: String) {
-        val temporary = File(file.parentFile, "${file.name}.tmp")
-        temporary.writeText(text)
-        if (!temporary.renameTo(file)) throw IOException("Could not replace ${file.name}")
-    }
-
-    /**
      * The most recently logged sample, or null when none was logged or its copy can't be read.
      * Reads a file: not for the main thread.
      */

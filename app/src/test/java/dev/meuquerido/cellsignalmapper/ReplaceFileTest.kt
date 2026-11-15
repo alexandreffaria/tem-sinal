@@ -18,7 +18,7 @@ class ReplaceFileTest {
     fun replacesTheEarlierContent() {
         file.writeText("earlier\n")
 
-        SignalLogger.replaceFile(file, "later\n")
+        replaceFile(file, "later\n")
 
         assertEquals("later\n", file.readText())
     }
@@ -28,8 +28,18 @@ class ReplaceFileTest {
         file.writeText("earlier\n")
         File(dir.root, "copy.json.tmp").mkdir()
 
-        assertThrows(IOException::class.java) { SignalLogger.replaceFile(file, "later\n") }
+        assertThrows(IOException::class.java) { replaceFile(file, "later\n") }
 
         assertEquals("earlier\n", file.readText())
+    }
+
+    @Test
+    fun failedRenameThrows() {
+        file.mkdir()
+        File(file, "inside").writeText("earlier\n")
+
+        assertThrows(IOException::class.java) { replaceFile(file, "later\n") }
+
+        assertEquals("earlier\n", File(file, "inside").readText())
     }
 }

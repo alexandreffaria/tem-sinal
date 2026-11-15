@@ -17,9 +17,7 @@ fun installId(file: File): String {
     val stored = if (file.exists()) file.readText().trim() else ""
     if (isUuid(stored)) return stored
     val id = UUID.randomUUID().toString()
-    val temporary = File(file.parentFile, "${file.name}.tmp")
-    temporary.writeText(id)
-    if (!temporary.renameTo(file)) throw IOException("Could not write ${file.name}")
+    replaceFile(file, id)
     return id
 }
 
