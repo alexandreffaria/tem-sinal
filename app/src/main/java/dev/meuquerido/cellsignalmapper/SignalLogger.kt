@@ -31,11 +31,22 @@ object SignalLogger {
         val line = gson.toJson(entry)
         appendLine(getLogFile(context), line)
         try {
-            getLastFile(context).writeText(line + "\n")
+            replaceFile(getLastFile(context), line + "\n")
         } catch (e: IOException) {
             Log.w("SignalLogger", "Could not keep a copy of the last sample", e)
         }
         publishPendingCount(context)
+    }
+
+    /**
+     * Replaces [file] with [text] through a temporary file beside it and a rename, so a crash or a
+     * read mid-write sees either the earlier content or [text], never a mix. Throws [IOException]
+     * when the write or the rename fails; [file] then keeps its earlier content.
+     */
+    fun replaceFile(file: File, text: String) {
+        val temporary = File(file.parentFile, "${file.name}.tmp")
+        temporary.writeText(text)
+        if (!temporary.renameTo(file)) throw IOException("Could not replace ${file.name}")
     }
 
     /**
