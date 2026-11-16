@@ -40,6 +40,19 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+// Robolectric runs on the Android jar Gradle downloads and verifies, instead of fetching it itself.
+val robolectricAndroidAll: Configuration by configurations.creating { isTransitive = false }
+tasks.withType<Test>().configureEach {
+    inputs.files(robolectricAndroidAll)
+    systemProperty("robolectric.offline", "true")
+    doFirst { systemProperty("robolectric.dependency.dir", robolectricAndroidAll.singleFile.parent) }
+    // StoreScreensTest writes the store screenshots' app screens here when it's set.
+    providers.gradleProperty("storeScreens").orNull?.let { systemProperty("storeScreens", it) }
 }
 
 dependencies {
@@ -59,6 +72,10 @@ dependencies {
     implementation (libs.gson)
     implementation(libs.androidx.work.runtime.ktx)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.ui.test.junit4)
+    robolectricAndroidAll(libs.robolectric.android.all)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
