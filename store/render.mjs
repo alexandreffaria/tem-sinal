@@ -72,7 +72,7 @@ const FEATURE = html(1024, 500, `
   <div class="hexes">${honeycomb()}</div>
   <div class="text">
     <h1><svg viewBox="0 0 16 16">${bars("#fff")}</svg>Tem Sinal</h1>
-    <p>Grave o sinal de cada operadora na trilha e veja tudo no mapa do site.</p>
+    <p>Grave o sinal na trilha.<br>Veja cada operadora<br>no mapa do site.</p>
   </div>`, `
   body { background: linear-gradient(160deg, #3d93cf, ${BLUE} 60%, #2672a8); color: #fff; position: relative; }
   .ridge { position: absolute; left: 0; bottom: 0; width: 1024px; height: 170px; }
@@ -82,7 +82,7 @@ const FEATURE = html(1024, 500, `
   .text { position: absolute; left: 72px; top: 110px; width: 560px; }
   h1 { font-size: 88px; font-weight: 800; margin: 0; letter-spacing: -2px; display: flex; align-items: center; gap: 22px; }
   h1 svg { width: 68px; height: 68px; flex: none; }
-  p { font-size: 32px; font-weight: 500; line-height: 1.25; margin: 16px 0 0; max-width: 500px; }`);
+  p { font-size: 32px; font-weight: 500; line-height: 1.25; margin: 16px 0 0; max-width: 470px; }`);
 
 /** Status bar icons: signal, battery. */
 const STATUS = `<span>10:00</span><span class="icons"><svg viewBox="0 0 16 16">${bars("currentColor")}</svg>
