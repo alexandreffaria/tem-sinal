@@ -97,8 +97,10 @@ is shared?" don't mention it.
 The list stays on the phone that made it: `recordings.json` is excluded from Auto Backup and
 device transfer, as the install id is, since its recordings can be deleted only with the install
 id they were sent with, and a restored install id would count two phones as one install. When the
-server answers Delete with 404, the app says nothing was deleted and keeps the recording listed.
-Issue #163.
+server answers Delete with 404, the app says nothing was deleted and takes the recording off the
+list, since no Delete of it can succeed (as for a session the end trim hid whole, once its raw
+samples expire); it comes back only if more of its samples are sent or the server lists it.
+Issues #163 and #169.
 
 **Recordings sent before the list existed.** `v1` also serves `POST /sessions/list`, body
 `{installId}`, authenticated as deletion is: for each session among the raw samples with that

@@ -229,8 +229,8 @@ object FirebaseUploader {
 
     /**
      * Asks the server off the main thread to delete the recording [sessionId], and returns what
-     * came of it. Only when it is [DeleteResult.DELETED] is the recording dropped from [Recordings]
-     * and never listed again. The server deletes only what carries this phone's install id, and
+     * came of it. When it is [DeleteResult.DELETED] or [DeleteResult.NOT_STORED], the recording
+     * leaves [Recordings] as [afterDelete] says. The server deletes only what carries this phone's install id, and
      * answers [DeleteResult.DELETED] again for a recording it already deleted, so asking again is
      * harmless.
      */
@@ -241,8 +241,11 @@ object FirebaseUploader {
             val (status, _) = post(DELETE_URL, body, idToken(signedInUser()), appCheckToken())
             val result = deleteResult(status)
             when (result) {
-                DeleteResult.DELETED -> Recordings.markDeleted(context, sessionId)
-                DeleteResult.NOT_STORED -> Log.w("FirebaseUploader", "The server holds nothing of this recording with this install id")
+                DeleteResult.DELETED -> Recordings.afterDelete(context, sessionId, result)
+                DeleteResult.NOT_STORED -> {
+                    Log.w("FirebaseUploader", "The server holds nothing of this recording with this install id")
+                    Recordings.afterDelete(context, sessionId, result)
+                }
                 DeleteResult.FAILED -> Log.e("FirebaseUploader", "Delete function answered HTTP $status")
             }
             result

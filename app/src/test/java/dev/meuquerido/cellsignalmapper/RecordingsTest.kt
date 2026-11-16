@@ -35,15 +35,32 @@ class RecordingsTest {
 
     @Test
     fun aDeletedRecordingIsNeverListedAgainEvenWhenItsSamplesAreSentLater() {
-        val list = withDeleted(withSent(empty, sent(first, 1_000L, 2) + sent(second, 2_000L, 1)), first)
+        val list = afterDelete(withSent(empty, sent(first, 1_000L, 2) + sent(second, 2_000L, 1)), first, DeleteResult.DELETED)
 
         assertEquals(listOf(Recording(second, 2_001L, 1, 0)), newestFirst(withSent(list, sent(first, 3_000L, 4))))
     }
 
     @Test
+    fun aRecordingTheServerHoldsNothingOfLeavesTheListAndComesBackIfMoreOfItIsSentOrListed() {
+        val list = afterDelete(withSent(empty, sent(first, 1_000L, 2) + sent(second, 2_000L, 1)), first, DeleteResult.NOT_STORED)
+
+        assertEquals(listOf(Recording(second, 2_001L, 1, 0)), newestFirst(list))
+        assertEquals(emptyList<String>(), list.deleted)
+        assertEquals(listOf(Recording(first, 3_001L, 4, 0), Recording(second, 2_001L, 1, 0)), newestFirst(withSent(list, sent(first, 3_000L, 4))))
+        assertEquals(listOf(Recording(second, 2_001L, 1, 0), Recording(first, 900L, 0, 3)), newestFirst(withListed(list, listOf(Recording(first, 900L, 0, 3)))))
+    }
+
+    @Test
+    fun aFailedDeleteLeavesTheListAsItWas() {
+        val list = withSent(empty, sent(first, 1_000L, 2))
+
+        assertEquals(list, afterDelete(list, first, DeleteResult.FAILED))
+    }
+
+    @Test
     fun theListSurvivesBeingWrittenAndRead() {
         val file = File(dir.root, RECORDINGS_FILE_NAME)
-        val list = withDeleted(withSent(empty, sent(first, 1_000L, 2) + sent(second, 2_000L, 1)), second)
+        val list = afterDelete(withSent(empty, sent(first, 1_000L, 2) + sent(second, 2_000L, 1)), second, DeleteResult.DELETED)
         replaceFile(file, gson.toJson(list))
 
         assertEquals(list, readRecordings(file, gson))
@@ -62,7 +79,7 @@ class RecordingsTest {
     @Test
     fun recordingsTheServerListsAreAddedOrMergedUnlessDeleted() {
         val third = "e6b1d3a8-2f4c-4d9e-a7b0-3c5e8f1d2a69"
-        val list = withDeleted(withSent(empty, sent(first, 1_000L, 5) + sent(third, 4_000L, 1)), third)
+        val list = afterDelete(withSent(empty, sent(first, 1_000L, 5) + sent(third, 4_000L, 1)), third, DeleteResult.DELETED)
         val listed = listOf(Recording(first, 900L, 0, 3), Recording(second, 2_000L, 0, 7), Recording(third, 4_001L, 0, 1))
 
         val merged = withListed(list, listed)

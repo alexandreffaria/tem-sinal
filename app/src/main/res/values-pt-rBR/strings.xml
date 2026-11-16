@@ -58,7 +58,7 @@
     <string name="delete_recording_text">Ela é apagada do nosso servidor agora e do mapa na próxima atualização diária. Não dá para desfazer.</string>
     <string name="delete_after_stop">Gravando agora. Aperte PARAR para apagar.</string>
     <string name="delete_failed">Não deu para apagar. Tente de novo quando estiver com internet.</string>
-    <string name="delete_not_stored">Nada foi apagado: nosso servidor não tem nada desta gravação vindo do app como está instalado agora. Uma gravação enviada antes de reinstalar o app não pode ser apagada daqui; como nos pedir para apagá-la: alexandreffaria.github.io/tem-sinal/delete.html</string>
+    <string name="delete_not_stored">Nada foi apagado: nosso servidor não tem nada desta gravação com o código deste app, então ela saiu da lista. Ou as amostras dela já expiraram, depois de 90 dias, sem nenhuma chegar ao mapa, ou ela foi enviada antes de reinstalar o app ou limpar os dados dele, com um código que este app não tem mais.</string>
 
     <string name="needs_precise_location">Para gravar, o app precisa da localização precisa. Permita a localização precisa para este app nas Configurações.</string>
     <string name="needs_location">Para gravar, o app precisa acessar sua localização. Permita a localização para este app nas Configurações.</string>

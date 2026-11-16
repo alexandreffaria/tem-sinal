@@ -52,10 +52,6 @@ fun withSent(list: RecordingList, sent: List<Sample>): RecordingList {
     return list.copy(recordings = bySession.values.toList())
 }
 
-/** [list] without the recording of [sessionId], which is never listed again. */
-fun withDeleted(list: RecordingList, sessionId: String): RecordingList =
-    RecordingList(list.recordings.filter { it.sessionId != sessionId }, (list.deleted + sessionId).distinct())
-
 /**
  * [list] with each recording in [listed], which the server holds, added, or merged into the
  * recording of its session, which takes the earlier start and the server's count as its
@@ -100,8 +96,9 @@ enum class DeleteResult {
     DELETED,
 
     /**
-     * The server holds nothing of the recording with this phone's install id, as for one sent
-     * before the app was reinstalled: nothing was deleted, and asking again won't change that.
+     * The server holds nothing of the recording with this phone's install id: its samples expired
+     * and none of them reached the map, or it was sent with an install id from before the app was
+     * reinstalled. Nothing was deleted, and asking again won't change that.
      */
     NOT_STORED,
 
@@ -116,6 +113,21 @@ fun deleteResult(status: Int): DeleteResult =
         404 -> DeleteResult.NOT_STORED
         else -> DeleteResult.FAILED
     }
+
+/**
+ * [list] after asking the server to delete the recording of [sessionId] came to [result]. A
+ * recording the server deleted leaves the list and is never listed again. One it holds nothing of
+ * leaves the list too, since no Delete of it can succeed, but comes back if more of its samples are
+ * sent or the server lists it. After a failure the list is unchanged.
+ */
+fun afterDelete(list: RecordingList, sessionId: String, result: DeleteResult): RecordingList {
+    val others = list.recordings.filter { it.sessionId != sessionId }
+    return when (result) {
+        DeleteResult.DELETED -> RecordingList(others, (list.deleted + sessionId).distinct())
+        DeleteResult.NOT_STORED -> list.copy(recordings = others)
+        DeleteResult.FAILED -> list
+    }
+}
 
 /** The recordings in [list], newest first. */
 fun newestFirst(list: RecordingList): List<Recording> = list.recordings.sortedByDescending { it.startMs }
@@ -153,9 +165,10 @@ object Recordings {
     @Synchronized
     fun addListed(context: Context, listed: List<Recording>) = update(context) { withListed(it, listed) }
 
-    /** Removes [sessionId] as [withDeleted] does. Throws [IOException] when the list can't be written. */
+    /** Changes the list as [afterDelete] does. Throws [IOException] when the list can't be written. */
     @Synchronized
-    fun markDeleted(context: Context, sessionId: String) = update(context) { withDeleted(it, sessionId) }
+    fun afterDelete(context: Context, sessionId: String, result: DeleteResult) =
+        update(context) { afterDelete(it, sessionId, result) }
 
     private fun update(context: Context, change: (RecordingList) -> RecordingList) {
         val file = file(context)
