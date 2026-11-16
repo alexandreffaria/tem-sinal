@@ -10,7 +10,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.meuquerido.cellsignalmapper"
+        applicationId = "dev.meuquerido.temsinal"
         minSdk = 30
         targetSdk = 35
         // The release workflow passes -PversionCode; local and CI builds use 1.

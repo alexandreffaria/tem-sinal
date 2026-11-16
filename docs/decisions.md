@@ -5,6 +5,23 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-16: The application id is `dev.meuquerido.temsinal`
+
+The app's application id is `dev.meuquerido.temsinal`, chosen by the owner before the app was
+created on Play, the last moment it could change: Play never changes an app's id once it has one.
+It replaces `dev.meuquerido.cellsignalmapper`. The Kotlin package and the Gradle `namespace` stay
+`dev.meuquerido.cellsignalmapper`; they are internal and nobody sees them. The new id is its own
+Firebase Android app in project `cellsignalmapper-a9da1`, with the release signing certificate,
+and `app/google-services.json` carries its config. The old Firebase Android app stays until no
+install of the old id is left.
+
+To Android an installed app with the old id is a different app: the new release installs beside
+it and doesn't upgrade it, and the old app's samples don't move. Its owner keeps it until nothing
+is waiting to upload, then uninstalls it. The new install gets a new install id, so recordings
+made under the old install can't be listed or deleted from the new one.
+
+Decided by the owner in chat on 2026-11-16 (issue #158).
+
 ## 2026-11-16: Zoomed out, a hexagon shows the best any measured spot inside it had
 
 The map shows where data is at every zoom. From zoom 10 it shows the resolution 11 cells of the
@@ -182,7 +199,7 @@ this account's billing is blocked; if it doesn't, going public doesn't bring CI 
 owner decides again.
 
 The app is renamed Tem Sinal ("is there signal?"): its display name, the Play listing, the docs.
-The application id `dev.meuquerido.cellsignalmapper` stays, since Play can't change it.
+The application id stayed `dev.meuquerido.cellsignalmapper` here; it changed on 2026-11-16 (above).
 The app has never been on Play, so its listing takes the name when the owner creates the app in
 Play Console (issue #28); no listing has to be renamed.
 
