@@ -49,6 +49,7 @@ options:
 resolution:
   choice: github-pages
   resolved_at: 2026-11-15T04:40:53Z
+applied_at: 2026-11-16T00:34:28Z
 ---
 
 ## Context
