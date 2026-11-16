@@ -81,7 +81,8 @@ const STATUS = `<span>10:00</span><span class="icons"><svg viewBox="0 0 16 16">$
 
 /**
  * A 1080 x 1920 screenshot: [caption] over a phone showing [screen]; [dialog] over it with the
- * scrim when given; in a browser with the map's address when [browser].
+ * scrim when given, centred on the screen below the status bar, as the app centres it; in a
+ * browser with the map's address when [browser].
  */
 function framed(caption, screen, { dialog, browser } = {}) {
   const url = (file) => pathToFileURL(file).href;
@@ -90,8 +91,9 @@ function framed(caption, screen, { dialog, browser } = {}) {
     <div class="phone"><div class="glass">
       <div class="status">${STATUS}</div>
       ${browser ? `<div class="bar"><span class="lock">🔒</span>${MAP_URL}</div>` : ""}
-      <div class="screen"><img src="${url(screen)}"></div>
-      ${dialog ? `<div class="scrim"></div><img class="dialog" src="${url(dialog)}">` : ""}
+      <div class="screen"><img src="${url(screen)}">
+        ${dialog ? `<div class="over"><img src="${url(dialog)}"></div>` : ""}</div>
+      ${dialog ? `<div class="scrim"></div>` : ""}
     </div></div>`, `
     body { background: linear-gradient(170deg, #3d93cf, ${BLUE} 45%, #1f5f8f); color: #fff; }
     h2 { position: absolute; left: 70px; right: 70px; top: 70px; height: 260px; margin: 0; display: flex;
@@ -108,10 +110,11 @@ function framed(caption, screen, { dialog, browser } = {}) {
     .bar { flex: none; margin: 4px 22px 14px; height: 64px; border-radius: 32px; background: #e9e9ef;
       display: flex; align-items: center; gap: 12px; padding: 0 28px; color: #333; font-size: 26px; }
     .bar .lock { font-size: 20px; filter: grayscale(1); }
-    .screen { flex: 1; overflow: hidden; }
-    .screen img { width: 100%; display: block; }
-    .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
-    .dialog { position: absolute; left: 6%; top: 50%; width: 88%; transform: translateY(-50%); }`);
+    .screen { flex: 1; overflow: hidden; position: relative; }
+    .screen > img { width: 100%; display: block; }
+    .scrim { position: absolute; inset: 0; z-index: 1; background: rgba(0,0,0,.4); }
+    .over { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; }
+    .over img { width: 88%; }`);
 }
 
 /** Renders [page] at [width] x [height] and writes it to store/[name]. */
@@ -138,8 +141,9 @@ async function main() {
   const server = spawn(process.execPath, [join(here, "../map/serve.js")], {
     env: { ...process.env, PORT: String(PORT), FIXTURES: join(work, "fixtures") }, stdio: "ignore",
   });
-  const chrome = await launch();
+  let chrome;
   try {
+    chrome = await launch();
     await sleep(500);
     // The popup opens above the cell clicked, so that cell sits low enough for it to clear the
     // legend: the view is centred [POPUP_DROP] px above a cell in the middle of the first trail.
@@ -176,7 +180,7 @@ async function main() {
     ];
     for (const [i, page] of phones.entries()) await shoot(chrome, work, `phone-${i + 1}.png`, 1080, 1920, page);
   } finally {
-    await chrome.close();
+    await chrome?.close();
     server.kill();
     await rm(work, { recursive: true, force: true });
   }
