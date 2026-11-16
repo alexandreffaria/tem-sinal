@@ -53,9 +53,9 @@
 <h2>O que é coletado</h2>
 <p>Nada é gravado até você tocar em GRAVAR. A gravação para quando você toca em PARAR, quando o celular desliga ou com 10% de bateria. A cada poucos segundos o app grava uma amostra com:</p>
 <ul>
-  <li>a posição, a hora, a precisão da localização e a altitude;</li>
-  <li>para cada chip ativo: a operadora, o estado do serviço (com serviço, só emergência ou sem serviço), o tipo de rede, as medições de sinal e os códigos das antenas que ele capta;</li>
-  <li>um código aleatório criado pelo app neste celular e um código aleatório para cada gravação.</li>
+  <li>a posição, a hora, o tempo desde que o celular foi ligado, a precisão horizontal e vertical da localização, a altitude e se a localização foi simulada;</li>
+  <li>para cada chip ativo: o slot, a operadora, o estado do serviço (com serviço, só emergência ou sem serviço), o tipo de rede, as medições de sinal e os códigos das antenas que ele capta, com o momento de cada medição;</li>
+  <li>um código aleatório criado pelo app neste celular, um código aleatório para cada gravação e outro para cada amostra, e a versão do formato da amostra.</li>
 </ul>
 <p>O app nunca lê seu nome, número de telefone, contas, IMEI, IMSI, ICCID, Android ID nem ID de publicidade. Para enviar, ele entra no Firebase (Google) com uma conta anônima; o Firebase guarda o código aleatório dessa conta e os horários de criação e acesso. Em cada conexão o Google recebe o endereço IP do celular, e as bibliotecas do Firebase enviam o idioma e o país configurados, códigos da marca e do modelo do aparelho e a versão do Android. O app também pede ao Google Play que confirme que ele é o app verdadeiro, num celular de verdade. Não há anúncios, análise de uso nem venda de dados.</p>
 
@@ -115,9 +115,9 @@
 <h2>What is collected</h2>
 <p>Nothing is recorded until you press LOG. Recording stops when you press STOP, when the phone shuts down, or at 10% battery. Every few seconds the app records a sample with:</p>
 <ul>
-  <li>the position, the time, the location's accuracy and the altitude;</li>
-  <li>for each active SIM: the carrier, the service state (in service, emergency calls only or no service), the network type, the signal readings and the IDs of the cell towers it hears;</li>
-  <li>a random ID the app made on this phone, and a random ID for each recording.</li>
+  <li>the position, the time, the time since the phone was turned on, the location's horizontal and vertical accuracy, the altitude, and whether the location was simulated;</li>
+  <li>for each active SIM: its slot, the carrier, the service state (in service, emergency calls only or no service), the network type, the signal readings and the IDs of the cell towers it hears, with when each was measured;</li>
+  <li>a random ID the app made on this phone, a random ID for each recording and another for each sample, and the version of the sample format.</li>
 </ul>
 <p>The app never reads your name, phone number, accounts, IMEI, IMSI, ICCID, Android ID or Advertising ID. To send samples, it signs in to Firebase (Google) with an anonymous account; Firebase keeps that account's random ID and its creation and sign-in times. Every connection gives Google the phone's IP address, and the Firebase libraries send the phone's language and country setting, codes for its brand and model, and the Android version. The app also asks Google Play to confirm that it is the real app, on a real phone. There are no ads, no usage analytics, and no data is sold.</p>
 
