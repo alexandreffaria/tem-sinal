@@ -9,7 +9,7 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="dev.meuquerido.cellsignalmapper" />
+                  <option name="appId" value="dev.meuquerido.temsinal" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
@@ -23,8 +23,8 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="dev.meuquerido.cellsignalmapper" />
-                  <option name="mobileSdkAppId" value="1:1048309727525:android:1c3f222b4d67d9ff299acc" />
+                  <option name="appId" value="dev.meuquerido.temsinal" />
+                  <option name="mobileSdkAppId" value="1:1048309727525:android:3db2171076df4cb0299acc" />
                   <option name="projectId" value="cellsignalmapper-a9da1" />
                   <option name="projectNumber" value="1048309727525" />
                 </ConnectionSetting>

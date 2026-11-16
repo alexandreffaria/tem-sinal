@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1048309727525:android:0dec06ba7c36765a299acc",
+        "mobilesdk_app_id": "1:1048309727525:android:1c3f222b4d67d9ff299acc",
         "android_client_info": {
-          "package_name": "com.example.cellsignalmapper"
+          "package_name": "dev.meuquerido.cellsignalmapper"
         }
       },
       "oauth_client": [],
@@ -26,9 +26,9 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1048309727525:android:1c3f222b4d67d9ff299acc",
+        "mobilesdk_app_id": "1:1048309727525:android:3db2171076df4cb0299acc",
         "android_client_info": {
-          "package_name": "dev.meuquerido.cellsignalmapper"
+          "package_name": "dev.meuquerido.temsinal"
         }
       },
       "oauth_client": [],
