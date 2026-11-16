@@ -91,4 +91,11 @@ class RecordingsTest {
             assertThrows(IOException::class.java) { listedRecordings(status, failed, gson) }
         }
     }
+
+    @Test
+    fun onlyASuccessfulAnswerCountsAsDeletedAndNotFoundIsNothingStoredFromThisInstall() {
+        assertEquals(DeleteResult.DELETED, deleteResult(204))
+        assertEquals(DeleteResult.NOT_STORED, deleteResult(404))
+        for (status in listOf(400, 401, 500, 503)) assertEquals(DeleteResult.FAILED, deleteResult(status))
+    }
 }

@@ -94,6 +94,29 @@ fun listedRecordings(status: Int, body: String, gson: Gson): List<Recording> {
     return sessions.filterNotNull().filter { it.sessionId != null }.map { Recording(it.sessionId, it.startMs, 0, it.samples) }
 }
 
+/** What came of asking the server to delete a recording. */
+enum class DeleteResult {
+    /** The server deleted the recording, now or before. */
+    DELETED,
+
+    /**
+     * The server holds nothing of the recording with this phone's install id, as for one sent
+     * before the app was reinstalled: nothing was deleted, and asking again won't change that.
+     */
+    NOT_STORED,
+
+    /** The server couldn't be reached or failed; asking again may work. */
+    FAILED,
+}
+
+/** The [DeleteResult] of the delete function's answer with HTTP [status]. */
+fun deleteResult(status: Int): DeleteResult =
+    when (status) {
+        in 200..299 -> DeleteResult.DELETED
+        404 -> DeleteResult.NOT_STORED
+        else -> DeleteResult.FAILED
+    }
+
 /** The recordings in [list], newest first. */
 fun newestFirst(list: RecordingList): List<Recording> = list.recordings.sortedByDescending { it.startMs }
 

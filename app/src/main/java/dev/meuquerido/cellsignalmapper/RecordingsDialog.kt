@@ -44,7 +44,8 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
     var recordings by remember { mutableStateOf<List<Recording>?>(null) }
     var confirming by rememberSaveable { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf<String?>(null) }
-    var failed by remember { mutableStateOf(false) }
+    // What came of the last Delete, when it deleted nothing.
+    var notDeleted by remember { mutableStateOf<DeleteResult?>(null) }
     // Null while the server is being asked, then whether it answered.
     var checked by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(Unit) {
@@ -61,9 +62,9 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
                     confirming = null
                     if (!LoggerState.state.value.canDelete(sessionId)) return@TextButton
                     deleting = sessionId
-                    failed = false
+                    notDeleted = null
                     scope.launch {
-                        failed = !FirebaseUploader.deleteRecording(context, sessionId)
+                        notDeleted = FirebaseUploader.deleteRecording(context, sessionId).takeIf { it != DeleteResult.DELETED }
                         recordings = withContext(Dispatchers.IO) { Recordings.list(context) }
                         deleting = null
                     }
@@ -85,7 +86,11 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.my_recordings)) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                if (failed) Text(stringResource(R.string.delete_failed))
+                when (notDeleted) {
+                    DeleteResult.FAILED -> Text(stringResource(R.string.delete_failed))
+                    DeleteResult.NOT_STORED -> Text(stringResource(R.string.delete_not_stored))
+                    DeleteResult.DELETED, null -> {}
+                }
                 val list = recordings
                 when (checked) {
                     null -> Text(stringResource(R.string.checking_recordings), style = MaterialTheme.typography.bodySmall)

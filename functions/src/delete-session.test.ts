@@ -63,13 +63,27 @@ test("deleting a session removes its raw samples and its effect on the private a
   assert.ok(!fake.docs.some((d) => (d.data as StoredSample).sessionId === sessionId));
 });
 
-test("a request with another install's id deletes nothing and stores no tombstone", async () => {
+test("asking again to delete a deleted session, as after a lost answer, answers 204 and deletes nothing else", async () => {
+  const fake = fakeStores();
+  const mine = walk(randomUUID(), 400);
+  const theirs = walk(randomUUID(), 400).map((s) => ({ ...s, installId: OTHER }));
+  for (const session of [mine, theirs]) fake.receive(session, T);
+  await aggregate(fake.store, SESSION_IDLE_MS / HOUR);
+  const body = { installId: mine[0]?.installId, sessionId: mine[0]?.sessionId };
+  assert.deepEqual(await deleteSession(body, fake.deletion), { status: 204 });
+  assert.deepEqual(await deleteSession(body, fake.deletion), { status: 204 });
+  assert.deepEqual(fake.cells, expected(theirs));
+  assert.equal(fake.docs.length, theirs.length);
+});
+
+test("a request with another install's id deletes nothing, stores no tombstone and answers 404", async () => {
   const fake = fakeStores();
   const mine = walk(randomUUID(), 400);
   fake.receive(mine, T);
   await aggregate(fake.store, SESSION_IDLE_MS / HOUR);
   const cells = structuredClone(fake.cells);
-  assert.deepEqual(await deleteSession({ installId: OTHER, sessionId: mine[0]?.sessionId }, fake.deletion), { status: 204 });
+  const response = await deleteSession({ installId: OTHER, sessionId: mine[0]?.sessionId }, fake.deletion);
+  assert.equal(response.status, 404);
   assert.deepEqual(fake.cells, cells);
   assert.equal(fake.docs.length, mine.length);
   assert.equal(fake.deleted.size, 0);

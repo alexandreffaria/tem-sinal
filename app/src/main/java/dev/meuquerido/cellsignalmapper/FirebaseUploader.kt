@@ -228,22 +228,27 @@ object FirebaseUploader {
     }
 
     /**
-     * Asks the server to delete the recording [sessionId] off the main thread, and returns whether
-     * it did; then the recording is dropped from [Recordings] and never listed again. The server
-     * deletes only what carries this phone's install id, and answers the same when it had nothing
-     * left of the recording, so asking again is harmless.
+     * Asks the server off the main thread to delete the recording [sessionId], and returns what
+     * came of it. Only when it is [DeleteResult.DELETED] is the recording dropped from [Recordings]
+     * and never listed again. The server deletes only what carries this phone's install id, and
+     * answers [DeleteResult.DELETED] again for a recording it already deleted, so asking again is
+     * harmless.
      */
-    suspend fun deleteRecording(context: Context, sessionId: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun deleteRecording(context: Context, sessionId: String): DeleteResult = withContext(Dispatchers.IO) {
         try {
             val installId = installId(File(context.noBackupFilesDir, INSTALL_ID_FILE_NAME))
             val body = gson.toJson(mapOf("installId" to installId, "sessionId" to sessionId))
             val (status, _) = post(DELETE_URL, body, idToken(signedInUser()), appCheckToken())
-            if (status !in 200..299) throw IOException("Delete function answered HTTP $status")
-            Recordings.markDeleted(context, sessionId)
-            true
+            val result = deleteResult(status)
+            when (result) {
+                DeleteResult.DELETED -> Recordings.markDeleted(context, sessionId)
+                DeleteResult.NOT_STORED -> Log.w("FirebaseUploader", "The server holds nothing of this recording with this install id")
+                DeleteResult.FAILED -> Log.e("FirebaseUploader", "Delete function answered HTTP $status")
+            }
+            result
         } catch (e: Exception) {
             Log.e("FirebaseUploader", "Delete failed", e)
-            false
+            DeleteResult.FAILED
         }
     }
 

@@ -388,7 +388,8 @@ session: its raw samples (those with both ids) and its private cells, which are 
 the raw samples expired. The next daily run publishes the map without it, deleting a public cell
 and emptying a tile it alone backed. A tombstone (`deleted_sessions`, the same hash, kept for
 good) stops the upload function storing, and the hourly job aggregating, any later sample of it.
-Only a phone holding the install id can delete; a wrong one deletes nothing.
+Only a phone holding the install id can delete; a wrong one deletes nothing. The answer is 204
+when anything of the session is stored, its tombstone included, and 404 when nothing is.
 
 **Listing.** `POST /v1/sessions/list` with `{"installId": ...}` answers
 `{"sessions": [{"sessionId": ..., "startMs": ..., "samples": ...}]}`: each session among the raw
