@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
-/** What a sample holds, when it leaves the phone, what Firebase receives, and what is public. */
+/** What a sample holds, when it leaves the phone, what Firebase receives, what is public, and where the privacy policy is. */
 private val sharingParagraphs = listOf(
     UiText(R.string.sharing_recording, listOf(UiText(R.string.log), UiText(R.string.stop))),
     UiText(R.string.sharing_sample),
@@ -21,6 +21,7 @@ private val sharingParagraphs = listOf(
     UiText(R.string.sharing_firebase),
     UiText(R.string.sharing_personal),
     UiText(R.string.sharing_map),
+    UiText(R.string.sharing_policy),
 )
 
 /** Explains what is shared; the text scrolls when the window is too short for it. */

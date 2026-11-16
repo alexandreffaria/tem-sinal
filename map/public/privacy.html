@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacidade · Tem Sinal</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='%232c7bb6'%3E%3Crect x='1' y='11' width='3' height='4' rx='.5'/%3E%3Crect x='5' y='8' width='3' height='7' rx='.5'/%3E%3Crect x='9' y='5' width='3' height='10' rx='.5'/%3E%3Crect x='13' y='1' width='2.5' height='14' rx='.5'/%3E%3C/g%3E%3C/svg%3E">
+  <meta name="description" content="Política de privacidade do app Tem Sinal. Tem Sinal app privacy policy.">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --signal: #2c7bb6;
+      --text: #1a1a1a;
+      --muted: #555;
+      --bg: #ffffff;
+      --rule: #ddd;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --signal: #7db7e8;
+        --text: #e8e8e8;
+        --muted: #aaa;
+        --bg: #161616;
+        --rule: #333;
+      }
+    }
+    body {
+      margin: 0 auto; max-width: 42rem; padding: 16px 16px 48px;
+      font: 15px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg);
+    }
+    h1 { font-size: 22px; margin: 8px 0 4px; }
+    h2 { font-size: 17px; margin: 24px 0 6px; }
+    p, ul { margin: 6px 0; }
+    ul { padding-left: 20px; }
+    li { margin: 3px 0; }
+    a { color: var(--signal); }
+    .muted { color: var(--muted); font-size: 13px; }
+    section + section { border-top: 1px solid var(--rule); margin-top: 32px; padding-top: 8px; }
+  </style>
+</head>
+<body>
+<p class="muted"><a href="./">← Mapa · Map</a> · <a href="#en">English below</a></p>
+
+<section>
+<h1>Política de privacidade do Tem Sinal</h1>
+<p class="muted">Atualizada em 16 de novembro de 2026.</p>
+
+<p>O Tem Sinal é um app Android (<code>dev.meuquerido.temsinal</code>) que mede o sinal de celular por onde você passa e o junta num <a href="./">mapa público</a> de onde cada operadora tem sinal.</p>
+
+<h2>Quem é o controlador</h2>
+<p>Alexandre Faria (desenvolvedor do Tem Sinal). Contato para qualquer assunto de privacidade: <a href="mailto:porquecequersaber@gmail.com">porquecequersaber@gmail.com</a>.</p>
+
+<h2>O que é coletado</h2>
+<p>Nada é gravado até você tocar em LOG. A gravação para quando você toca em PARAR, quando o celular desliga ou com 10% de bateria. A cada poucos segundos o app grava uma amostra com:</p>
+<ul>
+  <li>a posição, a hora, a precisão da localização e a altitude;</li>
+  <li>para cada chip ativo: a operadora, o estado do serviço (com serviço, só emergência ou sem serviço), o tipo de rede, as medições de sinal e os códigos das antenas que ele capta;</li>
+  <li>um código aleatório criado pelo app neste celular e um código aleatório para cada gravação.</li>
+</ul>
+<p>O app nunca lê seu nome, número de telefone, contas, IMEI, IMSI, ICCID, Android ID nem ID de publicidade. Para enviar, ele entra no Firebase (Google) com uma conta anônima; o Firebase guarda o código aleatório dessa conta e os horários de criação e acesso. Em cada conexão o Google recebe o endereço IP do celular, e as bibliotecas do Firebase enviam o idioma e o país configurados, códigos da marca e do modelo do aparelho e a versão do Android. O app também pede ao Google Play que confirme que ele é o app verdadeiro, num celular de verdade. Não há anúncios, análise de uso nem venda de dados.</p>
+
+<h2>Para quê</h2>
+<ul>
+  <li>Montar o mapa público de sinal por operadora.</li>
+  <li>Limitar quanto cada instalação envia por hora e conferir que o envio vem do app, para evitar abuso.</li>
+  <li>Deixar você listar e apagar as suas gravações.</li>
+</ul>
+
+<h2>Base legal</h2>
+<p>Consentimento (LGPD, art. 7º, I): tocar em LOG é a escolha de gravar e compartilhar. Você pode retirar o consentimento quando quiser: toque em PARAR, apague suas gravações (veja abaixo) ou desinstale o app. O que já foi gravado antes de PARAR ainda é enviado; para tirá-lo do servidor, apague a gravação.</p>
+
+<h2>Quando os dados saem do celular</h2>
+<p>As amostras são enviadas automaticamente quando a gravação para e quando você abre o app; sem internet, ficam no celular e o app tenta de novo até conseguir. Uma falha de envio nunca apaga amostras. O app guarda no celular: as amostras ainda não enviadas, uma cópia da amostra mais recente (para “Ver os dados enviados”; a cópia não é enviada), a lista das suas gravações (código, data e hora de início e número de pontos, sem coordenadas) e o código do app. Desinstalar o app ou limpar os dados dele apaga tudo isso, inclusive o que ainda não foi enviado.</p>
+
+<h2>Quem processa os dados</h2>
+<p>O Google, pelos serviços Firebase e Google Cloud (Firebase Authentication, App Check com Play Integrity, Cloud Functions, Firestore e Cloud Storage). O servidor do app roda nos Estados Unidos, e o Google pode tratar os dados em outros países onde opera; é uma transferência internacional (LGPD, art. 33). A localização do celular vem do serviço de localização do Google Play services, sob as regras do próprio Google. No servidor, os dados não são acessíveis a outros apps nem ao público; só as funções do servidor e o desenvolvedor os leem.</p>
+
+<h2>O que é público</h2>
+<p>O mapa mostra só totais por pequena área (hexágonos de uns 50 m) e operadora: intensidade do sinal, tipo de rede, quantas medições tiveram serviço, só emergência ou nenhum serviço, e o mês da última medição; afastando o mapa, hexágonos maiores resumem esses mesmos totais. Nenhum código, gravação, hora exata ou ponto exato é publicado. Ficam de fora pelo menos 300 m em volta de qualquer lugar onde o celular ficou parado 30 minutos ou mais perto do começo ou do fim de uma gravação, como sua casa; uma parada mais curta, como estacionar no início de uma trilha, aparece. Por isso, comece e pare a gravação longe de casa. O mapa é atualizado uma vez por dia, então quem comparar o mapa dia a dia pode ver mais ou menos em que dia uma área foi medida.</p>
+
+<h2>Por quanto tempo</h2>
+<ul>
+  <li>Amostras no servidor: apagadas automaticamente 90 dias depois de chegarem (a exclusão automática pode levar cerca de mais um dia).</li>
+  <li>Contadores de envio por hora, com o código do app e o da conta: apagados automaticamente depois de duas horas, com o mesmo atraso possível.</li>
+  <li>Resumos privados de cada gravação por área de uns 20 m (contagens e medições de sinal, o código do app e os meses e horários da primeira e da última medição ali): guardados sem prazo, até a gravação ser apagada, para que o mapa possa ser refeito sem ela.</li>
+  <li>Registro de gravação apagada: um código derivado dos códigos do app e da gravação, que não os revela, guardado sem prazo para que nada dela volte a ser guardado.</li>
+  <li>A conta anônima no Firebase (sem nome, e-mail nem telefone): guardada pelo Firebase enquanto existir.</li>
+  <li>Registros técnicos de acesso do Google Cloud, que podem incluir o endereço IP: guardados conforme a retenção de registros do Google Cloud, 30 dias por padrão.</li>
+  <li>O mapa público: sem prazo.</li>
+</ul>
+
+<h2>Como apagar e seus direitos</h2>
+<p>No app, “Minhas gravações” lista o que este celular enviou. “Apagar” remove a gravação do servidor na hora (amostras e resumos) e do mapa na próxima atualização diária, e nada dela é guardado de novo. Depois de reinstalar o app ou limpar os dados dele, o novo código do app não alcança as gravações antigas.</p>
+<p>Pela LGPD (art. 18) você pode pedir confirmação, acesso, correção, exclusão e informações sobre o compartilhamento dos seus dados, e reclamar à ANPD. Escreva para <a href="mailto:porquecequersaber@gmail.com">porquecequersaber@gmail.com</a> e inclua o código do app, que aparece em “Ver os dados enviados” (<code>installId</code>): como os dados não têm nome nem contato, só esse código permite achar os seus.</p>
+
+<h2>Crianças</h2>
+<p>O Tem Sinal não é direcionado a crianças. Se uma criança usou o app, o responsável pode apagar as gravações em “Minhas gravações” ou nos escrever.</p>
+
+<h2>Mudanças</h2>
+<p>Se esta política mudar, a nova versão é publicada nesta página com a data atualizada no topo.</p>
+
+<h2>Este site</h2>
+<p>Este site fica no GitHub Pages, e o mapa carrega o fundo do OpenFreeMap, bibliotecas do unpkg e os dados do Google Cloud Storage; esses serviços recebem o endereço IP de quem o visita. O site não usa cookies nem análise de uso.</p>
+</section>
+
+<section id="en" lang="en">
+<h1>Tem Sinal privacy policy</h1>
+<p class="muted">Updated 16 November 2026.</p>
+
+<p>Tem Sinal is an Android app (<code>dev.meuquerido.temsinal</code>) that measures cell signal where you go and adds it to a <a href="./">public map</a> of where each carrier has signal.</p>
+
+<h2>Who the controller is</h2>
+<p>Alexandre Faria (desenvolvedor do Tem Sinal, the developer of Tem Sinal). Contact for anything about privacy: <a href="mailto:porquecequersaber@gmail.com">porquecequersaber@gmail.com</a>.</p>
+
+<h2>What is collected</h2>
+<p>Nothing is recorded until you press LOG. Recording stops when you press STOP, when the phone shuts down, or at 10% battery. Every few seconds the app records a sample with:</p>
+<ul>
+  <li>the position, the time, the location's accuracy and the altitude;</li>
+  <li>for each active SIM: the carrier, the service state (in service, emergency calls only or no service), the network type, the signal readings and the IDs of the cell towers it hears;</li>
+  <li>a random ID the app made on this phone, and a random ID for each recording.</li>
+</ul>
+<p>The app never reads your name, phone number, accounts, IMEI, IMSI, ICCID, Android ID or Advertising ID. To send samples, it signs in to Firebase (Google) with an anonymous account; Firebase keeps that account's random ID and its creation and sign-in times. Every connection gives Google the phone's IP address, and the Firebase libraries send the phone's language and country setting, codes for its brand and model, and the Android version. The app also asks Google Play to confirm that it is the real app, on a real phone. There are no ads, no usage analytics, and no data is sold.</p>
+
+<h2>Why</h2>
+<ul>
+  <li>To build the public map of signal by carrier.</li>
+  <li>To limit how much each install sends per hour and check that uploads come from the app, against abuse.</li>
+  <li>To let you list and delete your recordings.</li>
+</ul>
+
+<h2>Legal basis</h2>
+<p>Consent (LGPD, art. 7, I): pressing LOG is the choice to record and share. You can withdraw it at any time: press STOP, delete your recordings (see below) or uninstall the app. What was recorded before STOP is still sent; to remove it from the server, delete the recording.</p>
+
+<h2>When data leaves the phone</h2>
+<p>Samples are sent automatically when recording stops and when you open the app; without a connection they stay on the phone and the app keeps trying until they are sent. A failed upload never deletes samples. The app keeps on the phone: samples not sent yet, a copy of the most recent sample (for “See the data sent”; the copy isn't sent), the list of your recordings (ID, start date and time, and number of points, no coordinates), and the app's ID. Uninstalling the app or clearing its data erases them, including anything not sent yet.</p>
+
+<h2>Who processes the data</h2>
+<p>Google, through Firebase and Google Cloud (Firebase Authentication, App Check with Play Integrity, Cloud Functions, Firestore and Cloud Storage). The app's server runs in the United States, and Google may process the data in other countries where it operates; this is an international transfer (LGPD, art. 33). The phone's location comes from Google Play services' location service, under Google's own terms. On the server, the data is not open to other apps or the public; only the server's functions and the developer read it.</p>
+
+<h2>What is public</h2>
+<p>The map shows only totals per small area (hexagons about 50 m across) and carrier: signal strength, network type, how many readings had service, emergency calls only or no service, and the month last seen; zoomed out, larger hexagons sum up the same totals. No ID, recording, exact time or exact point is published. At least 300 m is left out around any place where the phone stayed still for 30 minutes or more near the start or end of a recording, such as home; a shorter stop, like parking at a trailhead, is shown. So start and stop recording away from home. The map is updated once a day, so someone comparing it day by day can tell roughly on which day an area was measured.</p>
+
+<h2>How long</h2>
+<ul>
+  <li>Samples on the server: deleted automatically 90 days after they arrive (automatic deletion can take about a day longer).</li>
+  <li>Hourly upload counters, with the app's ID and the account's ID: deleted automatically after two hours, with the same possible delay.</li>
+  <li>Private summaries of each recording per area of about 20 m (counts and signal readings, the app's ID, and the months and times of the first and last reading there): kept with no end date, until the recording is deleted, so the map can be rebuilt without it.</li>
+  <li>A record of each deleted recording: a code derived from the app's and the recording's IDs that doesn't reveal them, kept with no end date so nothing of it is ever stored again.</li>
+  <li>The anonymous Firebase account (no name, email or phone number): kept by Firebase while it exists.</li>
+  <li>Google Cloud's technical request logs, which can include the IP address: kept under Google Cloud's log retention, 30 days by default.</li>
+  <li>The public map: no end date.</li>
+</ul>
+
+<h2>Deleting, and your rights</h2>
+<p>In the app, “My recordings” lists what this phone sent. “Delete” removes a recording from the server at once (samples and summaries) and from the map at the next daily update, and nothing of it is stored again. After reinstalling the app or clearing its data, the new app ID can't reach the old recordings.</p>
+<p>Under the LGPD (art. 18) you can ask for confirmation, access, correction, deletion and information about sharing of your data, and complain to the ANPD, Brazil's data protection authority. Write to <a href="mailto:porquecequersaber@gmail.com">porquecequersaber@gmail.com</a> and include the app's ID, shown in “See the data sent” (<code>installId</code>): since the data has no name or contact, only that ID lets us find yours.</p>
+
+<h2>Children</h2>
+<p>Tem Sinal is not directed at children. If a child used the app, a parent or guardian can delete the recordings in “My recordings” or write to us.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version is published on this page with the date at the top updated.</p>
+
+<h2>This site</h2>
+<p>This site is hosted on GitHub Pages, and the map loads its base map from OpenFreeMap, libraries from unpkg and the data from Google Cloud Storage; those services receive the IP address of whoever visits. The site uses no cookies and no usage analytics.</p>
+</section>
+</body>
+</html>
