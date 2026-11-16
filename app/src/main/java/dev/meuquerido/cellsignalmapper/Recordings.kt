@@ -2,14 +2,30 @@ package dev.meuquerido.cellsignalmapper
 
 import android.content.Context
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import java.io.File
 import java.io.IOException
 
 /** The file in `Context.getFilesDir()` that lists the recordings sent from this phone. */
 const val RECORDINGS_FILE_NAME = "recordings.json"
 
-/** A recording the server took samples of: its session id, its first sample's time and how many it took. */
-data class Recording(val sessionId: String, val startMs: Long, val samples: Int)
+/**
+ * A recording the server took samples of: its session id, its first sample's time, how many of its
+ * samples uploads from this phone counted as taken, and how many the server last listed.
+ */
+data class Recording(
+    val sessionId: String,
+    val startMs: Long,
+    @SerializedName("samples") val sent: Int,
+    val listed: Int,
+) {
+    /**
+     * How many samples the server took. The server stores a sample once by its id, so the two
+     * counts overlap and are never added: [listed] misses samples taken after the server listed
+     * them and [sent] misses samples sent before this phone kept the list.
+     */
+    val samples: Int get() = maxOf(sent, listed)
+}
 
 /**
  * The recordings sent from this phone, and the session ids of those deleted, which are never
@@ -29,7 +45,8 @@ fun withSent(list: RecordingList, sent: List<Sample>): RecordingList {
         bySession[sessionId] = Recording(
             sessionId,
             minOf(startMs, known?.startMs ?: startMs),
-            (known?.samples ?: 0) + samples.size,
+            (known?.sent ?: 0) + samples.size,
+            known?.listed ?: 0,
         )
     }
     return list.copy(recordings = bySession.values.toList())
@@ -40,16 +57,25 @@ fun withDeleted(list: RecordingList, sessionId: String): RecordingList =
     RecordingList(list.recordings.filter { it.sessionId != sessionId }, (list.deleted + sessionId).distinct())
 
 /**
- * [list] with each recording in [listed], which the server holds, added unless its session is
- * already listed or was deleted; a listed recording keeps its own figures.
+ * [list] with each recording in [listed], which the server holds, added, or merged into the
+ * recording of its session, which takes the earlier start and the server's count as its
+ * [Recording.listed]; recordings of a deleted session are left out.
  */
 fun withListed(list: RecordingList, listed: List<Recording>): RecordingList {
-    val known = list.recordings.map { it.sessionId }.toSet() + list.deleted
-    return list.copy(recordings = list.recordings + listed.filter { it.sessionId !in known }.distinctBy { it.sessionId })
+    val bySession = list.recordings.associateBy { it.sessionId }.toMutableMap()
+    for (recording in listed.filter { it.sessionId !in list.deleted }.distinctBy { it.sessionId }) {
+        val known = bySession[recording.sessionId]
+        bySession[recording.sessionId] =
+            known?.copy(startMs = minOf(known.startMs, recording.startMs), listed = recording.listed) ?: recording
+    }
+    return list.copy(recordings = bySession.values.toList())
 }
 
-/** The list function's answer: the recordings it holds raw samples of. */
-private data class ListAnswer(val sessions: List<Recording?>?)
+/** One session in the list function's answer: its id, its first sample's time and how many raw samples it holds. */
+private data class ListedSession(val sessionId: String, val startMs: Long, val samples: Int)
+
+/** The list function's answer: the sessions it holds raw samples of. */
+private data class ListAnswer(val sessions: List<ListedSession?>?)
 
 /**
  * The recordings in the list function's answer, HTTP [status] and the response [body]. Throws
@@ -65,7 +91,7 @@ fun listedRecordings(status: Int, body: String, gson: Gson): List<Recording> {
     }
     val sessions = answer?.sessions ?: throw IOException("List function's answer has no list")
     @Suppress("SENSELESS_COMPARISON")
-    return sessions.filterNotNull().filter { it.sessionId != null }
+    return sessions.filterNotNull().filter { it.sessionId != null }.map { Recording(it.sessionId, it.startMs, 0, it.samples) }
 }
 
 /** The recordings in [list], newest first. */
