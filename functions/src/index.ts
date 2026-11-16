@@ -239,11 +239,14 @@ const publicCells = db.collection("public_cells");
 const stagedCells = db.collection("staged_public_cells");
 const bucket = getStorage().bucket();
 
-// The job rewrites every public file once a day, so a cache may keep one for up to a day.
+// The job rewrites every public file once a day. A cache keeps one for at most 5 minutes, so a
+// deleted recording leaves the map at the next daily update, as the policy, the deletion page and
+// the app say. The map keeps every file it fetched for as long as the page is open, so the short
+// lifetime only costs a download when the page is opened again more than 5 minutes later.
 const writePublicFile = (path: string, content: unknown) =>
   bucket.file(path).save(JSON.stringify(content), {
     resumable: false,
-    metadata: { contentType: "application/json", cacheControl: "public, max-age=86400" },
+    metadata: { contentType: "application/json", cacheControl: "public, max-age=300" },
   });
 
 const publishStore: PublishStore = {
