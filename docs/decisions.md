@@ -56,7 +56,9 @@ The upload function `v1` also serves `POST /sessions/delete`, body `{installId, 
 needs a valid Firebase Auth ID token and logs only the App Check verdict, as uploads do. What
 makes a request the owner's is the install id: a random UUID the app sends nowhere but in its
 uploads, which no client can read back. A request deletes only the raw samples that carry both
-ids, so a wrong install id deletes nothing, and no other session or install is touched.
+ids, so a wrong install id deletes nothing, and no other session or install is touched. It
+answers 204 when anything of the session is stored, its tombstone included, so asking again is
+harmless, and 404 when nothing of it is stored with that install id.
 
 **Private cells per session.** Each session's contribution is kept apart: one private cell per
 session and resolution 12 H3 cell, in `session_cells`, keyed by `sessionKey`, the SHA-256 of the
@@ -91,6 +93,12 @@ samples it took, and Delete, which asks once. The phone keeps that list in `reco
 took whole. A deleted recording is dropped from the list and never listed again, even when samples
 of it still on the phone are sent later (the server drops those). The first-LOG warning and "What
 is shared?" don't mention it.
+
+The list stays on the phone that made it: `recordings.json` is excluded from Auto Backup and
+device transfer, as the install id is, since its recordings can be deleted only with the install
+id they were sent with, and a restored install id would count two phones as one install. When the
+server answers Delete with 404, the app says nothing was deleted and keeps the recording listed.
+Issue #163.
 
 **Recordings sent before the list existed.** `v1` also serves `POST /sessions/list`, body
 `{installId}`, authenticated as deletion is: for each session among the raw samples with that

@@ -8,8 +8,11 @@
    The app keeps none of its own state in shared preferences; everything there is Firebase's
    per-install state, including the signed-in anonymous user, so none of it is backed up or
    transferred. An app setting added to shared preferences would not be backed up either.
-   The one file of app state in filesDir, first_log_warning_shown, is backed up and
-   transferred on purpose: it holds no location data, and a restored phone need not show the
+   The list of recordings, recordings.json, is neither backed up nor transferred: its
+   recordings can be deleted only with the install id they were sent with, which is in
+   noBackupFilesDir and never restored, so a restored list would offer a Delete that can't work.
+   The one file of app state in filesDir that is backed up and transferred,
+   first_log_warning_shown, holds no location data, and a restored phone need not show the
    first-LOG warning again.
 -->
 <data-extraction-rules>
@@ -19,6 +22,8 @@
         <exclude domain="file" path="signal_log.rejected.json" />
         <exclude domain="file" path="signal_log.last.json" />
         <exclude domain="file" path="signal_log.last.json.tmp" />
+        <exclude domain="file" path="recordings.json" />
+        <exclude domain="file" path="recordings.json.tmp" />
         <exclude domain="database" path="." />
         <exclude domain="sharedpref" path="." />
     </cloud-backup>
@@ -28,6 +33,8 @@
         <exclude domain="file" path="signal_log.rejected.json" />
         <exclude domain="file" path="signal_log.last.json" />
         <exclude domain="file" path="signal_log.last.json.tmp" />
+        <exclude domain="file" path="recordings.json" />
+        <exclude domain="file" path="recordings.json.tmp" />
         <exclude domain="database" path="." />
         <exclude domain="sharedpref" path="." />
     </device-transfer>

@@ -18,7 +18,7 @@ export interface DeletionStore {
   deleteSamples(installId: string, sessionId: string): Promise<void>;
 }
 
-export type DeletionResponse = { status: 204 } | { status: 400; body: { error: string } };
+export type DeletionResponse = { status: 204 } | { status: 400 | 404; body: { error: string } };
 
 /**
  * Deletes the session that the request body `{"installId": ..., "sessionId": ...}` names: its
@@ -27,8 +27,10 @@ export type DeletionResponse = { status: 204 } | { status: 400; body: { error: s
  * effect only from a phone that holds the install id, which the app sends nowhere but in its
  * uploads; nothing of any other session or install is touched. A tombstone is stored first, so no
  * sample of the session is stored or aggregated again, even one still on the phone or being
- * aggregated now. Answers 204 whether or not anything was stored, so a request that failed part
- * way can be sent again; stores no tombstone when nothing of the session was stored.
+ * aggregated now. Answers 204 when anything of the session was stored, the tombstone included,
+ * so a request that failed part way, or whose answer was lost, can be sent again. Answers 404 and
+ * stores no tombstone when nothing of it was stored with that install id, as for a session sent
+ * with another install id: then nothing was deleted, and the phone must not say it was.
  */
 export async function deleteSession(body: unknown, store: DeletionStore): Promise<DeletionResponse> {
   const { installId, sessionId, ...rest } = (body ?? {}) as Record<string, unknown>;
@@ -40,6 +42,7 @@ export async function deleteSession(body: unknown, store: DeletionStore): Promis
     await store.bury(key);
     await store.deleteCells(key);
     await store.deleteSamples(installId, sessionId);
+    return { status: 204 };
   }
-  return { status: 204 };
+  return { status: 404, body: { error: "nothing of this session is stored with this install id" } };
 }
