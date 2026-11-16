@@ -35,6 +35,7 @@ jobs:
   release:
     name: Signed APK and AAB to GitHub Releases
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     # The signing secrets are set only on the steps that use them, so the third-party actions
     # never have them in their environment.
