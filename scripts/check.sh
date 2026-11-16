@@ -49,10 +49,14 @@ if [ -z "${ANDROID_HOME:-}" ]; then
     mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
     rm -f "$zip"
   fi
-  if [ ! -d "$ANDROID_HOME/platforms/android-35" ]; then
-    yes | JAVA_HOME="$JAVA_HOME" "$sdkmanager" --licenses > /dev/null || true
-    JAVA_HOME="$JAVA_HOME" "$sdkmanager" "platforms;android-35" "build-tools;35.0.0" > /dev/null
-  fi
+fi
+
+# The platform compileSdk names and the build tools AGP uses, installed when missing, also on a
+# runner whose preinstalled SDK lacks them.
+if [ ! -d "$ANDROID_HOME/platforms/android-36" ] || [ ! -d "$ANDROID_HOME/build-tools/35.0.0" ]; then
+  sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+  yes | JAVA_HOME="$JAVA_HOME" "$sdkmanager" --licenses > /dev/null || true
+  JAVA_HOME="$JAVA_HOME" "$sdkmanager" "platforms;android-36" "build-tools;35.0.0" > /dev/null
 fi
 
 ./gradlew lintDebug testDebugUnitTest assembleDebug
