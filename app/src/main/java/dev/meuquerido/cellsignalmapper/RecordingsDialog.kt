@@ -78,6 +78,33 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
         )
     }
 
+    RecordingsDialog(
+        recordings = recordings,
+        checked = checked,
+        notDeleted = notDeleted,
+        deleting = deleting,
+        canDelete = loggerState::canDelete,
+        onDelete = { confirming = it },
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * [recordings], or nothing while they are read, each with a Delete button that calls [onDelete]
+ * and is enabled when [canDelete] it and nothing is [deleting]. [checked] is null while the server
+ * is being asked, then whether it answered; [notDeleted] says what came of the last Delete when
+ * it deleted nothing.
+ */
+@Composable
+fun RecordingsDialog(
+    recordings: List<Recording>?,
+    checked: Boolean?,
+    notDeleted: DeleteResult?,
+    deleting: String?,
+    canDelete: (String) -> Boolean,
+    onDelete: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -91,14 +118,13 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
                     DeleteResult.NOT_STORED -> Text(stringResource(R.string.delete_not_stored))
                     DeleteResult.DELETED, null -> {}
                 }
-                val list = recordings
                 when (checked) {
                     null -> Text(stringResource(R.string.checking_recordings), style = MaterialTheme.typography.bodySmall)
                     false -> Text(stringResource(R.string.list_failed), style = MaterialTheme.typography.bodySmall)
-                    true -> if (list != null && list.isEmpty()) Text(stringResource(R.string.no_recordings))
+                    true -> if (recordings != null && recordings.isEmpty()) Text(stringResource(R.string.no_recordings))
                 }
                 val format = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
-                list?.forEach { recording ->
+                recordings?.forEach { recording ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -107,13 +133,13 @@ fun RecordingsDialog(onDismiss: () -> Unit) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(format.format(Date(recording.startMs)))
                             Text(pluralStringResource(R.plurals.recording_points, recording.samples, recording.samples))
-                            if (!loggerState.canDelete(recording.sessionId)) {
+                            if (!canDelete(recording.sessionId)) {
                                 Text(stringResource(R.string.delete_after_stop), style = MaterialTheme.typography.bodySmall)
                             }
                         }
                         TextButton(
-                            onClick = { confirming = recording.sessionId },
-                            enabled = deleting == null && loggerState.canDelete(recording.sessionId),
+                            onClick = { onDelete(recording.sessionId) },
+                            enabled = deleting == null && canDelete(recording.sessionId),
                         ) {
                             Text(stringResource(if (deleting == recording.sessionId) R.string.deleting else R.string.delete))
                         }

@@ -9,12 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,14 +16,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import android.telephony.TelephonyManager
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.*
 import com.google.firebase.FirebaseApp
 
 import android.content.Intent
@@ -190,70 +180,14 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    val controls = @Composable { sideBySide: Boolean ->
-                        permissionMessage?.let {
-                            Text(it.resolve(), modifier = Modifier.padding(horizontal = 16.dp))
-                        }
-
-                        LoggerButton(
-                            isLogging = loggerState.isLogging,
-                            onToggle = { toggleLogging { showFirstLogWarning = true } },
-                            sideBySide = sideBySide,
-                            location = loggerState.location,
-                            signalStrength = loggerState.signalStrength,
-                            service = loggerState.service,
-                            pendingPoints = loggerState.pendingCount,
-                            hint = loggerState.hint,
-                            onDismissHint = { LoggerState.dismissHint() },
-                            onShowSharing = { showSharing = true },
-                            onShowDataSent = { showDataSent = true },
-                            onShowRecordings = { showRecordings = true }
-                        )
-                    }
-                    val pingResult = loggerState.pingResult?.name ?: ""
-                    BoxWithConstraints(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding)
-                    ) {
-                        // Wider than tall, as in landscape: the visualizer, buttons and lines sit
-                        // in a row, because stacked they don't fit the height.
-                        if (maxWidth > maxHeight) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                PingVisualizer(
-                                    result = pingResult,
-                                    modifier = Modifier.padding(start = 32.dp),
-                                    animationKey = loggerState.sampleCount
-                                )
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    controls(true)
-                                }
-                            }
-                        } else {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                PingVisualizer(
-                                    result = pingResult,
-                                    animationKey = loggerState.sampleCount
-                                )
-
-                                Spacer(modifier = Modifier.height(24.dp))
-
-                                controls(false)
-                            }
-                        }
-                    }
-                }
+                MainScreen(
+                    loggerState = loggerState,
+                    permissionMessage = permissionMessage,
+                    onToggle = { toggleLogging { showFirstLogWarning = true } },
+                    onShowSharing = { showSharing = true },
+                    onShowDataSent = { showDataSent = true },
+                    onShowRecordings = { showRecordings = true }
+                )
             }
         }
 
