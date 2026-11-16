@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apagar dados · Tem Sinal</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='%232c7bb6'%3E%3Crect x='1' y='11' width='3' height='4' rx='.5'/%3E%3Crect x='5' y='8' width='3' height='7' rx='.5'/%3E%3Crect x='9' y='5' width='3' height='10' rx='.5'/%3E%3Crect x='13' y='1' width='2.5' height='14' rx='.5'/%3E%3C/g%3E%3C/svg%3E">
+  <meta name="description" content="Como apagar seus dados do Tem Sinal. How to delete your Tem Sinal data.">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --signal: #2c7bb6;
+      --text: #1a1a1a;
+      --muted: #555;
+      --bg: #ffffff;
+      --rule: #ddd;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --signal: #7db7e8;
+        --text: #e8e8e8;
+        --muted: #aaa;
+        --bg: #161616;
+        --rule: #333;
+      }
+    }
+    body {
+      margin: 0 auto; max-width: 42rem; padding: 16px 16px 48px;
+      font: 15px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg);
+    }
+    h1 { font-size: 22px; margin: 8px 0 4px; }
+    h2 { font-size: 17px; margin: 24px 0 6px; }
+    p, ul, ol { margin: 6px 0; }
+    ul, ol { padding-left: 20px; }
+    li { margin: 3px 0; }
+    a { color: var(--signal); }
+    .muted { color: var(--muted); font-size: 13px; }
+    section + section { border-top: 1px solid var(--rule); margin-top: 32px; padding-top: 8px; }
+  </style>
+</head>
+<body>
+<p class="muted"><a href="./">← Mapa · Map</a> · <a href="privacy.html">Privacidade · Privacy</a> · <a href="#en">English below</a></p>
+
+<section>
+<h1>Como apagar seus dados do Tem Sinal</h1>
+<p class="muted">Atualizada em 16 de novembro de 2026.</p>
+
+<h2>No app</h2>
+<ol>
+  <li>Abra o Tem Sinal. Se estiver gravando, toque em PARAR: a gravação em andamento só pode ser apagada depois de parar.</li>
+  <li>Toque em “Minhas gravações”, abaixo do botão GRAVAR.</li>
+  <li>Na gravação que quer remover, toque em “Apagar” e confirme.</li>
+</ol>
+<p>Uma gravação aparece na lista depois de enviada ao servidor. O app envia sozinho quando a gravação para e quando você o abre; se a lista não tiver uma gravação, abra o app com internet e veja de novo.</p>
+
+<h2>O que é apagado e o que fica</h2>
+<ul>
+  <li><strong>Apagado na hora:</strong> as amostras da gravação no servidor (posição, hora, sinal, códigos) e os resumos privados dela por área de uns 20 m.</li>
+  <li><strong>Apagado do mapa na próxima atualização diária</strong> (todo dia às 00h30 UTC, 21h30 em Brasília): o mapa é recalculado sem a gravação; uma área que só ela media sai do mapa, e as outras passam a mostrar os totais das demais gravações.</li>
+  <li><strong>Fica para sempre:</strong> um registro de que a gravação foi apagada, sem nenhum outro dado: só um código derivado do código do app e do da gravação, que não os revela. Ele serve para que nenhuma amostra dessa gravação, mesmo uma que ainda esteja no celular, volte a ser guardada.</li>
+  <li><strong>Fica:</strong> o mapa público, que só tem totais por área e operadora de outras gravações, sem códigos, horas exatas nem pontos exatos.</li>
+</ul>
+<p>Amostras ainda não enviadas ficam só no celular; desinstalar o app ou limpar os dados dele as apaga. Depois de reinstalar o app ou limpar os dados dele, o app ganha um código novo e não consegue apagar as gravações antigas, mesmo que elas voltem à lista pelo backup do Android; para essas, escreva para nós (abaixo).</p>
+
+<h2>Sem o app, ou para apagar tudo</h2>
+<p>Escreva para <a href="mailto:porquecequersaber@gmail.com">porquecequersaber@gmail.com</a>. O servidor não tem nomes nem e-mails, só um código aleatório do app (<code>installId</code>), então sem esse código não dá para achar seus dados. Ele aparece em “Ver os dados enviados”, abaixo do botão GRAVAR, no texto da amostra mais recente; copie-o e mande no e-mail. Depois de desinstalar o app ou limpar os dados dele, esse código se perde, e não temos como saber quais dados eram seus.</p>
+<p>Com o código do app, achamos e apagamos as amostras e os resumos privados das suas gravações, que guardam esse código, do mesmo jeito que o app apaga, com o mesmo registro de gravação apagada. Sem pedido nenhum:</p>
+<ul>
+  <li>as amostras são apagadas sozinhas 90 dias depois de chegarem (a exclusão automática pode levar cerca de mais um dia);</li>
+  <li>os resumos privados de cada gravação não expiram: ficam até a gravação ser apagada;</li>
+  <li>a conta anônima no Firebase não tem nome, e-mail nem telefone, e o app não mostra o código dela, então não temos como ligá-la a você.</li>
+</ul>
+</section>
+
+<section id="en" lang="en">
+<h1>How to delete your Tem Sinal data</h1>
+<p class="muted">Updated 16 November 2026.</p>
+
+<h2>In the app</h2>
+<ol>
+  <li>Open Tem Sinal. If it is recording, press STOP: the recording in progress can only be deleted once it has stopped.</li>
+  <li>Tap “My recordings”, below the LOG button.</li>
+  <li>On the recording you want removed, tap “Delete” and confirm.</li>
+</ol>
+<p>A recording shows in the list once it has been sent to the server. The app sends by itself when recording stops and when you open it; if a recording is missing from the list, open the app while online and look again.</p>
+
+<h2>What is deleted and what is kept</h2>
+<ul>
+  <li><strong>Deleted at once:</strong> the recording's samples on the server (position, time, signal, IDs) and its private summaries per area of about 20 m.</li>
+  <li><strong>Deleted from the map at the next daily update</strong> (every day at 00:30 UTC): the map is recomputed without the recording; an area only it measured leaves the map, and the others show the totals of the remaining recordings.</li>
+  <li><strong>Kept for good:</strong> a record that the recording was deleted, with no other data: only a code derived from the app's and the recording's IDs that doesn't reveal them. It makes sure no sample of that recording, even one still on the phone, is ever stored again.</li>
+  <li><strong>Kept:</strong> the public map, which holds only totals per area and carrier from other recordings, with no IDs, exact times or exact points.</li>
+</ul>
+<p>Samples not sent yet stay only on the phone; uninstalling the app or clearing its data erases them. After reinstalling the app or clearing its data, the app gets a new ID and can't delete the old recordings, even if they come back to the list from Android's backup; for those, write to us (below).</p>
+
+<h2>Without the app, or to remove everything</h2>
+<p>Write to <a href="mailto:porquecequersaber@gmail.com">porquecequersaber@gmail.com</a>. The server knows no names or emails, only the app's random ID (<code>installId</code>), so without that ID your data can't be found. It is shown in “See the data sent”, below the LOG button, in the text of the most recent sample; copy it into your email. After uninstalling the app or clearing its data, that ID is gone, and we have no way to tell which data was yours.</p>
+<p>With the app's ID, we find and delete the samples and private summaries of your recordings, which hold that ID, the same way the app deletes, with the same record of a deleted recording. Without any request:</p>
+<ul>
+  <li>samples are deleted by themselves 90 days after they arrive (automatic deletion can take about a day longer);</li>
+  <li>each recording's private summaries don't expire: they are kept until the recording is deleted;</li>
+  <li>the anonymous Firebase account has no name, email or phone number, and the app doesn't show its ID, so we have no way to link it to you.</li>
+</ul>
+</section>
+</body>
+</html>
