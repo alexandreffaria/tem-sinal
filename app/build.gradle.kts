@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "dev.meuquerido.cellsignalmapper"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.meuquerido.temsinal"
         minSdk = 30
-        targetSdk = 35
+        targetSdk = 36
         // The release workflow passes -PversionCode; local and CI builds use 1.
         versionCode = providers.gradleProperty("versionCode").orNull?.toInt() ?: 1
         versionName = "1.0.$versionCode"
