@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { type CellState, type StoredSample, publish, sessionKey, trimSession } from "./aggregate.js";
+import { type CellState, LONG_REST_MS, type StoredSample, publish, sessionKey, trimSession } from "./aggregate.js";
 import { type DeletionStore, deleteSession } from "./delete-session.js";
 import { type AggregationStore, SESSION_IDLE_MS, WRITE_MARGIN_MS, accumulateSessions, runHourly, sessionCellOf } from "./hourly.js";
 import { HOUR, T, fakeAggregation, walk } from "./test-stores.js";
@@ -87,6 +87,19 @@ test("a request with another install's id deletes nothing, stores no tombstone a
   assert.deepEqual(fake.cells, cells);
   assert.equal(fake.docs.length, mine.length);
   assert.equal(fake.deleted.size, 0);
+});
+
+test("a session spent wholly in a long rest leaves no private cell, so once its samples expire a delete of it answers 404", async () => {
+  const fake = fakeStores();
+  // Twice LONG_REST_MS of fixes within a few metres of one place.
+  const resting = walk(randomUUID(), (2 * LONG_REST_MS) / 5_000).map((s, i) => ({ ...s, fix: { ...s.fix, lat: -15.5 + 0.00002 * Math.sin(i) } }));
+  fake.receive(resting, T);
+  await aggregate(fake.store, SESSION_IDLE_MS / HOUR);
+  assert.deepEqual(fake.cells, {});
+  // Removed as Firestore's TTL would.
+  fake.docs.length = 0;
+  const response = await deleteSession({ installId: resting[0]?.installId, sessionId: resting[0]?.sessionId }, fake.deletion);
+  assert.equal(response.status, 404);
 });
 
 test("a deleted session's samples that arrive later, or while it is being aggregated, are never aggregated", async () => {
