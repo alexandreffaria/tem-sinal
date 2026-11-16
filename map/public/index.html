@@ -37,6 +37,7 @@
     .legend li { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
     .swatch { flex: none; width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.4); }
     .en { color: var(--muted); }
+    .note { font-size: 13px; margin: 6px 0 0; max-width: 280px; }
     #status:empty { display: none; }
     #status {
       position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
@@ -67,6 +68,7 @@
       <li><span class="swatch" style="background: var(--emergency)"></span><span>Só chamadas de emergência <span class="en">· Emergency calls only</span></span></li>
       <li><span class="swatch" style="background: var(--none)"></span><span>Sem sinal <span class="en">· No signal</span></span></li>
     </ul>
+    <p id="zoomed-out" class="note" hidden>Cada hexágono mostra o melhor que algum ponto medido dentro dele teve. Aproxime para ver cada ponto. <span class="en">· Each hexagon shows the best any measured spot inside it had. Zoom in to see each spot.</span></p>
   </div>
   <div id="status" role="status">Carregando… · Loading…</div>
 </body>

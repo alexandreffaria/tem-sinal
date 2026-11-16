@@ -232,11 +232,19 @@ export const aggregateHourly = onSchedule({ schedule: "every 60 minutes", timeou
 // The daily job's state, the public cells keyed by resolution 11 H3 cell, and the public cells
 // each run staged, keyed by `<runMs>_<h3>`. firestore.rules gives clients no access to any; the
 // map is served from tiles made from the public cells, one file per tile at `tiles/<h3>.json` in
-// the default bucket, which storage.rules lets anyone read.
+// the default bucket, and from the overview, one file per resolution at `overview/<resolution>.json`,
+// which storage.rules lets anyone read.
 const dailyRef = db.collection("aggregation").doc("daily");
 const publicCells = db.collection("public_cells");
 const stagedCells = db.collection("staged_public_cells");
 const bucket = getStorage().bucket();
+
+// The job rewrites every public file once a day, so a cache may keep one for up to a day.
+const writePublicFile = (path: string, content: unknown) =>
+  bucket.file(path).save(JSON.stringify(content), {
+    resumable: false,
+    metadata: { contentType: "application/json", cacheControl: "public, max-age=86400" },
+  });
 
 const publishStore: PublishStore = {
   privateCells: async () =>
@@ -276,12 +284,8 @@ const publishStore: PublishStore = {
       await batch.commit();
     }
   },
-  // The job rewrites every tile once a day, so a cache may keep a tile for up to a day.
-  writeTile: (tile, cells) =>
-    bucket.file(`tiles/${tile}.json`).save(JSON.stringify(cells), {
-      resumable: false,
-      metadata: { contentType: "application/json", cacheControl: "public, max-age=86400" },
-    }),
+  writeTile: (tile, cells) => writePublicFile(`tiles/${tile}.json`, cells),
+  writeOverview: (resolution, cells) => writePublicFile(`overview/${resolution}.json`, cells),
 };
 
 /** Publishes the private cells into the public cells and the map tiles once a day, at 00:30 UTC. */
