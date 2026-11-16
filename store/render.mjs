@@ -1,10 +1,10 @@
-// Renders the Play Store images into store/: the icon, the feature graphic and the phone
-// screenshots. Usage: node store/render.mjs <folder with the app screens>, the folder
-// StoreScreensTest wrote; scripts/store-assets.sh runs both. The map screenshots are the public map
-// page served by map/serve.js with the made-up cells of store/fixtures.mjs; the background map
-// comes from OpenFreeMap, so this needs the internet.
+// Renders the Play Store images into store/: the feature graphic and the phone screenshots, and
+// copies the icon. Usage: node store/render.mjs <folder with the app screens>, the folder
+// StoreScreensTest wrote the app screens and the launcher icon into; scripts/store-assets.sh runs
+// both. The map screenshots are the public map page served by map/serve.js with the made-up cells
+// of store/fixtures.mjs; the background map comes from OpenFreeMap, so this needs the internet.
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,16 +33,6 @@ const bars = (fill) => `
     <rect x="1" y="11" width="3" height="4" rx=".5"/><rect x="5" y="8" width="3" height="7" rx=".5"/>
     <rect x="9" y="5" width="3" height="10" rx=".5"/><rect x="13" y="1" width="2.5" height="14" rx=".5"/>
   </g>`;
-
-/** The icon: the bars over a mountain ridge, filling the square, as Play asks (it rounds the corners). */
-const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#3d93cf"/><stop offset="1" stop-color="${BLUE}"/></linearGradient></defs>
-  <rect width="512" height="512" fill="url(#sky)"/>
-  <path d="M0 400 L120 300 L170 335 L270 235 L350 310 L400 275 L512 360 L512 512 L0 512 Z" fill="#1f5f8f"/>
-  <path d="M0 440 L90 385 L190 430 L300 360 L420 420 L512 395 L512 512 L0 512 Z" fill="#174a70"/>
-  <g transform="translate(128 96) scale(16)">${bars("#fff")}</g>
-</svg>`;
 
 const FONT = `<link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&display=block" rel="stylesheet">`;
@@ -172,18 +162,7 @@ async function main() {
     await sleep(500);
     await writeFile(join(work, "map-popup.png"), await chrome.png());
 
-    // Play asks for a 32-bit PNG. A screenshot of an opaque page has no alpha channel, while a
-    // canvas encodes one, so the icon is drawn on a canvas.
-    await chrome.open("about:blank");
-    const icon = await chrome.evaluate(`(async () => {
-      const image = new Image();
-      image.src = "data:image/svg+xml;base64,${Buffer.from(ICON).toString("base64")}";
-      await image.decode();
-      const canvas = Object.assign(document.createElement("canvas"), { width: 512, height: 512 });
-      canvas.getContext("2d").drawImage(image, 0, 0);
-      return canvas.toDataURL("image/png");
-    })()`);
-    await writeFile(join(here, "icon-512.png"), Buffer.from(icon.split(",")[1], "base64"));
+    await copyFile(join(screens, "icon.png"), join(here, "icon-512.png"));
     await shoot(chrome, work, "feature-1024x500.png", 1024, 500, FEATURE);
     const app = (name) => join(screens, `${name}.png`);
     const map = (name) => join(work, `${name}.png`);

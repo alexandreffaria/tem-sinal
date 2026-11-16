@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Renders the Play Store images into store/ (see store/README.md): the app screens with
-# StoreScreensTest on the JVM, then the map, the frames, the icon and the feature graphic in
-# headless Chrome. Needs what scripts/check.sh needs, Google Chrome (or CHROME naming another
+# Renders the Play Store images into store/ (see store/README.md): the app screens and the
+# launcher icon with StoreScreensTest on the JVM, then the map, the frames and the feature graphic
+# in headless Chrome. Needs what scripts/check.sh needs, Google Chrome (or CHROME naming another
 # Chromium) and the internet, for the background map and the font.
 set -euo pipefail
 
