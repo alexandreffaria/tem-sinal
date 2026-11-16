@@ -1,8 +1,8 @@
 // The daily job: publishes the private cells into the public cells by the rule in [publish], then
-// writes every public cell into the map tiles. Its storage is behind [PublishStore]; the tiles are
-// its only public output.
+// writes every public cell into the map tiles and the overview. Its storage is behind
+// [PublishStore]; the tiles and the overview are its only public output.
 import { isDeepStrictEqual } from "node:util";
-import { type CellState, type PublicCell, publish, tiles } from "./aggregate.js";
+import { type CellState, type OverviewCell, type PublicCell, OVERVIEW_RESOLUTIONS, overview, publish, tiles } from "./aggregate.js";
 
 /**
  * What the job keeps between runs: [runMs] is the time of the run that stored it, null before the
@@ -46,6 +46,8 @@ export interface PublishStore {
   dropStaged(runMs: number): Promise<void>;
   /** Replaces the public file of the H3 region tile [tile] with [cells]. */
   writeTile(tile: string, cells: PublicCell[]): Promise<void>;
+  /** Replaces the public overview file of H3 resolution [resolution] with [cells]. */
+  writeOverview(resolution: number, cells: OverviewCell[]): Promise<void>;
 }
 
 /** How many public cells one write holds at most, which keeps it far below Firestore's 10 MiB request limit. */
@@ -82,7 +84,9 @@ async function applyStaged(store: PublishStore, runMs: number, cells: Record<str
  * next run. Throws, storing no state, when another run changed the state since this one read it.
  * After copying its cells, it writes every tile of [tiles] over all the public cells, and writes
  * empty every other tile that a run wrote or that held a public cell, so a tile whose write
- * failed is written again by the next run; throws, after trying every tile, when any write failed.
+ * failed is written again by the next run. Then it writes the overview at each of
+ * [OVERVIEW_RESOLUTIONS] over all the public cells, every file every run. Throws, after trying
+ * every tile and overview file, when any write failed.
  */
 export async function runDaily(store: PublishStore, nowMs: number): Promise<void> {
   const state = await store.state();
@@ -105,5 +109,8 @@ export async function runDaily(store: PublishStore, nowMs: number): Promise<void
     const results = await Promise.allSettled(names.slice(i, i + TILE_WRITES).map((tile) => store.writeTile(tile, byTile[tile] ?? [])));
     failed += results.filter((r) => r.status === "rejected").length;
   }
-  if (failed > 0) throw new Error(`runDaily: ${failed} of ${names.length} tile writes failed`);
+  const overviews = await Promise.allSettled(OVERVIEW_RESOLUTIONS.map((resolution) => store.writeOverview(resolution, overview(published, resolution))));
+  failed += overviews.filter((r) => r.status === "rejected").length;
+  const files = names.length + OVERVIEW_RESOLUTIONS.length;
+  if (failed > 0) throw new Error(`runDaily: ${failed} of ${files} tile and overview writes failed`);
 }

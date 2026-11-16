@@ -397,3 +397,52 @@ export function tiles(published: Record<string, PublicCell>): Record<string, Pub
   for (const cell of Object.values(published)) (byTile[cellToParent(cell.h3, TILE_RESOLUTION)] ??= []).push(cell);
   return byTile;
 }
+
+/**
+ * The coarse H3 resolutions of the overview, one file each, for the map's views too wide for the
+ * tiles: edges of about 69 km, 26 km, 10 km and 3.7 km.
+ */
+export const OVERVIEW_RESOLUTIONS = [3, 4, 5, 6] as const;
+
+/** The share of a carrier's readings in a public cell that signal, or emergency calls with signal counted in, must reach. */
+export const RELIABLE_SHARE = 0.9;
+
+/** What the map shows for one carrier in one public cell. */
+export type Label = "signal" | "emergency" | "none";
+
+/**
+ * The map's label of a carrier's figures, as `map/public/label.js` computes it: "signal" when
+ * in-service readings are at least [RELIABLE_SHARE] of the total; else "emergency" when in-service
+ * and emergency-only readings together are; else "none".
+ */
+export function label({ serviceN, emergencyN, noServiceN }: PublicCarrier): Label {
+  const total = serviceN + emergencyN + noServiceN;
+  if (serviceN >= RELIABLE_SHARE * total) return "signal";
+  if (serviceN + emergencyN >= RELIABLE_SHARE * total) return "emergency";
+  return "none";
+}
+
+/**
+ * A coarse cell of the overview: for each carrier, how many of the public cells inside it the map
+ * labels "signal", "emergency" and "none", in that order, and the latest month any of them was seen.
+ */
+export type OverviewCell = { h3: string; carriers: Record<string, [signal: number, emergency: number, none: number]>; lastSeen: string };
+
+const LABEL_INDEX = { signal: 0, emergency: 1, none: 2 } as const;
+
+/**
+ * The overview at [resolution]: a coarse cell for each parent there of a public cell. It holds
+ * only what the public cells inside it show: their labels counted and their latest month.
+ */
+export function overview(published: Record<string, PublicCell>, resolution: number): OverviewCell[] {
+  const coarse: Record<string, OverviewCell> = {};
+  for (const cell of Object.values(published)) {
+    const h3 = cellToParent(cell.h3, resolution);
+    const into = (coarse[h3] ??= { h3, carriers: {}, lastSeen: cell.lastSeen });
+    if (cell.lastSeen > into.lastSeen) into.lastSeen = cell.lastSeen;
+    for (const [plmn, figures] of Object.entries(cell.carriers)) {
+      (into.carriers[plmn] ??= [0, 0, 0])[LABEL_INDEX[label(figures)]]++;
+    }
+  }
+  return Object.values(coarse);
+}

@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isDeepStrictEqual } from "node:util";
 import { cellToParent, latLngToCell } from "h3-js";
-import { type CellState, type PublicCell, type StoredSample, CELL_RESOLUTION, TILE_RESOLUTION, accumulate, publish } from "./aggregate.js";
+import {
+  type CellState,
+  type PublicCell,
+  type StoredSample,
+  CELL_RESOLUTION,
+  OVERVIEW_RESOLUTIONS,
+  TILE_RESOLUTION,
+  accumulate,
+  overview,
+  publish,
+} from "./aggregate.js";
 import { CELLS_PER_WRITE, type DailyState, type PublishStore, dailyState, runDaily } from "./daily.js";
 import { INSTALL_ID, testSample } from "./test-sample.js";
 
@@ -22,8 +32,8 @@ function sample(installId: string, timeMs: number): StoredSample {
 
 /**
  * A [PublishStore] in memory, from the state [stored], that refuses a write of more than [CELLS_PER_WRITE] cells, and records
- * each commit's state with the public cells staged under it, and each tile file as the text that
- * would be stored.
+ * each commit's state with the public cells staged under it, and each tile and overview file as
+ * the text that would be stored.
  */
 function fakeStore(cells: Record<string, CellState>, stored: DailyState = { runMs: null, tiles: [] }) {
   let state = stored;
@@ -31,12 +41,16 @@ function fakeStore(cells: Record<string, CellState>, stored: DailyState = { runM
   const staged = new Map<number, Record<string, PublicCell | null>>();
   const commits: { next: DailyState; changed: Record<string, PublicCell | null> }[] = [];
   const files = new Map<string, string>();
+  const overviews = new Map<number, string>();
   const bounded = (written: Record<string, PublicCell | null>) => {
     if (Object.keys(written).length > CELLS_PER_WRITE) throw new Error("request too large");
   };
   const store: PublishStore = {
     writeTile: async (tile, tileCells) => {
       files.set(tile, JSON.stringify(tileCells));
+    },
+    writeOverview: async (resolution, cells) => {
+      overviews.set(resolution, JSON.stringify(cells));
     },
     privateCells: async () => structuredClone(Object.entries(cells)),
     state: async () => structuredClone(state),
@@ -65,7 +79,7 @@ function fakeStore(cells: Record<string, CellState>, stored: DailyState = { runM
       for (const run of staged.keys()) if (run <= runMs) staged.delete(run);
     },
   };
-  return { store, published, staged, commits, files, state: () => state };
+  return { store, published, staged, commits, files, overviews, state: () => state };
 }
 
 /** Private cells that publish [n] public cells, each seen by two installs, on the first run. */
@@ -128,7 +142,7 @@ test("a public cell no private cell backs any more is deleted, and its tile writ
     ...without.store,
     writeTile: (name, tileCells) => (name === farTile ? Promise.reject(new Error("unavailable")) : without.store.writeTile(name, tileCells)),
   };
-  await assert.rejects(runDaily(failing, JAN_10 + 2 * DAY), /1 of 2 tile writes failed/);
+  await assert.rejects(runDaily(failing, JAN_10 + 2 * DAY), /1 of 6 tile and overview writes failed/);
   assert.deepEqual(without.published, publish(Object.entries(cells)));
   await runDaily(without.store, JAN_10 + 3 * DAY);
   assert.equal(without.files.get(farTile), "[]");
@@ -145,10 +159,38 @@ test("a failed tile write doesn't stop the others, and the run then throws", asy
     ...fake.store,
     writeTile: (tile, tileCells) => (tile === failing ? Promise.reject(new Error("unavailable")) : fake.store.writeTile(tile, tileCells)),
   };
-  await assert.rejects(runDaily(flaky, JAN_10 + DAY), /1 of 2 tile writes failed/);
+  await assert.rejects(runDaily(flaky, JAN_10 + DAY), /1 of 6 tile and overview writes failed/);
   assert.equal(fake.commits.length, 1);
   assert.equal(fake.files.size, 1);
   assert.ok(!fake.files.has(failing));
+});
+
+test("each run writes the overview at every resolution over all the public cells, and empty once none is left", async () => {
+  const cells = sharedCells();
+  const fake = fakeStore(cells);
+  await runDaily(fake.store, JAN_10 + DAY);
+  assert.deepEqual([...fake.overviews.keys()], [...OVERVIEW_RESOLUTIONS]);
+  for (const resolution of OVERVIEW_RESOLUTIONS) {
+    assert.equal(fake.overviews.get(resolution), JSON.stringify(overview(fake.published, resolution)));
+    assert.deepEqual(JSON.parse(fake.overviews.get(resolution) ?? "").map((cell: PublicCell) => cell.h3), [cellToParent(h3, resolution)]);
+  }
+
+  const emptied = fakeStore({}, fake.state());
+  Object.assign(emptied.published, fake.published);
+  await runDaily(emptied.store, JAN_10 + 2 * DAY);
+  for (const resolution of OVERVIEW_RESOLUTIONS) assert.equal(emptied.overviews.get(resolution), "[]");
+});
+
+test("a failed overview write doesn't stop the others, and the run then throws", async () => {
+  const fake = fakeStore(sharedCells());
+  const [failing, ...others] = OVERVIEW_RESOLUTIONS;
+  const flaky: PublishStore = {
+    ...fake.store,
+    writeOverview: (resolution, cells) => (resolution === failing ? Promise.reject(new Error("unavailable")) : fake.store.writeOverview(resolution, cells)),
+  };
+  await assert.rejects(runDaily(flaky, JAN_10 + DAY), /1 of 5 tile and overview writes failed/);
+  assert.deepEqual([...fake.overviews.keys()], others);
+  assert.deepEqual([...fake.files.keys()], [tile]);
 });
 
 test("a cell seen by one install is public after the next run, and gains a later visit the run after", async () => {

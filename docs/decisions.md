@@ -5,6 +5,34 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-16: Zoomed out, a hexagon shows the best any measured spot inside it had
+
+The map shows where data is at every zoom. From zoom 10 it shows the resolution 11 cells of the
+tiles, as before. Below it, it shows an overview: coarser H3 cells at resolution 3, 4, 5 or 6,
+whichever is about 20 to 100 px across at the zoom (`OVERVIEW_ZOOMS` in `map/public/tiles.js`).
+The daily run writes the overview from the public cells, one file per resolution at
+`overview/<resolution>.json`, every file every run, after the tiles; a failed write is retried by
+the next run. A coarse cell holds, per carrier, how many of the public cells inside it the map
+labels signal, emergency calls only and no signal, and the latest month any of them was seen.
+That is only what the resolution 11 cells already show, so it reveals nothing more.
+
+**The colour.** For each carrier, a coarse hexagon takes the best label of any public cell inside
+it: signal if any spot inside it has signal, else emergency calls only if any has that, else no
+signal. Zoomed out, the question is "is there signal somewhere around here for my carrier", and
+the answer is where to zoom in: a spot with signal on a ridge is worth finding even when most of
+the valley around it has none. The panel says so while zoomed out, and tapping a coarse hexagon
+shows the three counts of spots. *Why not the others:* summing the readings and applying the 90%
+rule paints a whole region by its busiest spots, so an area with signal in a few places reads as
+no signal; the worst label paints it red as soon as one spot inside has no signal, which hides
+every place worth going.
+
+**Size.** About 50 bytes per carrier per coarse cell. With made-up data of 1,000 sessions of 5 km
+around 300 places (about 97,000 public cells), the files are about 50, 100, 170 and 270 KB at
+resolutions 3 to 6, and the page loads only the one for its zoom. Each run adds four Storage
+writes and no Firestore reads or writes. Issue #155.
+
+Asked for by the owner in chat ("make it visible from zoom-out"); the design is the agents'; no card.
+
 ## 2026-11-15: People delete their recordings session by session
 
 The upload function `v1` also serves `POST /sessions/delete`, body `{installId, sessionId}`. It
