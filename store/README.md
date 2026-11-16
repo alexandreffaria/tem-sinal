@@ -35,10 +35,12 @@ the page in `map/public/` served by `map/serve.js` with the cells `store/fixture
 four invented trails in the Serra do Mar forest between Angra dos Reis and Mangaratiba, away from
 any road or building, with invented counts for TIM, Claro and Vivo. The background map is
 OpenFreeMap (OpenStreetMap data), with its attribution in view. `store/render.mjs` draws the
-frames, captions, icon and feature graphic in headless Chrome (`store/chrome.mjs`).
+frames, captions and feature graphic in headless Chrome (`store/chrome.mjs`).
 
-The icon is new: the app's launcher icon is still Android's default, so this one is drawn from the
-map's mark, the favicon's signal bars in `#2c7bb6`, over a mountain ridge.
+The icon is the app's launcher icon, the map's mark: the favicon's signal bars, white over
+`#2c7bb6` and a mountain ridge. Its one source is the adaptive icon's layers,
+`app/src/main/res/drawable/ic_launcher_background.xml` and `ic_launcher_foreground.xml`;
+`StoreScreensTest` renders the middle 72 dp of them, the part a launcher shows, at 512 px.
 
 ## Rendering them again
 

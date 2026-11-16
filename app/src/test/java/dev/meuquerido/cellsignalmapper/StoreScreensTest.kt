@@ -2,6 +2,8 @@ package dev.meuquerido.cellsignalmapper
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.telephony.CellInfo
 import android.view.View
 import androidx.activity.ComponentActivity
@@ -24,7 +26,8 @@ import org.robolectric.shadows.ShadowDialog
  * Renders the app screens the Play Store screenshots show, in Portuguese, from made-up state: a
  * place in the forest with no one living there, and invented recordings. With the system property
  * `storeScreens` set to a folder (`-PstoreScreens=<folder>`, as `scripts/store-assets.sh` passes),
- * writes each screen there as `<name>.png`, and the dialog over it as `<name>-dialog.png`.
+ * writes each screen there as `<name>.png`, and the dialog over it as `<name>-dialog.png`; and the
+ * launcher icon as `icon.png`, for the store's icon.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -82,10 +85,14 @@ class StoreScreensTest {
         windows.forEachIndexed { i, window ->
             val image = compose.runOnUiThread { draw(window) }
             if (i == 0) assertEquals(1200, image.width)
-            val file = out?.resolve(if (i == 0) "$name.png" else "$name-dialog.png") ?: return@forEachIndexed
-            file.parentFile?.mkdirs()
-            file.outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            save(image, if (i == 0) name else "$name-dialog")
         }
+    }
+
+    private fun save(image: Bitmap, name: String) {
+        val file = out?.resolve("$name.png") ?: return
+        file.parentFile?.mkdirs()
+        file.outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     private fun draw(view: View): Bitmap =
@@ -126,5 +133,25 @@ class StoreScreensTest {
         shoot("recordings", { Main(idle) }) {
             RecordingsDialog(recordings, true, null, null, { true }, {}, noAction)
         }
+    }
+
+    /**
+     * The launcher icon at 512 px, square, as Play asks (it rounds the corners itself): the middle
+     * 72 dp of the 108 dp layers, the part every launcher mask covers.
+     */
+    @Test
+    fun icon() {
+        val icon = compose.activity.getDrawable(R.mipmap.ic_launcher) as AdaptiveIconDrawable
+        val image = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888)
+        val layers = 512 * 108 / 72
+        val inset = (layers - 512) / 2
+        for (layer in listOf(icon.background, icon.foreground)) {
+            layer.setBounds(-inset, -inset, layers - inset, layers - inset)
+            layer.draw(Canvas(image))
+        }
+        // The tallest bar is white where the store icon had it, over an opaque sky.
+        assertEquals(Color.WHITE, image.getPixel(352, 224))
+        assertEquals(255, Color.alpha(image.getPixel(0, 0)))
+        save(image, "icon")
     }
 }
