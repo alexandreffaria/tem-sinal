@@ -5,7 +5,7 @@
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { label } from "../map/public/label.js";
+import { LEVEL_THRESHOLDS, label, level } from "../map/public/label.js";
 import { TILE_RESOLUTION } from "../map/public/tiles.js";
 
 const h3 = createRequire(import.meta.url)("../map/node_modules/h3-js");
@@ -62,9 +62,13 @@ function counts(quality, next) {
   const service = q > 0.7 ? n : q > 0.35 ? Math.round(n * (q - 0.2)) : 0;
   const emergency = q > 0.7 ? 0 : q > 0.35 ? n - service : Math.round(n * q * 1.5);
   const noService = n - service - emergency;
-  const best = service > 0 ? -80 - Math.round((1 - q) * 35) : null;
+  // The median spans the network type's levels: from its poor threshold less 6 dB at quality 0.7
+  // to its great threshold plus 4 dB at quality 1.
+  const tech = service === 0 ? null : q > 0.97 ? "NR" : "LTE";
+  const [poor, , , great] = LEVEL_THRESHOLDS[tech] ?? [0, 0, 0, 0];
+  const median = tech === null ? null : Math.round(poor - 6 + ((q - 0.7) / 0.3) * (great + 4 - poor + 6));
   return {
-    best, median: best === null ? null : best - 8, tech: best === null ? null : q > 0.9 ? "NR" : "LTE",
+    best: median === null ? null : median + 3 + Math.floor(next() * 8), median, tech,
     serviceN: service, emergencyN: emergency, noServiceN: noService,
   };
 }
@@ -102,8 +106,10 @@ export async function writeFixtures(dir) {
       const carriers = {};
       for (const cell of inside) {
         for (const [plmn, cellCounts] of Object.entries(cell.carriers)) {
-          const byLabel = (carriers[plmn] ??= [0, 0, 0]);
-          byLabel[["signal", "emergency", "none"].indexOf(label(cellCounts))]++;
+          const byLabel = (carriers[plmn] ??= [0, 0, 0, 0, 0, 0, 0, 0]);
+          const which = label(cellCounts);
+          byLabel[["signal", "emergency", "none"].indexOf(which)]++;
+          if (which === "signal" && level(cellCounts) !== null) byLabel[3 + level(cellCounts)]++;
         }
       }
       return { h3: h3Cell, carriers, lastSeen: inside.map((cell) => cell.lastSeen).sort().at(-1) };

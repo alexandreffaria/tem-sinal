@@ -423,16 +423,50 @@ export function label({ serviceN, emergencyN, noServiceN }: PublicCarrier): Labe
 }
 
 /**
- * A coarse cell of the overview: for each carrier, how many of the public cells inside it the map
- * labels "signal", "emergency" and "none", in that order, and the latest month any of them was seen.
+ * Android's default signal level thresholds for each network type, in dBm of the headline strength
+ * (RSRP for LTE, SS-RSRP for NR, RSCP for WCDMA, RSSI for GSM): the lowest strength of levels 1
+ * (poor) to 4 (great). They are the defaults of CarrierConfigManager, which a phone uses unless its
+ * carrier overrides them: KEY_LTE_RSRP_THRESHOLDS_INT_ARRAY, KEY_5G_NR_SSRSRP_THRESHOLDS_INT_ARRAY,
+ * KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY and KEY_GSM_RSSI_THRESHOLDS_INT_ARRAY. `map/public/label.js`
+ * holds the same.
  */
-export type OverviewCell = { h3: string; carriers: Record<string, [signal: number, emergency: number, none: number]>; lastSeen: string };
+export const LEVEL_THRESHOLDS: Record<string, readonly [number, number, number, number]> = {
+  LTE: [-128, -118, -108, -98],
+  NR: [-110, -90, -80, -65],
+  WCDMA: [-115, -105, -95, -85],
+  GSM: [-107, -103, -97, -89],
+};
+
+/** A signal level as Android counts it: 0 (none or unknown to Android) to 4 (great). */
+export type Level = 0 | 1 | 2 | 3 | 4;
+
+/**
+ * The level of a carrier's median strength for its network type, as `map/public/label.js`
+ * computes it: the number of [LEVEL_THRESHOLDS] it reaches. Null when the median or the type is
+ * unknown, or the type has no thresholds.
+ */
+export function level({ median, tech }: PublicCarrier): Level | null {
+  if (median === null || tech === null || !Object.hasOwn(LEVEL_THRESHOLDS, tech)) return null;
+  return (LEVEL_THRESHOLDS[tech] ?? []).filter((threshold) => median >= threshold).length as Level;
+}
+
+/**
+ * A coarse cell of the overview: for each carrier, how many of the public cells inside it the map
+ * labels "signal", "emergency" and "none", in that order, then how many of those labelled "signal"
+ * have each [level] from 0 to 4 (the rest have none), and the latest month any of them was seen.
+ */
+export type OverviewCell = {
+  h3: string;
+  carriers: Record<string, [signal: number, emergency: number, none: number, level0: number, level1: number, level2: number, level3: number, level4: number]>;
+  lastSeen: string;
+};
 
 const LABEL_INDEX = { signal: 0, emergency: 1, none: 2 } as const;
+const LEVEL_INDEX = [3, 4, 5, 6, 7] as const;
 
 /**
  * The overview at [resolution]: a coarse cell for each parent there of a public cell. It holds
- * only what the public cells inside it show: their labels counted and their latest month.
+ * only what the public cells inside it show: their labels and levels counted and their latest month.
  */
 export function overview(published: Record<string, PublicCell>, resolution: number): OverviewCell[] {
   const coarse: Record<string, OverviewCell> = {};
@@ -441,7 +475,11 @@ export function overview(published: Record<string, PublicCell>, resolution: numb
     const into = (coarse[h3] ??= { h3, carriers: {}, lastSeen: cell.lastSeen });
     if (cell.lastSeen > into.lastSeen) into.lastSeen = cell.lastSeen;
     for (const [plmn, figures] of Object.entries(cell.carriers)) {
-      (into.carriers[plmn] ??= [0, 0, 0])[LABEL_INDEX[label(figures)]]++;
+      const counts = (into.carriers[plmn] ??= [0, 0, 0, 0, 0, 0, 0, 0]);
+      const which = label(figures);
+      counts[LABEL_INDEX[which]]++;
+      const signalLevel = which === "signal" ? level(figures) : null;
+      if (signalLevel !== null) counts[LEVEL_INDEX[signalLevel]]++;
     }
   }
   return Object.values(coarse);

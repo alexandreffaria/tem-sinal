@@ -15,7 +15,14 @@
   <script type="module" src="map.js"></script>
   <style>
     :root {
-      --signal: #2c7bb6;
+      /* Signal levels 0 (very weak) to 4 (great): one blue, lighter for weaker, so the steps read
+         in every kind of colour blindness; emergency and none differ from them in hue. */
+      --signal-0: #bfe1f0;
+      --signal-1: #74b9e0;
+      --signal-2: #3a8fd0;
+      --signal-3: #1f5fb0;
+      --signal-4: #14307a;
+      --signal-unknown: #969696;
       --emergency: #fdae61;
       --none: #b2182b;
       --panel: rgba(255, 255, 255, 0.95);
@@ -35,6 +42,9 @@
     .panel select { font: inherit; margin: 2px 0 8px; max-width: 100%; }
     .legend { list-style: none; margin: 0; padding: 0; font-size: 13px; }
     .legend li { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+    .ramp { display: flex; flex: none; }
+    .ramp .swatch { width: 9px; border-radius: 0; }
+    .ramp .swatch + .swatch { border-left: none; }
     .swatch { flex: none; width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.4); }
     .en { color: var(--muted); }
     .note { font-size: 13px; margin: 6px 0 0; max-width: 280px; }
@@ -65,7 +75,13 @@
     <label for="carrier">Operadora <span class="en">· Carrier</span></label>
     <select id="carrier" disabled><option>—</option></select>
     <ul class="legend">
-      <li><span class="swatch" style="background: var(--signal)"></span><span>Sinal <span class="en">· Signal</span></span></li>
+      <li>
+        <span class="ramp">
+          <span class="swatch" style="background: var(--signal-0)"></span><span class="swatch" style="background: var(--signal-1)"></span><span class="swatch" style="background: var(--signal-2)"></span><span class="swatch" style="background: var(--signal-3)"></span><span class="swatch" style="background: var(--signal-4)"></span>
+        </span>
+        <span>Sinal, muito fraco a ótimo <span class="en">· Signal, very weak to great</span></span>
+      </li>
+      <li><span class="swatch" style="background: var(--signal-unknown)"></span><span>Sinal, força desconhecida <span class="en">· Signal, strength unknown</span></span></li>
       <li><span class="swatch" style="background: var(--emergency)"></span><span>Só chamadas de emergência <span class="en">· Emergency calls only</span></span></li>
       <li><span class="swatch" style="background: var(--none)"></span><span>Sem sinal <span class="en">· No signal</span></span></li>
     </ul>

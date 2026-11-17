@@ -425,6 +425,20 @@ least 90% of `total` (a phone in service can also make emergency calls); else no
 85 / 0 / 15 no signal. The map page works the label out, so the 90% can be tuned without changing
 these files (see `docs/decisions.md`).
 
+A carrier labelled signal is shaded by the level of its `median` for its `tech`: how many of
+Android's default thresholds for that network type it reaches, 0 (very weak) to 4 (great), with
+the thresholds in `map/public/label.js`; with no `median`, or a `tech` with no thresholds, its
+strength is unknown.
+
+## Overview cells
+
+The overview at resolution `r`, `overview/<r>.json`, is a list of coarse cells
+`{"h3": "86…", "carriers": {"72406": [3, 1, 1, 0, 0, 1, 1, 0]}, "lastSeen": "2026-01"}`, one per
+H3 cell at resolution `r` with a public cell inside it. Per carrier, the eight numbers count the
+public cells inside it: those the map labels signal, emergency calls only and no signal, then those
+labelled signal at each level from 0 to 4 (those whose strength is unknown aren't counted there).
+`lastSeen` is the latest `lastSeen` of the public cells inside it.
+
 ## Example
 
 A made-up sample (an invented place, not a real reading) from a dual-SIM phone: SIM 1 on Vivo in
