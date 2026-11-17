@@ -4,8 +4,8 @@ import { test } from "node:test";
 import { cellToChildren, cellToLatLng, cellToParent, getResolution, greatCircleDistance, latLngToCell } from "h3-js";
 import {
   type CellState, type PublicCell, type StoredSample,
-  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, LONG_REST_MS, OVERVIEW_RESOLUTIONS, PRIVATE_RESOLUTION, REST_CUT_M, STAYS, TILE_RESOLUTION,
-  accumulate, distancesComputed, label, overview, publish, tiles, trimSession,
+  ANCHOR_FIXES, CELL_RESOLUTION, DEPARTURE_FIXES, LEVEL_THRESHOLDS, LONG_REST_MS, OVERVIEW_RESOLUTIONS, PRIVATE_RESOLUTION, REST_CUT_M, STAYS, TILE_RESOLUTION,
+  accumulate, distancesComputed, label, level, overview, publish, tiles, trimSession,
 } from "./aggregate.js";
 
 // Made-up installs, sessions and places; 0.001 degrees of latitude is about 111 m.
@@ -354,38 +354,57 @@ test("public cells are grouped by their region tile", () => {
   assert.deepEqual(byTile[cellToParent(h3At(far), TILE_RESOLUTION)]?.map((c) => c.h3), [h3At(far)]);
 });
 
-/** A public cell at [h3] seen in [lastSeen] with the counts (signal, emergency only, no service) of each carrier. */
-function publicCell(h3: string, lastSeen: string, carriers: Record<string, [number, number, number]>): PublicCell {
+/**
+ * A public cell at [h3] seen in [lastSeen] with, for each carrier, the counts (signal, emergency
+ * only, no service) and, when given, the median dBm and the network type.
+ */
+function publicCell(h3: string, lastSeen: string, carriers: Record<string, [number, number, number, number?, string?]>): PublicCell {
   return {
     h3,
     lastSeen,
     carriers: Object.fromEntries(
-      Object.entries(carriers).map(([plmn, [serviceN, emergencyN, noServiceN]]) => [plmn, { best: null, median: null, tech: null, serviceN, emergencyN, noServiceN }]),
+      Object.entries(carriers).map(([plmn, [serviceN, emergencyN, noServiceN, median = null, tech = null]]) =>
+        [plmn, { best: median, median, tech, serviceN, emergencyN, noServiceN }]),
     ),
   };
 }
 
-test("an overview cell counts, per carrier, the labels of the public cells inside it, and keeps their latest month", () => {
+test("an overview cell counts, per carrier, the labels and levels of the public cells inside it, and keeps their latest month", () => {
   const coarse = latLngToCell(PLACE.lat, PLACE.lon, 6);
-  const [a = "", b = "", c = ""] = cellToChildren(coarse, CELL_RESOLUTION);
+  const [a = "", b = "", c = "", d = "", e = ""] = cellToChildren(coarse, CELL_RESOLUTION);
   const far = h3At(PLACE.lat + 1);
   const published = Object.fromEntries(
     [
-      publicCell(a, "2026-02", { "72406": [199, 0, 1], "72402": [0, 0, 5] }),
-      publicCell(b, "2026-05", { "72406": [1, 200, 0] }),
+      publicCell(a, "2026-02", { "72406": [199, 0, 1, -95, "LTE"], "72402": [0, 0, 5] }),
+      publicCell(b, "2026-05", { "72406": [1, 200, 0, -70, "LTE"] }),
       publicCell(c, "2026-03", { "72406": [34, 33, 33] }),
-      publicCell(far, "2026-01", { "72405": [10, 0, 0] }),
+      publicCell(d, "2026-03", { "72406": [10, 0, 0, -70, "NR"] }),
+      publicCell(e, "2026-03", { "72406": [10, 0, 0] }),
+      publicCell(far, "2026-01", { "72405": [10, 0, 0, -130, "LTE"] }),
     ].map((cell) => [cell.h3, cell]),
   );
   assert.deepEqual(overview(published, 6), [
-    { h3: coarse, carriers: { "72406": [1, 1, 1], "72402": [0, 0, 1] }, lastSeen: "2026-05" },
-    { h3: cellToParent(far, 6), carriers: { "72405": [1, 0, 0] }, lastSeen: "2026-01" },
+    // The emergency cell's strong median counts for no level; the last signal cell has none.
+    { h3: coarse, carriers: { "72406": [3, 1, 1, 0, 0, 0, 1, 1], "72402": [0, 0, 1, 0, 0, 0, 0, 0] }, lastSeen: "2026-05" },
+    { h3: cellToParent(far, 6), carriers: { "72405": [1, 0, 0, 1, 0, 0, 0, 0] }, lastSeen: "2026-01" },
   ]);
   for (const resolution of OVERVIEW_RESOLUTIONS) {
     const cells = overview(published, resolution);
     assert.deepEqual(cells.map((cell) => cell.h3).sort(), [...new Set(Object.keys(published).map((h3) => cellToParent(h3, resolution)))].sort());
     assert.ok(cells.every((cell) => getResolution(cell.h3) === resolution));
   }
+});
+
+test("a median's level is the number of its network type's thresholds it reaches", () => {
+  const at = (median: number | null, tech: string | null) => level({ best: median, median, tech, serviceN: 1, emergencyN: 0, noServiceN: 0 });
+  assert.deepEqual([-129, -128, -119, -118, -108, -99, -98, -44].map((dbm) => at(dbm, "LTE")), [0, 1, 1, 2, 3, 3, 4, 4]);
+  assert.deepEqual([-111, -110, -90, -81, -80, -65].map((dbm) => at(dbm, "NR")), [0, 1, 2, 2, 3, 4]);
+  assert.deepEqual([-116, -115, -105, -95, -85].map((dbm) => at(dbm, "WCDMA")), [0, 1, 2, 3, 4]);
+  assert.deepEqual([-108, -107, -103, -97, -89].map((dbm) => at(dbm, "GSM")), [0, 1, 2, 3, 4]);
+  assert.equal(at(null, "LTE"), null);
+  assert.equal(at(-90, null), null);
+  assert.equal(at(-90, "CDMA"), null);
+  assert.equal(at(-90, "toString"), null);
 });
 
 test("the overview labels a carrier in a public cell as the map page does", async () => {
@@ -395,6 +414,18 @@ test("the overview labels a carrier in a public cell as the map page does", asyn
       for (const noServiceN of [0, 1, 2, 3, 10, 200]) {
         const figures = { best: null, median: null, tech: null, serviceN, emergencyN, noServiceN };
         assert.equal(label(figures), page.label(figures), JSON.stringify(figures));
+      }
+    }
+  }
+});
+
+test("the overview's levels are the map page's, with the same thresholds", async () => {
+  const page = (await import(new URL("../../map/public/label.js", import.meta.url).href)) as { level: typeof level; LEVEL_THRESHOLDS: typeof LEVEL_THRESHOLDS };
+  assert.deepEqual(page.LEVEL_THRESHOLDS, LEVEL_THRESHOLDS);
+  for (const tech of [...Object.keys(LEVEL_THRESHOLDS), "CDMA", null]) {
+    for (let median = -160; median <= -30; median++) {
+      for (const figures of [{ best: median, median, tech, serviceN: 1, emergencyN: 0, noServiceN: 0 }, { best: null, median: null, tech, serviceN: 1, emergencyN: 0, noServiceN: 0 }]) {
+        assert.equal(level(figures), page.level(figures), JSON.stringify(figures));
       }
     }
   }

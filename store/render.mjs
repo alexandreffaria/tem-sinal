@@ -149,7 +149,7 @@ async function main() {
     // legend: the view is centred [POPUP_DROP] px above a cell in the middle of the first trail.
     const trail = cells().filter((cell) => h3.greatCircleDistance(h3.cellToLatLng(cell.h3), ZOOMED_IN.start, "km") < 4);
     const [lat, lon] = h3.cellToLatLng(trail[Math.floor(trail.length * 0.55)].h3);
-    const POPUP_DROP = 200;
+    const POPUP_DROP = 250;
     const popupZoom = 15.4;
     const degreesPerPx = (360 / (512 * 2 ** popupZoom)) * Math.cos((lat * Math.PI) / 180);
     const vivo = `document.getElementById("carrier").value = "72406";

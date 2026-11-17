@@ -1,7 +1,8 @@
 // The public map: from TILE_ZOOM on, fetches the published tiles in view and colours each cell by
-// the chosen carrier's label; below it, shows the overview at the resolution that fits the zoom.
+// the chosen carrier's label, cells with signal by how strong it is; below it, shows the overview
+// at the resolution that fits the zoom.
 // maplibregl and h3 are the globals of the scripts index.html loads.
-import { label } from "./label.js";
+import { coarseShade, label, level, shade } from "./label.js";
 import { TILE_ZOOM, overviewResolution, tilesInView } from "./tiles.js";
 import { tileLoader } from "./loader.js";
 
@@ -21,11 +22,34 @@ const CARRIERS = {
 };
 const carrierName = (plmn) => (CARRIERS[plmn] ? `${CARRIERS[plmn]} (${plmn})` : plmn);
 
-const LABELS = {
-  signal: "Sinal · Signal",
+/** The words for a level, 0 to 4, in Portuguese and English. */
+const LEVEL_WORDS = [["muito fraco", "very weak"], ["fraco", "weak"], ["médio", "moderate"], ["bom", "good"], ["ótimo", "great"]];
+
+/** What each shade means, in Portuguese and English. */
+const SHADES = {
+  ...Object.fromEntries(LEVEL_WORDS.map(([pt, en], i) => [`signal-${i}`, `Sinal ${pt} · ${en[0].toUpperCase()}${en.slice(1)} signal`])),
+  "signal-unknown": "Sinal, força desconhecida · Signal, strength unknown",
   emergency: "Só chamadas de emergência · Emergency calls only",
   none: "Sem sinal · No signal",
 };
+
+/** The generation a network type is known by. */
+const GENERATIONS = { NR: "5G", LTE: "4G", WCDMA: "3G", GSM: "2G" };
+
+/** A strength in dBm with a minus sign. */
+const dbm = (n) => `${String(n).replace("-", "\u2212")} dBm`;
+
+/**
+ * What a public cell with signal says of its strength, in two lines, as "4G, sinal bom · good
+ * signal" and "−92 dBm (melhor · best −85 dBm)"; null when it has no level.
+ */
+function strength(figures) {
+  const signalLevel = level(figures);
+  if (signalLevel === null) return null;
+  const [pt, en] = LEVEL_WORDS[signalLevel];
+  const tech = GENERATIONS[figures.tech] ?? figures.tech;
+  return [`${tech}, sinal ${pt} · ${en} signal`, `${dbm(figures.median)} (melhor · best ${dbm(figures.best)})`];
+}
 
 const css = getComputedStyle(document.documentElement);
 const colour = (name) => css.getPropertyValue(`--${name}`).trim();
@@ -45,9 +69,6 @@ async function fetchPublic(path) {
 const { tiles, cells, fetching, load: loadTiles } = tileLoader((tile) => fetchPublic(`tiles/${tile}.json`));
 /** The overview, by resolution as its "tiles". */
 const overview = tileLoader((resolution) => fetchPublic(`overview/${resolution}.json`));
-
-/** The best label any public cell inside an overview cell has, from its counts of each label. */
-const bestLabel = ([signal, emergency]) => (signal > 0 ? "signal" : emergency > 0 ? "emergency" : "none");
 
 /** The tiles that cover the map's current view. */
 function viewTiles(map) {
@@ -82,14 +103,14 @@ function updateCarriers() {
 }
 
 function features(map, plmn) {
-  const labelOf = coarse(map) === null ? label : bestLabel;
+  const shadeOf = coarse(map) === null ? shade : coarseShade;
   const out = [];
   for (const cell of shown(map)) {
     const counts = cell.carriers[plmn];
     if (!counts) continue;
     out.push({
       type: "Feature",
-      properties: { h3: cell.h3, label: labelOf(counts) },
+      properties: { h3: cell.h3, shade: shadeOf(counts) },
       geometry: { type: "Polygon", coordinates: [h3.cellToBoundary(cell.h3, true)] },
     });
   }
@@ -149,8 +170,9 @@ async function load(map) {
 }
 
 /**
- * A table of the cell's figures, one row per carrier with its label's colour: a public cell's
- * three counts of readings, or an overview cell's counts of the public cells inside it by label.
+ * A table of the cell's figures, one row per carrier with its shade's colour and meaning: a public
+ * cell's three counts of readings and, with signal, its strength; or an overview cell's counts of
+ * the public cells inside it by label.
  */
 function popup(cell) {
   const isCoarse = overview.cells.has(cell.h3);
@@ -173,14 +195,15 @@ function popup(cell) {
   const body = table.createTBody();
   for (const plmn of Object.keys(cell.carriers).sort((a, b) => carrierName(a).localeCompare(carrierName(b)))) {
     const counts = cell.carriers[plmn];
-    const which = isCoarse ? bestLabel(counts) : label(counts);
+    const which = isCoarse ? coarseShade(counts) : shade(counts);
     const row = body.insertRow();
     const name = el("th");
     const swatch = el("span", undefined, "swatch");
     swatch.style.background = colour(which);
-    name.append(swatch, ` ${carrierName(plmn)}`, el("br"), el("span", LABELS[which], "en"));
+    const words = (!isCoarse && label(counts) === "signal" && strength(counts)) || [SHADES[which]];
+    name.append(swatch, ` ${carrierName(plmn)}`, ...words.flatMap((line) => [el("br"), el("span", line, "en")]));
     row.append(name);
-    const numbers = isCoarse ? counts : [counts.serviceN, counts.emergencyN, counts.noServiceN];
+    const numbers = isCoarse ? counts.slice(0, 3) : [counts.serviceN, counts.emergencyN, counts.noServiceN];
     for (const n of numbers) row.append(el("td", String(n)));
   }
   const root = el("div");
@@ -202,13 +225,13 @@ map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAc
 
 map.on("load", () => {
   map.addSource("cells", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-  const byLabel = ["match", ["get", "label"],
-    "signal", colour("signal"), "emergency", colour("emergency"), colour("none")];
-  map.addLayer({ id: "cells-fill", type: "fill", source: "cells", paint: { "fill-color": byLabel, "fill-opacity": 0.55 } });
+  const byShade = ["match", ["get", "shade"],
+    ...Object.keys(SHADES).filter((name) => name !== "none").flatMap((name) => [name, colour(name)]), colour("none")];
+  map.addLayer({ id: "cells-fill", type: "fill", source: "cells", paint: { "fill-color": byShade, "fill-opacity": 0.7 } });
   // A line keeps cells visible as dots at zooms where a 50 m hexagon is under a pixel.
   map.addLayer({
     id: "cells-line", type: "line", source: "cells",
-    paint: { "line-color": byLabel, "line-width": ["interpolate", ["linear"], ["zoom"], 9, 3, 15, 1] },
+    paint: { "line-color": byShade, "line-width": ["interpolate", ["linear"], ["zoom"], 9, 3, 15, 1] },
   });
   map.on("click", (e) => {
     const [hit] = map.queryRenderedFeatures(e.point, { layers: ["cells-fill", "cells-line"] });

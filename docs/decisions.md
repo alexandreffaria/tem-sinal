@@ -5,6 +5,65 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-17: Cells with signal are shaded by how strong it is
+
+For the chosen carrier, the map shades a cell it labels signal by the **level** of the cell's
+`median` for its `tech`: the number of Android's default thresholds for that network type the
+median reaches, 0 (very weak) to 4 (great), as Android counts its signal bars. Emergency calls only
+and no signal keep their own colours; the label rule is unchanged. The median, not the best, since
+it is what a visitor will typically get. The popup says it in words, with the median and the best,
+as "4G, sinal bom · good signal" over "−92 dBm (melhor · best −85 dBm)".
+
+**The thresholds** are the defaults of `CarrierConfigManager`
+(`frameworks/base/telephony/java/android/telephony/CarrierConfigManager.java`, AOSP `main` on
+2026-11-17), which a phone applies unless its carrier overrides them, in dBm of the headline
+strength the server publishes; each is the lowest strength of levels 1 (poor) to 4 (great):
+
+| Type | Headline | Key | Thresholds |
+|---|---|---|---|
+| LTE | RSRP | `KEY_LTE_RSRP_THRESHOLDS_INT_ARRAY` | −128, −118, −108, −98 |
+| NR | SS-RSRP | `KEY_5G_NR_SSRSRP_THRESHOLDS_INT_ARRAY` | −110, −90, −80, −65 |
+| WCDMA | RSCP | `KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY` | −115, −105, −95, −85 |
+| GSM | RSSI | `KEY_GSM_RSSI_THRESHOLDS_INT_ARRAY` | −107, −103, −97, −89 |
+
+A strength at or above a threshold reaches it, as in `CellSignalStrengthLte.updateLevelWithMeasure`.
+*Why not the others:* `CellSignalStrengthLte`'s own `sRsrpThresholds` (−115, −105, −95, −85) apply
+only when there is no carrier config, so a phone shows bars by the carrier config's; NR, WCDMA RSCP
+and GSM have the same values in both places. Android's WCDMA bars default to RSSI
+(`KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING`), but the published headline for WCDMA is
+RSCP, so its RSCP thresholds are used. A median over readings of more than one type is levelled by
+the most common type's thresholds. A cell labelled signal with no median, or whose type has no
+thresholds, is "signal, strength unknown", in grey. The thresholds are in both
+`functions/src/aggregate.ts` (for the overview) and `map/public/label.js`, and a test checks they
+agree.
+
+**The colours.** Five steps of one blue, lighter for weaker: `#bfe1f0`, `#74b9e0`, `#3a8fd0`,
+`#1f5fb0`, `#14307a`, at fill opacity 0.7 (from 0.55) with a full-colour outline. Lightness alone
+orders them, so they read in every kind of colour blindness; simulated protanopia, deuteranopia and
+tritanopia (Machado 2009) keep adjacent steps at least 12 ΔE (CIE76) apart over the base map's
+land and forest and 11 over its water, and emergency calls only (orange `#fdae61`), no signal (dark
+red `#b2182b`) and unknown (grey `#969696`) farther from every step than that. The base map has
+only a light style. A pale cell reads as weak signal, which is what it is.
+
+**Few readings.** A cell with one or two readings is shaded like any other. The popup shows its
+counts, and the label already asks 9 readings in 10 to agree; fading such cells would clash with
+the ramp, where pale means weak.
+
+**Zoomed out**, the overview keeps the rule of "Zoomed out, a hexagon shows the best any measured
+spot inside it had": each carrier of a coarse cell also counts the public cells inside it labelled
+signal at each level, so it holds eight numbers: signal, emergency calls only, no signal, then
+levels 0 to 4. A coarse hexagon with any spot with signal is shaded by the best level of any of
+them (grey when none has a level); else emergency calls only, else no signal. That is still only
+what the resolution 11 cells show, whose medians and types are public, so it reveals nothing more.
+With made-up data of 1,000 sessions of 5 km around 300 places (about 100,000 public cells), the
+files grow from about 43, 83, 146 and 224 KB to 60, 113, 195 and 296 KB at resolutions 3 to 6,
+about 12 bytes more per carrier per coarse cell (8, 14, 24, 35 KB to 15, 25, 41, 59 KB gzipped).
+Until the first daily run after this ships, the overview files have three numbers per carrier, and
+their hexagons with signal show as strength unknown. Issue #190.
+
+Asked for by the owner in chat ("I would like to have the avg signal strength too ... so we can
+actually make a 'heatmap'"); the design is the agents'; no card.
+
 ## 2026-11-16: The application id is `dev.meuquerido.temsinal`
 
 The app's application id is `dev.meuquerido.temsinal`, chosen by the owner before the app was
