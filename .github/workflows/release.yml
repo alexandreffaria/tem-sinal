@@ -11,6 +11,7 @@ on:
       - '.claude/**'
       - 'functions/**'
       - 'map/**'
+      - 'store/**'
       - 'firestore.rules'
       - 'firestore.indexes.json'
       - 'storage.rules'
