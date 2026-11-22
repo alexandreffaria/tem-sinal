@@ -135,9 +135,10 @@ const sessionListStore: SessionListStore = {
  * The function is named `v1` and serves `POST /samples`, an upload, `POST /sessions/list`, which
  * lists an install's sessions, and `POST /sessions/delete`, which deletes one session. All need a
  * valid Firebase Auth ID token, and log only whether the App Check token was valid. At most 10 instances run and a request is cut off after 30 seconds,
- * so a flood of requests with valid tokens is bounded in cost.
+ * so a flood of requests with valid tokens is bounded in cost. An upload of a full batch of large
+ * samples, about 3 MB, needs more than the default 256 MiB.
  */
-export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30 }, async (req, res) => {
+export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30, memory: "512MiB" }, async (req, res) => {
   const route = ({ "/samples": "upload", "/sessions/list": "list", "/sessions/delete": "delete" } as const)[req.path];
   if (!route) {
     res.status(404).json({ error: "not found" });
