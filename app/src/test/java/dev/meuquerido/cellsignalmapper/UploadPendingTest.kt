@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -69,10 +70,25 @@ class UploadPendingTest {
         val uploaded = uploadPending(pending, rejected, gson) { if (++batches == 1) setOf(0) else setOf(1) }
 
         assertEquals(
-            UploadedLog(unparseable = 0, refused = 2, sent = lines.drop(1).dropLast(1).map { gson.fromJson(it, Sample::class.java) }),
+            UploadedLog(unparseable = 0, oversized = 0, refused = 2, sent = lines.drop(1).dropLast(1).map { gson.fromJson(it, Sample::class.java) }),
             uploaded,
         )
         assertEquals(listOf(lines[0], lines[UPLOAD_BATCH_LIMIT + 1]), rejected.readLines())
+        assertFalse(pending.exists())
+    }
+
+    @Test
+    fun aSampleTooLargeForABodyOfItsOwnGoesToTheRejectedFileAndIsNeverSent() {
+        val tooLarge = gson.toJson(testSample("big", cells = 20_000))
+        assertTrue(tooLarge.toByteArray().size + UPLOAD_BODY_FRAME_BYTES > UPLOAD_BODY_LIMIT_BYTES)
+        writePending(listOf(gson.toJson(sample("a")), tooLarge, gson.toJson(sample("b"))))
+        val committed = mutableListOf<String>()
+
+        val uploaded = uploadPending(pending, rejected, gson) { batch -> committed += batch.map { it.id }; emptySet() }
+
+        assertEquals(listOf("a", "b"), committed)
+        assertEquals(1, uploaded.oversized)
+        assertEquals(listOf(tooLarge), rejected.readLines())
         assertFalse(pending.exists())
     }
 

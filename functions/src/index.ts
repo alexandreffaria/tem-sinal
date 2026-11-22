@@ -153,7 +153,7 @@ export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30, memory: "512
     if (uid === undefined) {
       res.status(401).json({ error: "missing or invalid ID token" });
     } else if (route === "upload") {
-      const { status, body } = await ingest(req.body, uid, firestoreStore, Date.now());
+      const { status, body } = await ingest(req.body, req.rawBody.length, uid, firestoreStore, Date.now());
       res.status(status).json(body);
     } else if (route === "list") {
       const { status, body } = await listSessions(req.body, sessionListStore);

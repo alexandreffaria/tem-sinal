@@ -39,3 +39,10 @@ fun testSample(id: String) = Sample(
         ),
     ),
 )
+
+/** [testSample] with [cells] copies of its one LTE cell, to make a sample of any size. */
+fun testSample(id: String, cells: Int): Sample {
+    val sample = testSample(id)
+    val sim = sample.sims.single()
+    return sample.copy(sims = listOf(sim.copy(cells = List(cells) { sim.cells!!.single() })))
+}
