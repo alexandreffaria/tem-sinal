@@ -136,8 +136,9 @@ const sessionListStore: SessionListStore = {
  * The function is named `v1` and serves `POST /samples`, an upload, `POST /sessions/list`, which
  * lists an install's sessions, and `POST /sessions/delete`, which deletes one session. All need a
  * valid Firebase Auth ID token, and log only whether the App Check token was valid. At most 10 instances run and a request is cut off after 30 seconds,
- * so a flood of requests with valid tokens is bounded in cost. An upload of a full batch of large
- * samples, about 3 MB, needs more than the default 256 MiB.
+ * so a flood of requests with valid tokens is bounded in cost. It has 512 MiB, not the default
+ * 256 MiB, so that handling the largest upload it accepts, `MAX_BODY_BYTES` in `ingest.ts`, takes
+ * about half of its memory; the comment there gives the measurement.
  */
 export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30, memory: "512MiB" }, async (req, res) => {
   const route = ({ "/samples": "upload", "/sessions/list": "list", "/sessions/delete": "delete" } as const)[req.path];
@@ -154,7 +155,8 @@ export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30, memory: "512
     if (uid === undefined) {
       res.status(401).json({ error: "missing or invalid ID token" });
     } else if (route === "upload") {
-      const { status, body } = await ingest(req.body, req.rawBody.length, uid, firestoreStore, Date.now());
+      // The body parsers set rawBody, and they don't run for an empty body, whatever its type says.
+      const { status, body } = await ingest(req.body, req.rawBody as Buffer | undefined, uid, firestoreStore, Date.now());
       res.status(status).json(body);
     } else if (route === "list") {
       const { status, body } = await listSessions(req.body, sessionListStore);
