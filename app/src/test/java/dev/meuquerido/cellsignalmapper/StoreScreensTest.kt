@@ -31,7 +31,7 @@ import org.robolectric.shadows.ShadowDialog
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "pt-rBR-w400dp-h866dp-xxhdpi")
+@Config(sdk = [36], qualifiers = "pt-rBR-w400dp-h866dp-xxhdpi")
 class StoreScreensTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()

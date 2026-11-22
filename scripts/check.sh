@@ -5,7 +5,7 @@
 # Needs Node and npm on the PATH for functions/ and map/. Its checks run on any recent Node, so a Node
 # other than the one functions/package.json deploys on is not an error.
 # Uses JAVA_HOME and ANDROID_HOME when set. Otherwise it uses, and installs on first run without
-# root, JDK 17 in ~/.local/share/jdks and the Android SDK in ~/Android/Sdk.
+# root, JDK 21 in ~/.local/share/jdks and the Android SDK in ~/Android/Sdk.
 set -euo pipefail
 
 base=${1:-origin/main}
@@ -26,13 +26,13 @@ fi
 
 if [ -z "${JAVA_HOME:-}" ]; then
   jdks="$HOME/.local/share/jdks"
-  JAVA_HOME=$(find "$jdks" -maxdepth 1 -name 'jdk-17*' 2>/dev/null | sort | tail -1)
+  JAVA_HOME=$(find "$jdks" -maxdepth 1 -name 'jdk-21*' 2>/dev/null | sort | tail -1)
   if [ -z "$JAVA_HOME" ]; then
-    echo "Installing JDK 17 in $jdks"
+    echo "Installing JDK 21 in $jdks"
     mkdir -p "$jdks"
-    curl -fsSL "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse" \
+    curl -fsSL "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse" \
       | tar -xz -C "$jdks"
-    JAVA_HOME=$(find "$jdks" -maxdepth 1 -name 'jdk-17*' | sort | tail -1)
+    JAVA_HOME=$(find "$jdks" -maxdepth 1 -name 'jdk-21*' | sort | tail -1)
   fi
   export JAVA_HOME
 fi
