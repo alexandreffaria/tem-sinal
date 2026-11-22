@@ -106,10 +106,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/dist"
           apk="$RUNNER_TEMP/dist/tem-sinal-1.0.$VERSION_CODE.apk"
           aab="$RUNNER_TEMP/dist/tem-sinal-1.0.$VERSION_CODE.aab"
+          mapping="$RUNNER_TEMP/dist/tem-sinal-1.0.$VERSION_CODE-mapping.txt"
           cp app/build/outputs/apk/release/app-release.apk "$apk"
           cp app/build/outputs/bundle/release/app-release.aab "$aab"
+          cp app/build/outputs/mapping/release/mapping.txt "$mapping"
           git log -1 --format=%B "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"
-          gh release create "v$VERSION_CODE" "$apk" "$aab" \
+          gh release create "v$VERSION_CODE" "$apk" "$aab" "$mapping" \
             --target "$GITHUB_SHA" \
             --title "1.0.$VERSION_CODE" \
             --notes-file "$RUNNER_TEMP/notes.md"
