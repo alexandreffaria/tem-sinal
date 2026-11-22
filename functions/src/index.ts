@@ -137,8 +137,8 @@ const sessionListStore: SessionListStore = {
  * lists an install's sessions, and `POST /sessions/delete`, which deletes one session. All need a
  * valid Firebase Auth ID token, and log only whether the App Check token was valid. At most 10 instances run and a request is cut off after 30 seconds,
  * so a flood of requests with valid tokens is bounded in cost. It has 512 MiB, not the default
- * 256 MiB, so that the largest upload it accepts, `MAX_BODY_BYTES` in `ingest.ts`, stays near
- * half of its memory, which leaves room for the extra Cloud Run uses beyond the emulator.
+ * 256 MiB, so that handling the largest upload it accepts, `MAX_BODY_BYTES` in `ingest.ts`, takes
+ * about half of its memory; the comment there gives the measurement.
  */
 export const v1 = onRequest({ maxInstances: 10, timeoutSeconds: 30, memory: "512MiB" }, async (req, res) => {
   const route = ({ "/samples": "upload", "/sessions/list": "list", "/sessions/delete": "delete" } as const)[req.path];
