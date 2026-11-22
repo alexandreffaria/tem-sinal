@@ -51,8 +51,9 @@ export interface Response {
 }
 
 /**
- * Validates an upload body of [bodyBytes] bytes from the Firebase Auth user [uid], received at
- * [nowMs], and refuses it whole, with 413, when it holds more than [MAX_BODY_BYTES]. Stores its
+ * Validates an upload, parsed as [body] from the bytes [rawBody], from the Firebase Auth user [uid],
+ * received at [nowMs], and refuses it whole, with 413, when it holds more than [MAX_BODY_BYTES]. A
+ * request with no body has no [rawBody] and is refused with 400 like any malformed batch. Stores its
  * valid samples, each with `expireAt` [SAMPLE_LIFETIME_MS] after [nowMs]. The uid is used only to
  * count uploads; it is never stored on a sample. A sample already stored counts as accepted and
  * keeps its first `expireAt`, so sending the same batch again is harmless; one of a deleted session
@@ -60,7 +61,8 @@ export interface Response {
  * request fails and the phone keeps the batch, when the store would start writing more than
  * [WRITE_DEADLINE_MS] after [nowMs].
  */
-export async function ingest(body: unknown, bodyBytes: number, uid: string, store: SampleStore, nowMs: number): Promise<Response> {
+export async function ingest(body: unknown, rawBody: Buffer | undefined, uid: string, store: SampleStore, nowMs: number): Promise<Response> {
+  const bodyBytes = rawBody?.length ?? 0;
   if (bodyBytes > MAX_BODY_BYTES) return { status: 413, body: { error: `expected at most ${MAX_BODY_BYTES} bytes, got ${bodyBytes}` } };
   const batch = validateBatch(body);
   if (!batch.ok) return { status: 400, body: { error: batch.error } };
