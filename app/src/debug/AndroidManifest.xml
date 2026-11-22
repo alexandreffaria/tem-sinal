@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Lets MockLocationReceiver put the fused location client in mock mode, once
+         `appops set <package> android:mock_location allow` (or Developer options) allows it. -->
+    <uses-permission
+        android:name="android.permission.ACCESS_MOCK_LOCATION"
+        tools:ignore="MockLocation,ProtectedPermissions" />
+
+    <application>
+        <!-- DUMP is held by adb's shell and by no ordinary app, so only adb can send these. -->
+        <receiver
+            android:name=".MockLocationReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="dev.meuquerido.cellsignalmapper.MOCK_LOCATION" />
+                <action android:name="dev.meuquerido.cellsignalmapper.STOP_MOCK_LOCATION" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>
