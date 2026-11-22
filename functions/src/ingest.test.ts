@@ -32,8 +32,8 @@ function fakeStore(nowMs = 0) {
 
 const NOW = Date.UTC(2026, 0, 1, 10, 30);
 const UID = "test-user";
-/** The size of a body well under [MAX_BODY_BYTES]. */
-const BYTES = 1_000;
+/** A raw body well under [MAX_BODY_BYTES]. */
+const BYTES = Buffer.alloc(1_000);
 const HOUR = `${INSTALL_ID}_${Date.UTC(2026, 0, 1, 10)}`;
 const USER_HOUR = `uid_${UID}_${Date.UTC(2026, 0, 1, 10)}`;
 
@@ -116,7 +116,7 @@ test("a user rotating install ids is refused once over the hourly limit and noth
 
 test("a body over MAX_BODY_BYTES is refused whole with 413 and nothing is counted or stored", async () => {
   const fake = fakeStore();
-  const response = await ingest({ samples: [testSample()] }, MAX_BODY_BYTES + 1, UID, fake.store, NOW);
+  const response = await ingest({ samples: [testSample()] }, Buffer.alloc(MAX_BODY_BYTES + 1), UID, fake.store, NOW);
   assert.equal(response.status, 413);
   assert.equal(fake.stored.size, 0);
   assert.equal(fake.counts.size, 0);
@@ -124,7 +124,15 @@ test("a body over MAX_BODY_BYTES is refused whole with 413 and nothing is counte
 
 test("a body of exactly MAX_BODY_BYTES is taken", async () => {
   const fake = fakeStore();
-  const response = await ingest({ samples: [testSample()] }, MAX_BODY_BYTES, UID, fake.store, NOW);
+  const response = await ingest({ samples: [testSample()] }, Buffer.alloc(MAX_BODY_BYTES), UID, fake.store, NOW);
   assert.equal(response.status, 200);
   assert.equal(fake.stored.size, 1);
+});
+
+test("a request with no body is refused with 400 and nothing is counted or stored", async () => {
+  const fake = fakeStore();
+  const response = await ingest(undefined, undefined, UID, fake.store, NOW);
+  assert.deepEqual(response, { status: 400, body: { error: 'expected {"samples": [...]}' } });
+  assert.equal(fake.stored.size, 0);
+  assert.equal(fake.counts.size, 0);
 });
