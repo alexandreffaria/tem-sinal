@@ -23,8 +23,43 @@ import kotlinx.coroutines.withContext
 /** The most samples the upload function takes in one request. */
 const val UPLOAD_BATCH_LIMIT = 500
 
-/** Splits [items] into consecutive batches of at most [UPLOAD_BATCH_LIMIT], in order. */
-fun <T> uploadBatches(items: List<T>): List<List<T>> = items.chunked(UPLOAD_BATCH_LIMIT)
+/**
+ * The most bytes the upload function takes in one request's body: `MAX_BODY_BYTES` in
+ * `functions/src/ingest.ts`, which answers a larger body with HTTP 413.
+ */
+const val UPLOAD_BODY_LIMIT_BYTES = 2_000_000
+
+/** The bytes of an [uploadBody] around its samples: `{"samples":[` and `]}`. */
+const val UPLOAD_BODY_FRAME_BYTES = 14
+
+/**
+ * Splits [items] into consecutive batches, in order, each of at most [UPLOAD_BATCH_LIMIT] items
+ * whose upload body takes at most [UPLOAD_BODY_LIMIT_BYTES]: [UPLOAD_BODY_FRAME_BYTES], the
+ * [bytes] of each item and a comma between items. An item too large for a body of its own gets a
+ * batch of its own.
+ */
+fun <T> uploadBatches(items: List<T>, bytes: (T) -> Int): List<List<T>> {
+    val batches = mutableListOf<List<T>>()
+    var batch = mutableListOf<T>()
+    var bodyBytes = UPLOAD_BODY_FRAME_BYTES
+    for (item in items) {
+        val itemBytes = bytes(item)
+        if (batch.isNotEmpty() &&
+            (batch.size == UPLOAD_BATCH_LIMIT || bodyBytes + 1 + itemBytes > UPLOAD_BODY_LIMIT_BYTES)
+        ) {
+            batches += batch
+            batch = mutableListOf()
+            bodyBytes = UPLOAD_BODY_FRAME_BYTES
+        }
+        bodyBytes += itemBytes + if (batch.isEmpty()) 0 else 1
+        batch += item
+    }
+    if (batch.isNotEmpty()) batches += batch
+    return batches
+}
+
+/** The bytes [sample] takes in an [uploadBody] made with [gson]. */
+fun sampleBytes(sample: Sample, gson: Gson): Int = gson.toJson(sample).toByteArray(Charsets.UTF_8).size
 
 /**
  * The samples in a log, in order, and the non-blank lines that are not a sample of
@@ -122,27 +157,31 @@ fun rejectedIndexes(status: Int, body: String, batchSize: Int, gson: Gson): Set<
 }
 
 /**
- * How many lines of an uploaded log were not a sample, how many samples the server rejected, and
- * the samples it took.
+ * How many lines of an uploaded log were not a sample, how many samples were too large to send in a
+ * body of their own, how many samples the server rejected, and the samples it took.
  */
-data class UploadedLog(val unparseable: Int, val refused: Int, val sent: List<Sample>)
+data class UploadedLog(val unparseable: Int, val oversized: Int, val refused: Int, val sent: List<Sample>)
 
 /**
- * Sends the samples in [pending] batch by batch with [send], which returns the positions in its
- * batch that the server rejected. Then moves the lines that are not a sample, and the samples the
- * server rejected, to [rejected] and deletes [pending]. If [send] throws, for example on a
- * timeout or a refused batch, the exception propagates and both files are left as they were.
+ * Sends the samples in [pending] with [send], in [uploadBatches] that fit the upload function's
+ * limits; [send] returns the positions in its batch that the server rejected. Then moves the lines
+ * that are not a sample, the samples too large for a body of their own, and the samples the server
+ * rejected, to [rejected] and deletes [pending]. If [send] throws, for example on a timeout or a
+ * refused batch, the exception propagates and both files are left as they were.
  */
 fun uploadPending(pending: File, rejected: File, gson: Gson, send: (List<Sample>) -> Set<Int>): UploadedLog {
     val log = parseLog(pending.readLines(), gson)
+    val sized = log.samples.map { it to sampleBytes(it, gson) }
+    val (fitting, oversized) = sized.partition { (_, bytes) -> UPLOAD_BODY_FRAME_BYTES + bytes <= UPLOAD_BODY_LIMIT_BYTES }
     val refused = mutableListOf<Sample>()
     val sent = mutableListOf<Sample>()
-    for (batch in uploadBatches(log.samples)) {
+    for (batch in uploadBatches(fitting) { (_, bytes) -> bytes }.map { batch -> batch.map { (sample, _) -> sample } }) {
         val indexes = send(batch)
         batch.forEachIndexed { i, sample -> if (i in indexes) refused += sample else sent += sample }
     }
-    SignalLogger.keepRejected(pending, rejected, log.rejected + refused.map { gson.toJson(it) })
-    return UploadedLog(log.rejected.size, refused.size, sent)
+    val kept = log.rejected + (oversized.map { (sample, _) -> sample } + refused).map { gson.toJson(it) }
+    SignalLogger.keepRejected(pending, rejected, kept)
+    return UploadedLog(log.rejected.size, oversized.size, refused.size, sent)
 }
 
 object FirebaseUploader {
@@ -199,6 +238,9 @@ object FirebaseUploader {
             }
             if (log.unparseable > 0) {
                 Log.w("FirebaseUploader", "Kept ${log.unparseable} unparseable lines in the rejected file.")
+            }
+            if (log.oversized > 0) {
+                Log.w("FirebaseUploader", "Kept ${log.oversized} samples too large to upload in the rejected file.")
             }
             if (log.refused > 0) {
                 Log.w("FirebaseUploader", "Kept ${log.refused} samples the server rejected in the rejected file.")

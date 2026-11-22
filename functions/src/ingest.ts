@@ -9,6 +9,14 @@ export const HOURLY_LIMIT = 20_000;
 const HOUR_MS = 3_600_000;
 
 /**
+ * The most bytes one upload's body may hold. A batch of 500 samples, 3.6 MB, took the
+ * function to about 300 MiB against the Firestore emulator, and more in Cloud Run, so a body of
+ * this size stays near half of the function's 512 MiB. The app splits its batches to fit:
+ * `UPLOAD_BODY_LIMIT_BYTES` in `FirebaseUploader.kt` holds the same.
+ */
+export const MAX_BODY_BYTES = 2_000_000;
+
+/**
  * How long a stored sample is kept after the server receives it (card 20261113bmjv). A TTL policy
  * on `signal_logs.expireAt` deletes it, typically within a day after that.
  */
@@ -43,7 +51,8 @@ export interface Response {
 }
 
 /**
- * Validates an upload body from the Firebase Auth user [uid], received at [nowMs], and stores its
+ * Validates an upload body of [bodyBytes] bytes from the Firebase Auth user [uid], received at
+ * [nowMs], and refuses it whole, with 413, when it holds more than [MAX_BODY_BYTES]. Stores its
  * valid samples, each with `expireAt` [SAMPLE_LIFETIME_MS] after [nowMs]. The uid is used only to
  * count uploads; it is never stored on a sample. A sample already stored counts as accepted and
  * keeps its first `expireAt`, so sending the same batch again is harmless; one of a deleted session
@@ -51,7 +60,8 @@ export interface Response {
  * request fails and the phone keeps the batch, when the store would start writing more than
  * [WRITE_DEADLINE_MS] after [nowMs].
  */
-export async function ingest(body: unknown, uid: string, store: SampleStore, nowMs: number): Promise<Response> {
+export async function ingest(body: unknown, bodyBytes: number, uid: string, store: SampleStore, nowMs: number): Promise<Response> {
+  if (bodyBytes > MAX_BODY_BYTES) return { status: 413, body: { error: `expected at most ${MAX_BODY_BYTES} bytes, got ${bodyBytes}` } };
   const batch = validateBatch(body);
   if (!batch.ok) return { status: 400, body: { error: batch.error } };
   const { valid, rejected } = batch;
