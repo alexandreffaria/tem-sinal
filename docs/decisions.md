@@ -5,6 +5,17 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-22: The old application id's Firebase app is deleted
+
+The Firebase Android app of `dev.meuquerido.cellsignalmapper` (`1:1048309727525:android:1c3f222b4d67d9ff299acc`)
+is deleted from project `cellsignalmapper-a9da1`, and `app/google-services.json` has one client,
+`dev.meuquerido.temsinal`. The owner chose this on card `20261122eses` without waiting until no
+install of the old id is left, which can't be known: the old-id APKs were downloaded 63 times from
+GitHub. An old install should still upload. The project's one API key has no Android app
+restriction, its Firebase Auth ID token is per project, and the server doesn't require App Check,
+which a sideloaded install never had. That is inferred, not tested. It was removed with the default
+`androidApps.remove`, so it can be restored with `undelete` until 2026-12-22.
+
 ## 2026-11-17: Cells with signal are shaded by how strong it is
 
 For the chosen carrier, the map shades a cell it labels signal by the **level** of the cell's
@@ -71,8 +82,8 @@ created on Play, the last moment it could change: Play never changes an app's id
 It replaces `dev.meuquerido.cellsignalmapper`. The Kotlin package and the Gradle `namespace` stay
 `dev.meuquerido.cellsignalmapper`; they are internal and nobody sees them. The new id is its own
 Firebase Android app in project `cellsignalmapper-a9da1`, with the release signing certificate,
-and `app/google-services.json` carries its config. The old Firebase Android app stays until no
-install of the old id is left.
+and `app/google-services.json` carries its config. The old Firebase Android app was deleted on
+2026-11-22 (see that day's entry).
 
 To Android an installed app with the old id is a different app: the new release installs beside
 it and doesn't upgrade it, and the old app's samples don't move. Its owner keeps it until nothing
