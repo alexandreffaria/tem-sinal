@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { initializeApp } from "firebase-admin/app";
 import { getAppCheck } from "firebase-admin/app-check";
 import { getAuth } from "firebase-admin/auth";
-import { FieldPath, type QueryDocumentSnapshot, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { FieldPath, type Query, type QueryDocumentSnapshot, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { logger } from "firebase-functions";
 import { setGlobalOptions } from "firebase-functions/v2";
@@ -15,6 +15,7 @@ import { type DeletionStore, deleteSession } from "./delete-session.js";
 import { type AggregationStore, type HourlyState, type Stored, runHourly, sessionCellOf } from "./hourly.js";
 import { type SampleStore, ingest } from "./ingest.js";
 import { type SessionListStore, listSessions } from "./list-sessions.js";
+import { readInChunks } from "./read-chunks.js";
 
 // Every function runs as this account, which holds only what they use: Firestore through the
 // Admin SDK, object writes in the default bucket, and log writes. Verifying App Check and Auth
@@ -176,6 +177,14 @@ function stored(doc: QueryDocumentSnapshot): Stored {
   return { id: doc.id, expireAtMs: (expireAt as Timestamp).toMillis(), data };
 }
 
+/** The first [limit] documents of [query], in its order, as [stored], read with [readInChunks]. */
+const readStored = (query: Query, limit: number) =>
+  readInChunks<QueryDocumentSnapshot, Stored>(
+    async (after, n) => (await (after ? query.startAfter(after) : query).limit(n).get()).docs,
+    stored,
+    limit,
+  );
+
 const hourlyState = (data: unknown) => (data as HourlyState | undefined) ?? { cursor: null, open: {} };
 
 const aggregationStore: AggregationStore = {
@@ -187,18 +196,17 @@ const aggregationStore: AggregationStore = {
       .orderBy("expireAt")
       .orderBy(FieldPath.documentId());
     if (after && after.expireAtMs > notBeforeMs) query = query.startAfter(Timestamp.fromMillis(after.expireAtMs), after.id);
-    return (await query.limit(limit).get()).docs.map(stored);
+    return readStored(query, limit);
   },
-  sessionSamples: async (sessionId, fromMs, notAfterMs, limit) =>
-    (
-      await signalLogs
+  sessionSamples: (sessionId, fromMs, notAfterMs, limit) =>
+    readStored(
+      signalLogs
         .where("sessionId", "==", sessionId)
         .where("expireAt", ">=", Timestamp.fromMillis(fromMs))
         .where("expireAt", "<=", Timestamp.fromMillis(notAfterMs))
-        .orderBy("expireAt")
-        .limit(limit)
-        .get()
-    ).docs.map(stored),
+        .orderBy("expireAt"),
+      limit,
+    ),
   commit: (expected, next, ids, update) =>
     db.runTransaction(async (tx) => {
       if (!isDeepStrictEqual(hourlyState((await tx.get(hourlyRef)).data()), expected)) return false;
