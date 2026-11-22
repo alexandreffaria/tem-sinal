@@ -43,4 +43,4 @@ commit is the checks passing. Branch protection on `main` requires it, but doesn
 owner's account, which sessions act as, so it holds only because no session ever merges with
 `--admin`. Run `scripts/check.sh` on
 this machine before opening the pull request and before each push (it needs Node and npm, and
-installs JDK 17 and the Android SDK on first use).
+installs JDK 21 and the Android SDK on first use).

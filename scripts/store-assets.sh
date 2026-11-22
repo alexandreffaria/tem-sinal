@@ -9,7 +9,7 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 
 if [ -z "${JAVA_HOME:-}" ]; then
-  JAVA_HOME=$(find "$HOME/.local/share/jdks" -maxdepth 1 -name 'jdk-17*' 2>/dev/null | sort | tail -1)
+  JAVA_HOME=$(find "$HOME/.local/share/jdks" -maxdepth 1 -name 'jdk-21*' 2>/dev/null | sort | tail -1)
   export JAVA_HOME
 fi
 export ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk}
