@@ -50,6 +50,9 @@ android {
 val robolectricAndroidAll: Configuration by configurations.creating { isTransitive = false }
 tasks.withType<Test>().configureEach {
     inputs.files(robolectricAndroidAll)
+    // GsonKeepRulesTest reads the R8 rules and the sources' text, so a change to either reruns it.
+    inputs.file("proguard-rules.pro")
+    inputs.dir("src/main/java")
     systemProperty("robolectric.offline", "true")
     doFirst { systemProperty("robolectric.dependency.dir", robolectricAndroidAll.singleFile.parent) }
     // StoreScreensTest writes the store screenshots' app screens here when it's set.
