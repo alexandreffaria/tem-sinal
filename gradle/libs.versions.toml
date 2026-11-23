@@ -11,7 +11,8 @@ activityCompose = "1.8.0"
 composeBom = "2024.09.00"
 playServicesLocation = "21.3.0"
 googleServices = "4.4.2"
-firebaseBom = "32.7.0"
+# Later BOMs bring firebase-auth built with Kotlin metadata newer than Kotlin 2.0 can read.
+firebaseBom = "34.12.0"
 workRuntimeKtx = "2.10.1"
 robolectric = "4.16.1"
 
@@ -34,7 +35,7 @@ androidx-material3 = { group = "androidx.compose.material3", name = "material3" 
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-appcheck-playintegrity = { group = "com.google.firebase", name = "firebase-appcheck-playintegrity" }
-firebase-auth = { group = "com.google.firebase", name = "firebase-auth-ktx"}
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 # The Android 16 jar Robolectric 4.16.1 runs SDK 36 tests on; it needs the tests to run on Java 21.
