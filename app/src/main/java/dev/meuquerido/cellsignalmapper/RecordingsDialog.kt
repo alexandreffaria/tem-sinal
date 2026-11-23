@@ -134,7 +134,7 @@ fun RecordingsDialog(
                             Text(format.format(Date(recording.startMs)))
                             Text(pluralStringResource(R.plurals.recording_points, recording.samples, recording.samples))
                             if (!canDelete(recording.sessionId)) {
-                                Text(stringResource(R.string.delete_after_stop), style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.delete_after_stop, stringResource(R.string.stop)), style = MaterialTheme.typography.bodySmall)
                             }
                         }
                         TextButton(

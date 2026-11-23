@@ -57,7 +57,7 @@
     <string name="deleting">Apagando…</string>
     <string name="delete_recording_title">Apagar esta gravação?</string>
     <string name="delete_recording_text">Ela é apagada do nosso servidor agora e do mapa na próxima atualização diária. Não dá para desfazer.</string>
-    <string name="delete_after_stop">Gravando agora. Aperte PARAR para apagar.</string>
+    <string name="delete_after_stop">Gravando agora. Aperte %1$s para apagar.</string>
     <string name="delete_failed">Não deu para apagar. Tente de novo quando estiver com internet.</string>
     <string name="delete_not_stored">Nada foi apagado: nosso servidor não tem nada desta gravação com o código deste app, então ela saiu da lista. Ou as amostras dela já expiraram, depois de 90 dias, sem nenhuma chegar ao mapa, ou ela foi enviada antes de reinstalar o app ou limpar os dados dele, com um código que este app não tem mais.</string>
 
