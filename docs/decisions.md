@@ -5,6 +5,18 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-23: Issue 5's phone checks run on emulators, and the owner checks the radio outdoors
+
+The checks of alexandreffaria/tem-sinal#5 that don't need a real radio or the outdoors run on
+Android 11 (API 30), 12 (API 31) and 14 (API 34) emulators, with a debug build logging at a made-up
+location through the debug-only `MockLocationReceiver` hook. The owner checks the rest on their next
+outing with the release app: two SIMs (all of item 8, including cells whose `plmn` differs from the
+SIM's, from roaming or RAN sharing), cold-start GPS and battery (the comment from
+alexandreffaria/CellSignalMapper#41). The owner chose this on card `20261123huhi`: it needs no code
+change, leaves the owner's phone untouched, and covers Android 11 and 14, which the owner's Galaxy
+S10 can't. The emulators' radio is simulated and isn't Samsung's Android, so the checks that depend
+on a real modem stay with the owner.
+
 ## 2026-11-22: The old application id's Firebase app is deleted
 
 The Firebase Android app of `dev.meuquerido.cellsignalmapper` (`1:1048309727525:android:1c3f222b4d67d9ff299acc`)
