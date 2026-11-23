@@ -132,6 +132,15 @@ class LoggerUiStateTest {
     }
 
     @Test
+    fun nextMinuteIsTheNextWholeMinuteOfTheRecording() {
+        assertEquals(60_000L, msUntilNextMinute(0L))
+        assertEquals(1L, msUntilNextMinute(59_999L))
+        assertEquals(60_000L, msUntilNextMinute(60_000L))
+        assertEquals(30_000L, msUntilNextMinute(42 * 60_000L + 30_000L))
+        assertEquals(60_000L, msUntilNextMinute(-5_000L))
+    }
+
+    @Test
     fun stoppingClearsReadingsAndIgnoresLateSamples() {
         val sims = listOf(sim(0, ServiceStatus.IN_SERVICE, rsrp = -70))
         val stopped = LoggerUiState().serviceStarted(SESSION, 0L)
