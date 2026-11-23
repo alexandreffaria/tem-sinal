@@ -89,7 +89,7 @@ class GsonKeepRulesTest {
 
     /** The app's classes [type] refers to, through type arguments and arrays. */
     private fun appClasses(type: Type): List<Class<*>> = when (type) {
-        is Class<*> -> if (type.isArray) appClasses(type.componentType) else listOfNotNull(type.takeIf { it.name.startsWith("$pkg.") })
+        is Class<*> -> if (type.isArray) appClasses(type.componentType!!) else listOfNotNull(type.takeIf { it.name.startsWith("$pkg.") })
         is ParameterizedType -> appClasses(type.rawType) + type.actualTypeArguments.flatMap { appClasses(it) }
         is WildcardType -> type.upperBounds.flatMap { appClasses(it) }
         is GenericArrayType -> appClasses(type.genericComponentType)
