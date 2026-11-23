@@ -37,10 +37,13 @@ private const val DEFAULT_MOCK_ACCURACY_M = 5f
  * fresh; it lasts until [ACTION_STOP] or until the app's process ends, and then the real position
  * comes back.
  *
+ * The extras go in an intent URI (`d.` a double, `f.` a float; `f.accuracy` is optional) because
+ * `am broadcast --ed`, the double-extra option, exists only from Android 13; the URI form works on
+ * Android 11 to 14.
+ *
  * ```
  * adb shell appops set dev.meuquerido.temsinal android:mock_location allow
- * adb shell am broadcast -n dev.meuquerido.temsinal/dev.meuquerido.cellsignalmapper.MockLocationReceiver \
- *     -a dev.meuquerido.cellsignalmapper.MOCK_LOCATION --ed lat <lat> --ed lon <lon> [--ef accuracy <m>]
+ * adb shell "am broadcast 'intent:#Intent;action=dev.meuquerido.cellsignalmapper.MOCK_LOCATION;component=dev.meuquerido.temsinal/dev.meuquerido.cellsignalmapper.MockLocationReceiver;d.lat=<lat>;d.lon=<lon>;f.accuracy=5;end'"
  * adb shell am broadcast -n dev.meuquerido.temsinal/dev.meuquerido.cellsignalmapper.MockLocationReceiver \
  *     -a dev.meuquerido.cellsignalmapper.STOP_MOCK_LOCATION
  * ```
@@ -62,7 +65,7 @@ class MockLocationReceiver : BroadcastReceiver() {
                     accuracyM = if (intent.hasExtra(EXTRA_ACCURACY)) intent.getFloatExtra(EXTRA_ACCURACY, 0f) else null,
                 )
                 if (place == null) {
-                    Log.e(TAG, "Needs --ed lat and --ed lon on the globe, and --ef accuracy above 0 if given")
+                    Log.e(TAG, "Needs d.lat and d.lon on the globe, and f.accuracy above 0 if given, as intent-URI extras")
                     return
                 }
                 client.setMockMode(true)
