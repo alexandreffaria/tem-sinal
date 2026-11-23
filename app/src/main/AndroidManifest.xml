@@ -9,7 +9,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
+    <!-- Firebase Auth's dependencies add reCAPTCHA's permission and the Google Sign-In and
+         Credential Manager components below. The app signs in only anonymously, which needs none
+         of them. -->
+    <uses-permission
+        android:name="com.google.android.providers.gsf.permission.READ_GSERVICES"
+        tools:node="remove" />
 
     <uses-feature android:name="android.hardware.telephony" android:required="true" />
 
@@ -39,6 +44,23 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- Google Sign-In and Credential Manager components, removed as said above. The Google
+             Sign-In classes are only on the runtime classpath, which lint doesn't see. -->
+        <activity
+            android:name="com.google.android.gms.auth.api.signin.internal.SignInHubActivity"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+        <service
+            android:name="com.google.android.gms.auth.api.signin.RevocationBoundService"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+        <activity
+            android:name="androidx.credentials.playservices.HiddenActivity"
+            tools:node="remove" />
+        <service
+            android:name="androidx.credentials.playservices.CredentialProviderMetadataHolder"
+            tools:node="remove" />
     </application>
 
 </manifest>
