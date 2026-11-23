@@ -31,6 +31,7 @@
     <string name="cancel">Cancel</string>
     <string name="dismiss">Dismiss</string>
 
+    <string name="see_map">See the map</string>
     <string name="what_is_shared">What is shared?</string>
     <string name="sharing_recording">Pressing %1$s records samples and shares them: what is recorded is sent to our server. No sample is recorded until you press %1$s, and recording stops when you press %2$s, when the phone shuts down, or at 10%% battery.</string>
     <string name="sharing_sample">Each sample holds the position and time, the time since the phone was turned on, the location\'s horizontal and vertical accuracy, its altitude and whether it was simulated, and for each SIM its slot, carrier, service state, network type, signal readings and the IDs of the cell towers it hears, with each cell\'s technology (2G, 3G, 4G or 5G), its frequency channel, whether the phone is connected to it and when it was measured. It also carries a random app ID made on this phone, a random ID for each recording and another for each sample, and the version of the sample format. A sample never holds your name, phone number, accounts, IMEI or Android ID.</string>
