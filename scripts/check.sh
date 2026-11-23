@@ -59,7 +59,18 @@ if [ ! -d "$ANDROID_HOME/platforms/android-36" ] || [ ! -d "$ANDROID_HOME/build-
   JAVA_HOME="$JAVA_HOME" "$sdkmanager" "platforms;android-36" "build-tools;35.0.0" > /dev/null
 fi
 
-./gradlew lintDebug testDebugUnitTest assembleDebug
+./gradlew lintDebug testDebugUnitTest assembleDebug :app:processReleaseMainManifest
+
+# The mock location receiver and its permission are debug-only; the release manifest must not name them.
+release_manifest=app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml
+if [ ! -f "$release_manifest" ]; then
+  echo "Missing $release_manifest; the check can't see the release manifest."
+  exit 1
+fi
+if grep -nE 'MockLocationReceiver|ACCESS_MOCK_LOCATION' "$release_manifest"; then
+  echo "The release manifest names the debug-only mock location receiver or its permission."
+  exit 1
+fi
 
 (cd functions && npm ci --engine-strict=false && npm run lint && npm run typecheck && npm test)
 
