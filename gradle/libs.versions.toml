@@ -1,7 +1,7 @@
 [versions]
 agp = "8.10.0"
 gson = "2.11.0"
-kotlin = "2.0.21"
+kotlin = "2.3.21"
 coreKtx = "1.10.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
@@ -11,8 +11,7 @@ activityCompose = "1.8.0"
 composeBom = "2024.09.00"
 playServicesLocation = "21.3.0"
 googleServices = "4.4.2"
-# Later BOMs bring firebase-auth built with Kotlin metadata newer than Kotlin 2.0 can read.
-firebaseBom = "34.12.0"
+firebaseBom = "35.2.0"
 workRuntimeKtx = "2.10.1"
 robolectric = "4.16.1"
 
