@@ -5,22 +5,28 @@
     <string name="stop">STOP</string>
     <string name="no_pending_points">No pending points stored</string>
     <plurals name="pending_points">
-        <item quantity="one">%d pending point stored</item>
-        <item quantity="other">%d pending points stored</item>
+        <item quantity="one">%d point stored · sent when online</item>
+        <item quantity="other">%d points stored · sent when online</item>
     </plurals>
 
     <string name="getting_location">Getting Location…</string>
     <string name="getting_signal_strength">Getting Signal Strength…</string>
-    <string name="location">Lat: %1$s, Lon: %2$s</string>
+    <string name="recording_elapsed">Recording · %1$s</string>
+    <string name="elapsed_minutes" translatable="false">%1$d min</string>
+    <string name="elapsed_hours" translatable="false">%1$d h %2$02d min</string>
+    <string name="gps" translatable="false">GPS</string>
+    <string name="gps_accuracy" translatable="false">GPS ±%1$d m</string>
     <string name="no_location_fix">No location fix</string>
-    <string name="signal_strength_dbm">Signal Strength: %1$d dBm</string>
-    <string name="signal_strength_unknown">Signal Strength: unknown</string>
+    <string name="signal_strength_dbm" translatable="false">%1$d dBm</string>
+    <string name="signal_strength_unknown">Signal unknown</string>
+    <string name="signal_bars">%1$d of 4 bars</string>
 
     <string name="no_active_sim">No active SIM</string>
-    <string name="sim_slot_service">SIM %1$d: %2$s</string>
-    <string name="sim_service">SIM: %1$s</string>
+    <string name="sim_slot">SIM %1$d</string>
+    <string name="sim">SIM</string>
+    <string name="sim_operator" translatable="false">%1$s · %2$s</string>
     <string name="in_service">In service</string>
-    <string name="emergency_calls_only">Emergency calls only</string>
+    <string name="emergency_calls_only">Emergency only</string>
     <string name="no_service">No service</string>
     <string name="no_service_radio_off">No service (radio off)</string>
     <string name="service_unknown">Service unknown</string>

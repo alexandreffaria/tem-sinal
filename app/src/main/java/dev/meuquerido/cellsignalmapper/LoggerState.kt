@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.math.roundToInt
 
 /**
  * What a logging tick did. [SUCCESS]: it logged a sample, with or without signal. [BAD]: it had no
@@ -38,56 +39,121 @@ fun msUntilNextTick(tickStartMs: Long, fixDelivered: Boolean, nowMs: Long): Long
     ((if (fixDelivered) MIN_TICK_GAP_MS else NO_FIX_TICK_AFTER_MS) - (nowMs - tickStartMs))
         .coerceAtLeast(0L)
 
-/** Each SIM's service state in plain words, one line per SIM, such as "SIM 1: No service". */
-fun serviceText(sims: List<SimReading>): List<UiText> =
-    if (sims.isEmpty()) {
-        listOf(UiText(R.string.no_active_sim))
-    } else {
-        sims.map { sim ->
-            val words = UiText(
-                when (sim.serviceState) {
-                    ServiceStatus.IN_SERVICE -> R.string.in_service
-                    ServiceStatus.EMERGENCY_ONLY -> R.string.emergency_calls_only
-                    ServiceStatus.OUT_OF_SERVICE -> R.string.no_service
-                    ServiceStatus.POWER_OFF -> R.string.no_service_radio_off
-                    null -> R.string.service_unknown
-                },
-            )
-            sim.slot?.let { UiText(R.string.sim_slot_service, listOf(it + 1, words)) }
-                ?: UiText(R.string.sim_service, listOf(words))
-        }
+/**
+ * The signal bars, 0 to 4, of a cell's [headlineDbm]: how many of its technology's thresholds it
+ * reaches. The thresholds are Android's defaults, the same the map shades by
+ * (`map/public/label.js`). Null when the cell reports no headline strength.
+ */
+fun CellReading.signalBars(): Int? {
+    val dbm = headlineDbm() ?: return null
+    val thresholds = when (rat) {
+        Rat.LTE -> intArrayOf(-128, -118, -108, -98)
+        Rat.NR -> intArrayOf(-110, -90, -80, -65)
+        Rat.WCDMA -> intArrayOf(-115, -105, -95, -85)
+        Rat.GSM -> intArrayOf(-107, -103, -97, -89)
     }
+    return thresholds.count { dbm >= it }
+}
 
 /**
- * What the main screen shows about the logging service. [sampleCount] grows by one per sample so
- * the screen can react to a sample even when it repeats the previous values. [pendingCount] is the
- * number of samples not uploaded yet.
+ * What a SIM's card on the main screen shows: [label] ("Chip 1 · Vivo"), [value] (the network
+ * generation, "SOS" when [emergency], or a dash), and below it [bars] or [detail], the service
+ * state in words.
+ */
+data class SimCard(
+    val label: UiText,
+    val value: String,
+    val emergency: Boolean = false,
+    val bars: Int? = null,
+    val detail: UiText? = null,
+)
+
+/** The value a card shows when there is no network generation to show. */
+const val NO_VALUE = "—"
+
+/**
+ * [sim]'s card. In service, the value is the generation of its first registered cell (5G for
+ * LTE with a 5G NSA or 5G Advanced override) with that cell's bars, or a dash and "In service"
+ * without a registered cell or strength. Emergency only is "SOS"; every other state is a dash
+ * and its words.
+ */
+fun simCard(sim: SimReading): SimCard {
+    val slotLabel = sim.slot?.let { UiText(R.string.sim_slot, listOf(it + 1)) } ?: UiText(R.string.sim)
+    val label = sim.operatorName?.let { UiText(R.string.sim_operator, listOf(slotLabel, it)) } ?: slotLabel
+    fun words(id: Int) = SimCard(label, NO_VALUE, detail = UiText(id))
+    return when (sim.serviceState) {
+        ServiceStatus.IN_SERVICE -> {
+            val cell = sim.cells?.firstOrNull { it.registered }
+            val value = when (cell?.rat) {
+                Rat.GSM -> "2G"
+                Rat.WCDMA -> "3G"
+                Rat.LTE -> if (sim.overrideNetworkType == OverrideNetworkType.NR_NSA ||
+                    sim.overrideNetworkType == OverrideNetworkType.NR_ADVANCED
+                ) "5G" else "4G"
+                Rat.NR -> "5G"
+                null -> NO_VALUE
+            }
+            val bars = cell?.signalBars()
+            SimCard(label, value, bars = bars, detail = if (bars == null) UiText(R.string.in_service) else null)
+        }
+        ServiceStatus.EMERGENCY_ONLY ->
+            SimCard(label, "SOS", emergency = true, detail = UiText(R.string.emergency_calls_only))
+        ServiceStatus.OUT_OF_SERVICE -> words(R.string.no_service)
+        ServiceStatus.POWER_OFF -> words(R.string.no_service_radio_off)
+        null -> words(R.string.service_unknown)
+    }
+}
+
+/**
+ * How long a recording has run, [ms], in whole minutes: "42 min", or "1 h 05 min" from an hour.
+ */
+fun elapsedText(ms: Long): UiText {
+    val minutes = ms.coerceAtLeast(0L) / 60_000L
+    return if (minutes < 60) {
+        UiText(R.string.elapsed_minutes, listOf(minutes))
+    } else {
+        UiText(R.string.elapsed_hours, listOf(minutes / 60, minutes % 60))
+    }
+}
+
+/**
+ * What the main screen shows about the logging service. [pendingCount] is the number of samples
+ * not uploaded yet.
  */
 data class LoggerUiState(
     val isLogging: Boolean = false,
-    /** The last tick's position; null shows nothing. */
-    val location: UiText? = UiText(R.string.getting_location),
+    /** When the recording started, ms since boot (`SystemClock.elapsedRealtime`); null while stopped. */
+    val startedAtMs: Long? = null,
+    /** The last tick's fix accuracy, or that it had none; null shows nothing. */
+    val gps: UiText? = UiText(R.string.getting_location),
     /** The last tick's signal strength; null shows nothing. */
     val signalStrength: UiText? = UiText(R.string.getting_signal_strength),
-    /** [serviceText] of the last tick's SIMs. */
-    val service: List<UiText> = emptyList(),
+    /** [simCard] of each of the last tick's SIMs; empty when it had none, null before the first tick. */
+    val sims: List<SimCard>? = null,
     val pingResult: PingResult? = null,
-    val sampleCount: Int = 0,
     val pendingCount: Int = 0,
     /** Advice shown below the button, such as [R.string.indoor_hint]; null shows nothing. */
     val hint: UiText? = null,
     /** The session id of the recording being logged; null while the service is stopped. */
     val sessionId: String? = null,
 ) {
-    fun serviceStarted(sessionId: String): LoggerUiState =
-        copy(isLogging = true, location = null, signalStrength = null, service = emptyList(), sessionId = sessionId)
+    fun serviceStarted(sessionId: String, startedAtMs: Long): LoggerUiState =
+        copy(
+            isLogging = true,
+            startedAtMs = startedAtMs,
+            gps = null,
+            signalStrength = null,
+            sims = null,
+            sessionId = sessionId,
+        )
 
     fun serviceStopped(): LoggerUiState =
         copy(
             isLogging = false,
-            location = null,
+            startedAtMs = null,
+            gps = null,
             signalStrength = null,
-            service = emptyList(),
+            sims = null,
             hint = null,
             sessionId = null,
         )
@@ -106,13 +172,14 @@ data class LoggerUiState(
         if (isLogging) copy(hint = UiText(R.string.indoor_hint)) else this
 
     /**
-     * Shows a tick's position (null when it had no fresh fix), the headline strength of the first
-     * registered cell with one, and each SIM's service state. Ignores a tick that arrives after
-     * the service stopped.
+     * Shows a tick's fix accuracy in metres ([hasFix] false when it had no fresh fix,
+     * [accuracyM] null when the fix reported none), the headline strength of the first registered
+     * cell with one, and each SIM's [simCard]. Ignores a tick that arrives after the service
+     * stopped.
      */
     fun withSample(
-        lat: Double?,
-        lon: Double?,
+        hasFix: Boolean,
+        accuracyM: Float?,
         sims: List<SimReading>,
         pingResult: PingResult,
     ): LoggerUiState =
@@ -123,16 +190,15 @@ data class LoggerUiState(
                 .filter { it.registered }
                 .firstNotNullOfOrNull { it.headlineDbm() }
             copy(
-                location = if (lat != null && lon != null) {
-                    UiText(R.string.location, listOf(lat.toString(), lon.toString()))
-                } else {
-                    UiText(R.string.no_location_fix)
+                gps = when {
+                    !hasFix -> UiText(R.string.no_location_fix)
+                    accuracyM == null -> UiText(R.string.gps)
+                    else -> UiText(R.string.gps_accuracy, listOf(accuracyM.roundToInt()))
                 },
                 signalStrength = signalDbm?.let { UiText(R.string.signal_strength_dbm, listOf(it)) }
                     ?: UiText(R.string.signal_strength_unknown),
-                service = serviceText(sims),
+                sims = sims.map(::simCard),
                 pingResult = pingResult,
-                sampleCount = sampleCount + 1,
             )
         }
 }
@@ -142,12 +208,13 @@ object LoggerState {
     private val mutableState = MutableStateFlow(LoggerUiState())
     val state: StateFlow<LoggerUiState> = mutableState.asStateFlow()
 
-    fun serviceStarted(sessionId: String) = mutableState.update { it.serviceStarted(sessionId) }
+    fun serviceStarted(sessionId: String, startedAtMs: Long) =
+        mutableState.update { it.serviceStarted(sessionId, startedAtMs) }
 
     fun serviceStopped() = mutableState.update { it.serviceStopped() }
 
-    fun sample(lat: Double?, lon: Double?, sims: List<SimReading>, pingResult: PingResult) =
-        mutableState.update { it.withSample(lat, lon, sims, pingResult) }
+    fun sample(hasFix: Boolean, accuracyM: Float?, sims: List<SimReading>, pingResult: PingResult) =
+        mutableState.update { it.withSample(hasFix, accuracyM, sims, pingResult) }
 
     fun pendingCount(count: Int) = mutableState.update { it.copy(pendingCount = count) }
 

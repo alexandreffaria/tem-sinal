@@ -29,8 +29,8 @@ in a browser with that address and their captions say "no mapa do site".
 ## Where the pictures come from
 
 No image holds real data. The app screens are rendered on the JVM by
-`app/src/test/java/dev/meuquerido/cellsignalmapper/StoreScreensTest.kt` from made-up state: a
-position in the forest, invented signal readings and invented recordings. The map screenshots are
+`app/src/test/java/dev/meuquerido/cellsignalmapper/StoreScreensTest.kt` from made-up state:
+invented signal readings and invented recordings. The map screenshots are
 the page in `map/public/` served by `map/serve.js` with the cells `store/fixtures.mjs` makes up:
 four invented trails in the Serra do Mar forest between Angra dos Reis and Mangaratiba, away from
 any road or building, with invented counts for TIM, Claro and Vivo. The background map is

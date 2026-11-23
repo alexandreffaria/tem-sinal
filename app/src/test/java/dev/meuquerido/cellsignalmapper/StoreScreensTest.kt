@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.AdaptiveIconDrawable
+import android.os.SystemClock
 import android.telephony.CellInfo
 import android.view.View
 import androidx.activity.ComponentActivity
@@ -23,8 +24,8 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 
 /**
- * Renders the app screens the Play Store screenshots show, in Portuguese, from made-up state: a
- * place in the forest with no one living there, and invented recordings. With the system property
+ * Renders the app screens the Play Store screenshots show, in Portuguese, from made-up state:
+ * invented readings and recordings. With the system property
  * `storeScreens` set to a folder (`-PstoreScreens=<folder>`, as `scripts/store-assets.sh` passes),
  * writes each screen there as `<name>.png`, and the dialog over it as `<name>-dialog.png`; and the
  * launcher icon as `icon.png`, for the store's icon.
@@ -50,8 +51,8 @@ class StoreScreensTest {
         TimeZone.setDefault(zone)
     }
 
-    private fun sim(slot: Int, plmn: String, serviceState: ServiceStatus, rsrp: Int?) = simReading(
-        slotIndex = slot, simOperator = plmn, operatorNumeric = plmn, operatorAlphaLong = null,
+    private fun sim(slot: Int, plmn: String, name: String, serviceState: ServiceStatus, rsrp: Int?) = simReading(
+        slotIndex = slot, simOperator = plmn, operatorNumeric = plmn, operatorAlphaLong = name,
         serviceState = serviceState,
         overrideNetworkType = null,
         cells = listOfNotNull(
@@ -73,12 +74,12 @@ class StoreScreensTest {
     private fun shoot(name: String, screen: @Composable () -> Unit, dialog: (@Composable () -> Unit)? = null) {
         compose.mainClock.autoAdvance = false
         compose.setContent {
-            CellSignalMapperTheme(darkTheme = false) {
+            CellSignalMapperTheme {
                 screen()
                 dialog?.invoke()
             }
         }
-        // The clock stays at the first frame, where the ping visualizer's circle is full size.
+        // The clock stays at the first frame, before any flock of birds flies in.
         compose.mainClock.advanceTimeByFrame()
         val windows = listOfNotNull(compose.activity.window.decorView, ShadowDialog.getLatestDialog()?.window?.decorView)
         assertEquals(if (dialog == null) 1 else 2, windows.size)
@@ -107,11 +108,11 @@ class StoreScreensTest {
     @Test
     fun logging() {
         val sims = listOf(
-            sim(0, "72406", ServiceStatus.IN_SERVICE, rsrp = -97),
-            sim(1, "72405", ServiceStatus.EMERGENCY_ONLY, rsrp = null),
+            sim(0, "72406", "Vivo", ServiceStatus.IN_SERVICE, rsrp = -105),
+            sim(1, "72405", "Claro", ServiceStatus.EMERGENCY_ONLY, rsrp = null),
         )
-        val state = LoggerUiState().serviceStarted("store")
-            .withSample(-22.90037, -44.10021, sims, PingResult.SUCCESS)
+        val state = LoggerUiState().serviceStarted("store", SystemClock.elapsedRealtime() - 42 * 60_000L)
+            .withSample(hasFix = true, accuracyM = 4f, sims, PingResult.SUCCESS)
             .copy(pendingCount = 128)
         shoot("logging", { Main(state) })
     }

@@ -29,90 +29,126 @@ class LoggerUiStateTest {
     fun beforeLoggingShowsWaitingForReadings() {
         val state = LoggerUiState()
 
-        assertEquals(UiText(R.string.getting_location), state.location)
+        assertEquals(UiText(R.string.getting_location), state.gps)
         assertEquals(UiText(R.string.getting_signal_strength), state.signalStrength)
-        assertEquals(emptyList<UiText>(), state.service)
+        assertNull(state.sims)
     }
 
     @Test
     fun startingClearsReadingsAndMarksLogging() {
-        val state = LoggerUiState().serviceStarted(SESSION)
+        val state = LoggerUiState().serviceStarted(SESSION, startedAtMs = 7_000L)
 
         assertTrue(state.isLogging)
-        assertNull(state.location)
+        assertEquals(7_000L, state.startedAtMs)
+        assertNull(state.gps)
         assertNull(state.signalStrength)
-        assertEquals(emptyList<UiText>(), state.service)
+        assertNull(state.sims)
         assertNull(state.pingResult)
     }
 
     @Test
-    fun sampleShowsReadingsAndCountsUp() {
+    fun sampleShowsReadings() {
         val sims = listOf(sim(0, ServiceStatus.IN_SERVICE, rsrp = -85))
-        val state = LoggerUiState().serviceStarted(SESSION)
-            .withSample(-10.5, 20.25, sims, PingResult.SUCCESS)
-            .withSample(-10.5, 20.25, sims, PingResult.SUCCESS)
+        val state = LoggerUiState().serviceStarted(SESSION, 0L)
+            .withSample(hasFix = true, accuracyM = 4.4f, sims, PingResult.SUCCESS)
 
-        assertEquals(UiText(R.string.location, listOf("-10.5", "20.25")), state.location)
+        assertEquals(UiText(R.string.gps_accuracy, listOf(4)), state.gps)
         assertEquals(UiText(R.string.signal_strength_dbm, listOf(-85)), state.signalStrength)
-        assertEquals(
-            listOf(UiText(R.string.sim_slot_service, listOf(1, UiText(R.string.in_service)))),
-            state.service,
-        )
+        assertEquals(listOf(SimCard(UiText(R.string.sim_slot, listOf(1)), "4G", bars = 4)), state.sims)
         assertEquals(PingResult.SUCCESS, state.pingResult)
-        assertEquals(2, state.sampleCount)
+    }
+
+    @Test
+    fun fixWithoutAccuracyShowsGpsAlone() {
+        val state = LoggerUiState().serviceStarted(SESSION, 0L)
+            .withSample(hasFix = true, accuracyM = null, emptyList(), PingResult.BAD)
+
+        assertEquals(UiText(R.string.gps), state.gps)
     }
 
     @Test
     fun tickWithoutLocationOrSignalShowsUnknown() {
-        val state = LoggerUiState().serviceStarted(SESSION)
-            .withSample(null, null, emptyList(), PingResult.BAD)
+        val state = LoggerUiState().serviceStarted(SESSION, 0L)
+            .withSample(hasFix = false, accuracyM = null, emptyList(), PingResult.BAD)
 
-        assertEquals(UiText(R.string.no_location_fix), state.location)
+        assertEquals(UiText(R.string.no_location_fix), state.gps)
         assertEquals(UiText(R.string.signal_strength_unknown), state.signalStrength)
-        assertEquals(listOf(UiText(R.string.no_active_sim)), state.service)
+        assertEquals(emptyList<SimCard>(), state.sims)
     }
 
     @Test
-    fun everyServiceStateHasPlainWordsPerSim() {
-        val text = serviceText(
-            listOf(
-                sim(0, ServiceStatus.IN_SERVICE),
-                sim(1, ServiceStatus.EMERGENCY_ONLY),
-                sim(2, ServiceStatus.OUT_OF_SERVICE),
-                sim(3, ServiceStatus.POWER_OFF),
-                sim(null, null),
-            ),
+    fun everyServiceStateHasACard() {
+        val chip = { n: Int -> UiText(R.string.sim_slot, listOf(n)) }
+
+        assertEquals(SimCard(chip(1), NO_VALUE, detail = UiText(R.string.in_service)), simCard(sim(0, ServiceStatus.IN_SERVICE)))
+        assertEquals(
+            SimCard(chip(2), "SOS", emergency = true, detail = UiText(R.string.emergency_calls_only)),
+            simCard(sim(1, ServiceStatus.EMERGENCY_ONLY)),
         )
+        assertEquals(SimCard(chip(3), NO_VALUE, detail = UiText(R.string.no_service)), simCard(sim(2, ServiceStatus.OUT_OF_SERVICE)))
+        assertEquals(
+            SimCard(chip(4), NO_VALUE, detail = UiText(R.string.no_service_radio_off)),
+            simCard(sim(3, ServiceStatus.POWER_OFF)),
+        )
+        assertEquals(SimCard(UiText(R.string.sim), NO_VALUE, detail = UiText(R.string.service_unknown)), simCard(sim(null, null)))
+    }
+
+    @Test
+    fun cardNamesTheOperatorAndTheGeneration() {
+        val lte = sim(0, ServiceStatus.IN_SERVICE, rsrp = -110).copy(operatorName = "Operadora Exemplo")
 
         assertEquals(
-            listOf(
-                UiText(R.string.sim_slot_service, listOf(1, UiText(R.string.in_service))),
-                UiText(R.string.sim_slot_service, listOf(2, UiText(R.string.emergency_calls_only))),
-                UiText(R.string.sim_slot_service, listOf(3, UiText(R.string.no_service))),
-                UiText(R.string.sim_slot_service, listOf(4, UiText(R.string.no_service_radio_off))),
-                UiText(R.string.sim_service, listOf(UiText(R.string.service_unknown))),
-            ),
-            text,
+            SimCard(UiText(R.string.sim_operator, listOf(UiText(R.string.sim_slot, listOf(1)), "Operadora Exemplo")), "4G", bars = 2),
+            simCard(lte),
         )
+        assertEquals("5G", simCard(lte.copy(overrideNetworkType = OverrideNetworkType.NR_NSA)).value)
+        assertEquals("5G", simCard(lte.copy(overrideNetworkType = OverrideNetworkType.NR_ADVANCED)).value)
+        assertEquals("4G", simCard(lte.copy(overrideNetworkType = OverrideNetworkType.LTE_CA)).value)
+    }
+
+    @Test
+    fun barsCountTheThresholdsReached() {
+        fun cell(rat: Rat, dbm: Int) = cellReading(
+            rat, registered = true, connectionStatus = CellInfo.CONNECTION_PRIMARY_SERVING, timestampMs = 0L,
+            arfcn = 0, pci = 0, mcc = "001", mnc = "01", ci = 1L, tac = 1,
+            rsrp = dbm, rssi = dbm, rscp = dbm,
+        )
+
+        assertEquals(0, cell(Rat.LTE, -129).signalBars())
+        assertEquals(1, cell(Rat.LTE, -128).signalBars())
+        assertEquals(4, cell(Rat.LTE, -98).signalBars())
+        assertEquals(3, cell(Rat.NR, -80).signalBars())
+        assertEquals(2, cell(Rat.WCDMA, -105).signalBars())
+        assertEquals(4, cell(Rat.GSM, -89).signalBars())
+        assertNull(cell(Rat.LTE, -200).signalBars())
+    }
+
+    @Test
+    fun elapsedIsInWholeMinutesThenHours() {
+        assertEquals(UiText(R.string.elapsed_minutes, listOf(0L)), elapsedText(59_999L))
+        assertEquals(UiText(R.string.elapsed_minutes, listOf(42L)), elapsedText(42 * 60_000L + 30_000L))
+        assertEquals(UiText(R.string.elapsed_hours, listOf(1L, 5L)), elapsedText(65 * 60_000L))
+        assertEquals(UiText(R.string.elapsed_minutes, listOf(0L)), elapsedText(-5_000L))
     }
 
     @Test
     fun stoppingClearsReadingsAndIgnoresLateSamples() {
         val sims = listOf(sim(0, ServiceStatus.IN_SERVICE, rsrp = -70))
-        val stopped = LoggerUiState().serviceStarted(SESSION)
-            .withSample(1.0, 2.0, sims, PingResult.SUCCESS)
+        val stopped = LoggerUiState().serviceStarted(SESSION, 0L)
+            .withSample(true, 3f, sims, PingResult.SUCCESS)
             .serviceStopped()
 
         assertFalse(stopped.isLogging)
-        assertNull(stopped.location)
+        assertNull(stopped.startedAtMs)
+        assertNull(stopped.gps)
         assertNull(stopped.signalStrength)
-        assertEquals(emptyList<UiText>(), stopped.service)
-        assertEquals(stopped, stopped.withSample(3.0, 4.0, sims, PingResult.SUCCESS))
+        assertNull(stopped.sims)
+        assertEquals(stopped, stopped.withSample(true, 3f, sims, PingResult.SUCCESS))
     }
 
     @Test
     fun indoorHintShowsWhileLoggingAndClearsOnStop() {
-        val hinted = LoggerUiState().serviceStarted(SESSION).withIndoorHint()
+        val hinted = LoggerUiState().serviceStarted(SESSION, 0L).withIndoorHint()
 
         assertEquals(UiText(R.string.indoor_hint), hinted.hint)
         assertNull(hinted.serviceStopped().hint)
@@ -120,14 +156,14 @@ class LoggerUiStateTest {
 
     @Test
     fun indoorHintAfterStopIsIgnored() {
-        val stopped = LoggerUiState().serviceStarted(SESSION).serviceStopped()
+        val stopped = LoggerUiState().serviceStarted(SESSION, 0L).serviceStopped()
 
         assertEquals(stopped, stopped.withIndoorHint())
     }
 
     @Test
     fun theRecordingBeingLoggedCanBeDeletedOnlyAfterStop() {
-        val logging = LoggerUiState().serviceStarted(SESSION)
+        val logging = LoggerUiState().serviceStarted(SESSION, 0L)
 
         assertFalse(logging.canDelete(SESSION))
         assertTrue(logging.canDelete(OTHER_SESSION))

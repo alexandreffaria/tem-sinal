@@ -1,152 +1,88 @@
 package dev.meuquerido.cellsignalmapper
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-
-/** The public map of the aggregated samples. */
-const val MAP_URL = "https://alexandreffaria.github.io/tem-sinal/"
+import androidx.compose.ui.unit.sp
 
 /**
- * The pending count, the LOG/STOP button, a dismissible [hint] below it, a link that opens
- * [MAP_URL] in the browser, links that call [onShowSharing], [onShowDataSent] and [onShowRecordings], and the location and signal lines:
- * stacked, or with the lines beside the button when [sideBySide]. Either way the content scrolls when the window is too
- * short for it; when it fits, it stays centred because the scroll keeps the filled
- * height as its minimum.
+ * The round LOG/STOP button that calls [onToggle], and under it the number of samples not sent
+ * yet, [pendingPoints].
  */
 @Composable
-fun LoggerButton(
-    isLogging: Boolean,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier,
-    sideBySide: Boolean = false,
-    location: UiText? = null,
-    signalStrength: UiText? = null,
-    service: List<UiText> = emptyList(),
-    pendingPoints: Int = 0,
-    hint: UiText? = null,
-    onDismissHint: () -> Unit = {},
-    onShowSharing: () -> Unit = {},
-    onShowDataSent: () -> Unit = {},
-    onShowRecordings: () -> Unit = {}
-) {
-    val scrolling = modifier
-        .fillMaxSize()
-        .verticalScroll(rememberScrollState())
-        .padding(16.dp)
-    if (sideBySide) {
-        Row(
-            modifier = scrolling,
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                LoggingControls(
-                    isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing,
-                    onShowDataSent, onShowRecordings
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                SignalLines(location, signalStrength, service)
-            }
-        }
-    } else {
-        Column(
-            modifier = scrolling,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            LoggingControls(
-                isLogging, onToggle, pendingPoints, hint, onDismissHint, onShowSharing,
-                onShowDataSent, onShowRecordings
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-            SignalLines(location, signalStrength, service)
-            Spacer(modifier = Modifier.height(100.dp))
-        }
-    }
-}
-
-@Composable
-private fun LoggingControls(
-    isLogging: Boolean,
-    onToggle: () -> Unit,
-    pendingPoints: Int,
-    hint: UiText?,
-    onDismissHint: () -> Unit,
-    onShowSharing: () -> Unit,
-    onShowDataSent: () -> Unit,
-    onShowRecordings: () -> Unit
-) {
-    Text(
-        if (pendingPoints == 0) {
-            stringResource(R.string.no_pending_points)
-        } else {
-            pluralStringResource(R.plurals.pending_points, pendingPoints, pendingPoints)
-        }
-    )
-    Spacer(modifier = Modifier.height(50.dp))
-    Button(
-        onClick = onToggle,
-        modifier = Modifier.size(200.dp)
+fun LoggerButton(isLogging: Boolean, onToggle: () -> Unit, pendingPoints: Int) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(stringResource(if (isLogging) R.string.stop else R.string.log))
-    }
-    if (hint != null) {
-        Spacer(modifier = Modifier.height(16.dp))
+        Box(
+            modifier = Modifier
+                .size(188.dp)
+                .shadow(18.dp, CircleShape, ambientColor = Teal, spotColor = Teal)
+                .clip(CircleShape)
+                .background(Color.White)
+                .border(6.dp, Teal, CircleShape)
+                .clickable(role = Role.Button, onClick = onToggle),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                stringResource(if (isLogging) R.string.stop else R.string.log),
+                color = Teal,
+                fontFamily = SpaceGrotesk,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 26.sp
+            )
+        }
         Text(
-            hint.resolve(),
-            modifier = Modifier.widthIn(max = 320.dp),
+            if (pendingPoints == 0) {
+                stringResource(R.string.no_pending_points)
+            } else {
+                pluralStringResource(R.plurals.pending_points, pendingPoints, pendingPoints)
+            },
+            color = InkSoft,
+            fontSize = 14.sp,
             textAlign = TextAlign.Center
         )
-        TextButton(onClick = onDismissHint) {
-            Text(stringResource(R.string.dismiss))
-        }
-    }
-    val uriHandler = LocalUriHandler.current
-    TextButton(onClick = {
-        // Throws IllegalArgumentException when no app on the phone can open a web page;
-        // the tap then does nothing.
-        try {
-            uriHandler.openUri(MAP_URL)
-        } catch (_: IllegalArgumentException) {
-        }
-    }) {
-        Text(stringResource(R.string.see_map))
-    }
-    TextButton(onClick = onShowSharing) {
-        Text(stringResource(R.string.what_is_shared))
-    }
-    TextButton(onClick = onShowDataSent) {
-        Text(stringResource(R.string.see_data_sent))
-    }
-    TextButton(onClick = onShowRecordings) {
-        Text(stringResource(R.string.my_recordings))
     }
 }
 
+/** [text] in a card, with a Dismiss button that calls [onDismiss] when it is given. */
 @Composable
-private fun SignalLines(location: UiText?, signalStrength: UiText?, service: List<UiText>) {
-    Text(location?.resolve() ?: "")
-    Text(signalStrength?.resolve() ?: "")
-    Text(service.map { it.resolve() }.joinToString("\n"))
+fun Note(text: UiText, onDismiss: (() -> Unit)? = null) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(CardWhite)
+            .padding(start = 16.dp, top = 14.dp, end = 8.dp, bottom = if (onDismiss == null) 14.dp else 0.dp)
+    ) {
+        Text(text.resolve(), color = Ink, fontSize = 14.sp, modifier = Modifier.padding(end = 8.dp))
+        if (onDismiss != null) {
+            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                Text(stringResource(R.string.dismiss))
+            }
+        }
+    }
 }
