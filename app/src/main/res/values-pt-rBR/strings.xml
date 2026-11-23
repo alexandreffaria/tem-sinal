@@ -30,6 +30,7 @@
     <string name="cancel">Cancelar</string>
     <string name="dismiss">Fechar</string>
 
+    <string name="see_map">Ver o mapa</string>
     <string name="what_is_shared">O que é compartilhado?</string>
     <string name="sharing_recording">Tocar em %1$s grava amostras e as compartilha: o que é gravado é enviado ao nosso servidor. Nenhuma amostra é gravada até você tocar em %1$s, e a gravação para quando você toca em %2$s, quando o celular desliga ou com 10%% de bateria.</string>
     <string name="sharing_sample">Cada amostra guarda a posição e a hora, o tempo desde que o celular foi ligado, a precisão horizontal e vertical da localização, a altitude e se a localização foi simulada e, para cada chip, o slot, a operadora, o estado do serviço, o tipo de rede, as medições de sinal e os códigos das antenas que ele capta, com a tecnologia de cada antena (2G, 3G, 4G ou 5G), o canal de frequência dela, se o celular está conectado a ela e o momento de cada medição. Ela também leva um código aleatório do app, criado neste celular, um código aleatório para cada gravação e outro para cada amostra, e a versão do formato da amostra. Uma amostra nunca contém seu nome, número de telefone, contas, IMEI ou Android ID.</string>

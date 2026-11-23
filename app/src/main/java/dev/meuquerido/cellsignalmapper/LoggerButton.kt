@@ -17,14 +17,18 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
+/** The public map of the aggregated samples. */
+const val MAP_URL = "https://alexandreffaria.github.io/tem-sinal/"
+
 /**
- * The pending count, the LOG/STOP button, a dismissible [hint] below it, links that call
- * [onShowSharing], [onShowDataSent] and [onShowRecordings], and the location and signal lines:
+ * The pending count, the LOG/STOP button, a dismissible [hint] below it, a link that opens
+ * [MAP_URL] in the browser, links that call [onShowSharing], [onShowDataSent] and [onShowRecordings], and the location and signal lines:
  * stacked, or with the lines beside the button when [sideBySide]. Either way the content scrolls when the window is too
  * short for it; when it fits, it stays centred because the scroll keeps the filled
  * height as its minimum.
@@ -117,6 +121,17 @@ private fun LoggingControls(
         TextButton(onClick = onDismissHint) {
             Text(stringResource(R.string.dismiss))
         }
+    }
+    val uriHandler = LocalUriHandler.current
+    TextButton(onClick = {
+        // Throws IllegalArgumentException when no app on the phone can open a web page;
+        // the tap then does nothing.
+        try {
+            uriHandler.openUri(MAP_URL)
+        } catch (_: IllegalArgumentException) {
+        }
+    }) {
+        Text(stringResource(R.string.see_map))
     }
     TextButton(onClick = onShowSharing) {
         Text(stringResource(R.string.what_is_shared))
