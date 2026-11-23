@@ -217,7 +217,7 @@ class LoggerService : Service() {
             return
         }
 
-        LoggerState.serviceStarted(sessionId)
+        LoggerState.serviceStarted(sessionId, SystemClock.elapsedRealtime())
         // A low-battery notice from an earlier session is stale once logging runs again.
         getSystemService(NotificationManager::class.java).cancel(LOW_BATTERY_NOTIFICATION_ID)
         // ACTION_BATTERY_CHANGED is sticky: the receiver gets the current level straight away, so
@@ -346,7 +346,12 @@ class LoggerService : Service() {
                     PingResult.BAD
                 }
 
-                LoggerState.sample(location?.latitude, location?.longitude, sims, pingResult)
+                LoggerState.sample(
+                    hasFix = location != null,
+                    accuracyM = location?.takeIf { it.hasAccuracy() }?.accuracy,
+                    sims = sims,
+                    pingResult = pingResult,
+                )
                 // Advice only: the hint is decided after the tick's sample was written and changes
                 // nothing that is logged.
                 if (startTicks.size < START_TICKS) {

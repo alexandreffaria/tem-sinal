@@ -3,23 +3,23 @@
     <string name="stop">PARAR</string>
     <string name="no_pending_points">Nenhum ponto guardado esperando envio</string>
     <plurals name="pending_points">
-        <item quantity="one">%d ponto guardado esperando envio</item>
-        <item quantity="many">%d pontos guardados esperando envio</item>
-        <item quantity="other">%d pontos guardados esperando envio</item>
+        <item quantity="one">%d ponto guardado · enviado ao ter conexão</item>
+        <item quantity="many">%d pontos guardados · enviados ao ter conexão</item>
+        <item quantity="other">%d pontos guardados · enviados ao ter conexão</item>
     </plurals>
 
     <string name="getting_location">Obtendo localização…</string>
     <string name="getting_signal_strength">Obtendo intensidade do sinal…</string>
-    <string name="location">Lat: %1$s, Long: %2$s</string>
+    <string name="recording_elapsed">Gravando · %1$s</string>
     <string name="no_location_fix">Sem localização (GPS)</string>
-    <string name="signal_strength_dbm">Intensidade do sinal: %1$d dBm</string>
-    <string name="signal_strength_unknown">Intensidade do sinal: desconhecida</string>
+    <string name="signal_strength_unknown">Sinal desconhecido</string>
+    <string name="signal_bars">%1$d de 4 barras</string>
 
     <string name="no_active_sim">Nenhum chip ativo</string>
-    <string name="sim_slot_service">Chip %1$d: %2$s</string>
-    <string name="sim_service">Chip: %1$s</string>
+    <string name="sim_slot">Chip %1$d</string>
+    <string name="sim">Chip</string>
     <string name="in_service">Com serviço</string>
-    <string name="emergency_calls_only">Só chamadas de emergência</string>
+    <string name="emergency_calls_only">Só emergência</string>
     <string name="no_service">Sem serviço</string>
     <string name="no_service_radio_off">Sem serviço (rádio desligado)</string>
     <string name="service_unknown">Serviço desconhecido</string>

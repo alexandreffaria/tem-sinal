@@ -5,6 +5,20 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-23: The app looks like the mockup "layout B, visual C"
+
+The main screen takes Topo's layout with Neblina's look: a mist background (`#E6ECEA`) over three
+hill bands with a few pines, the lowercase "tem sinal" wordmark with a "Gravando · <time>" pill
+while recording, a 188 dp white round button with a teal (`#2E6468`) ring, one card per SIM with
+its network generation and signal bars ("SOS" in orange, `#B5541E`, when only emergency calls get
+through), a small "GPS ±<m> m · <dBm> dBm" line instead of the coordinates, and a card of links at
+the bottom. Space Grotesk SemiBold for the wordmark, the button and the card values; Inter for
+the rest, both bundled under the SIL Open Font License (`docs/fonts/`). Every 20 to 30 s a small
+flock of birds crosses the upper half, never while the app is in the background or the system's
+animations are off. The dialogs take the same colors, fonts and corners from the theme, which is
+light also in system dark mode. The owner chose this in chat on 2026-11-23, withdrawing card
+`20261123fuo8`. Issue alexandreffaria/tem-sinal#231.
+
 ## 2026-11-23: Issue 5's phone checks run on emulators, and the owner checks the radio outdoors
 
 The checks of alexandreffaria/tem-sinal#5 that don't need a real radio or the outdoors run on
