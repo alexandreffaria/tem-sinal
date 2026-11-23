@@ -116,6 +116,9 @@ fun elapsedText(ms: Long): UiText {
     }
 }
 
+/** How long after [ms] of recording [elapsedText] next changes: the time to its next whole minute. */
+fun msUntilNextMinute(ms: Long): Long = 60_000L - ms.coerceAtLeast(0L) % 60_000L
+
 /**
  * What the main screen shows about the logging service. [pendingCount] is the number of samples
  * not uploaded yet.

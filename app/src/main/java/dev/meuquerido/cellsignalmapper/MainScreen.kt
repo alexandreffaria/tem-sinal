@@ -43,6 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
 /** The public map of the aggregated samples. */
@@ -136,10 +139,14 @@ private fun TopRow(loggerState: LoggerUiState) {
         )
         val startedAtMs = loggerState.startedAtMs
         if (loggerState.isLogging && startedAtMs != null) {
-            val now by produceState(SystemClock.elapsedRealtime(), startedAtMs) {
-                while (true) {
-                    value = SystemClock.elapsedRealtime()
-                    delay(1_000L)
+            val lifecycle = LocalLifecycleOwner.current.lifecycle
+            // Updates only while the activity is started, on each whole minute of the recording.
+            val now by produceState(SystemClock.elapsedRealtime(), startedAtMs, lifecycle) {
+                lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    while (true) {
+                        value = SystemClock.elapsedRealtime()
+                        delay(msUntilNextMinute(value - startedAtMs))
+                    }
                 }
             }
             val pulse by rememberInfiniteTransition(label = "recording").animateFloat(
