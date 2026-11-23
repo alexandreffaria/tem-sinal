@@ -63,7 +63,7 @@
     <string name="deleting">Deleting…</string>
     <string name="delete_recording_title">Delete this recording?</string>
     <string name="delete_recording_text">It is deleted from our server now and from the map at the next daily update. This can\'t be undone.</string>
-    <string name="delete_after_stop">Being recorded now. Press “Stop” to delete it.</string>
+    <string name="delete_after_stop">Being recorded now. Press %1$s to delete it.</string>
     <string name="delete_failed">Couldn\'t delete. Try again when you\'re online.</string>
     <string name="delete_not_stored">Nothing was deleted: our server holds nothing of this recording with this app\'s ID, so it was taken off the list. Either its samples have expired, after 90 days, without any of them reaching the map, or it was sent before the app was reinstalled or its data was cleared, with an ID this app no longer has.</string>
 
