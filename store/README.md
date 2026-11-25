@@ -23,7 +23,7 @@ apps with at least four 9:16 screenshots of 1080 x 1920 or more can be featured.
 tablet screenshots; the listing works without them.
 
 The captions and the tagline say what the app and the map do today. The map is the public web page
-(<https://alexandreffaria.github.io/tem-sinal/>), not part of the app, so its screenshots show it
+(<https://comsinal.com.br/>), not part of the app, so its screenshots show it
 in a browser with that address and their captions say "no mapa do site".
 
 ## Where the pictures come from

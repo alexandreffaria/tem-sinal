@@ -289,8 +289,9 @@ Decided by the owner in chat on 2026-11-15; no card.
 
 ## 2026-11-15: The map page is on GitHub Pages
 
-The public map page, `map/public/`, is published at
-<https://alexandreffaria.github.io/tem-sinal/> by the Pages workflow on each merge to `main` that
+The public map page, `map/public/`, is published at <https://comsinal.com.br/> (the Pages
+site's custom domain since 2026-11-25; before that `alexandreffaria.github.io/tem-sinal/`) by the
+Pages workflow on each merge to `main` that
 changes it, not on Firebase Hosting. Pages is free for a public repo and needs no new Google
 permissions: the deploy service account gets no Hosting role and no Hosting site is created. The
 page still reads the published tiles from the Storage bucket.

@@ -49,7 +49,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
 /** The public map of the aggregated samples. */
-const val MAP_URL = "https://alexandreffaria.github.io/tem-sinal/"
+const val MAP_URL = "https://comsinal.com.br/"
 
 /**
  * The main screen over the [Hills] and [Birds]: the wordmark and, while recording, how long it
