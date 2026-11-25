@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Tem Sinal</string>
+    <string name="app_name" translatable="false">Com Sinal</string>
 
     <string name="log">Log</string>
     <string name="stop">Stop</string>

@@ -1,6 +1,6 @@
 # Play Store images
 
-The images for the Google Play listing of Tem Sinal (`dev.meuquerido.temsinal`), in Portuguese
+The images for the Google Play listing of Com Sinal (`dev.meuquerido.temsinal`), in Portuguese
 (Brazil), the listing's default language. `scripts/store-assets.sh` renders them all again.
 
 | File | Size | Play Console field |

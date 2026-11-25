@@ -335,7 +335,7 @@ object FirebaseUploader {
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             // Replaces the default user agent, which names the phone's model and build.
-            connection.setRequestProperty("User-Agent", "tem-sinal")
+            connection.setRequestProperty("User-Agent", "com-sinal")
             connection.setRequestProperty("Authorization", "Bearer $idToken")
             appCheckToken?.let { connection.setRequestProperty("X-Firebase-AppCheck", it) }
             connection.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }

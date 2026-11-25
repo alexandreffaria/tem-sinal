@@ -104,9 +104,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/dist"
-          apk="$RUNNER_TEMP/dist/tem-sinal-1.0.$VERSION_CODE.apk"
-          aab="$RUNNER_TEMP/dist/tem-sinal-1.0.$VERSION_CODE.aab"
-          mapping="$RUNNER_TEMP/dist/tem-sinal-1.0.$VERSION_CODE-mapping.txt"
+          apk="$RUNNER_TEMP/dist/com-sinal-1.0.$VERSION_CODE.apk"
+          aab="$RUNNER_TEMP/dist/com-sinal-1.0.$VERSION_CODE.aab"
+          mapping="$RUNNER_TEMP/dist/com-sinal-1.0.$VERSION_CODE-mapping.txt"
           cp app/build/outputs/apk/release/app-release.apk "$apk"
           cp app/build/outputs/bundle/release/app-release.aab "$aab"
           cp app/build/outputs/mapping/release/mapping.txt "$mapping"

@@ -5,6 +5,18 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-24: The app is renamed Com Sinal
+
+The app is named Com Sinal ("with signal"), because the owner holds `comsinal.com.br`;
+`temsinal.com.br` was taken. The name changes wherever a person reads it: the display name and
+lowercase wordmark, the map, privacy and delete pages, the store art, the docs, the release asset
+names and the uploader's `User-Agent`. The map moves to `comsinal.com.br`, served by the same
+GitHub Pages site, and the repo is renamed `com-sinal` once no released build links to the
+github.io address. Whether the application id `dev.meuquerido.temsinal` stays is card
+`20261125gc4l`. This replaces the name part of "The code goes public in a new repo, as Tem Sinal".
+
+Decided by the owner in chat on 2026-11-24; no card.
+
 ## 2026-11-23: The app looks like the mockup "layout B, visual C"
 
 The main screen takes Topo's layout with Neblina's look: a mist background (`#E6ECEA`) over three
