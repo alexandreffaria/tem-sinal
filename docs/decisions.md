@@ -5,6 +5,25 @@ Issue numbers here written before the move to tem-sinal are the archive's,
 
 Settled decisions, newest first. Each links the president card it came from (`decisions/`).
 
+## 2026-11-25: The application id is `br.com.comsinal`
+
+The app's application id is `br.com.comsinal`, matching the domain `comsinal.com.br`, and the app
+is a new Play app, "Com Sinal", on the same developer account. It replaces
+`dev.meuquerido.temsinal` (the 2026-11-16 entry). A new id costs least now: the Tem Sinal closed
+test's opt-in link was never shared and the paid tester service hadn't started, so only a few
+test phones have the old id. The owner left the choice to the sessions in chat on 2026-11-25.
+
+The new id is its own Firebase Android app in project `cellsignalmapper-a9da1`
+(`1:1048309727525:android:a82578b1429bc81e299acc`), with the release signing certificate and the
+project's API key, and `app/google-services.json` carries only its config. The Tem Sinal Firebase
+app stays registered, so an installed old-id copy keeps uploading. To Android the new id is a
+different app: it installs beside the old one and doesn't upgrade it, and samples still on the old
+app upload from the old app. The Tem Sinal Play app is never deleted, since a deleted app's id can
+never be reused. The Kotlin package and the Gradle `namespace` stay
+`dev.meuquerido.cellsignalmapper`.
+
+Decided in chat on 2026-11-25; no card.
+
 ## 2026-11-24: The app is renamed Com Sinal
 
 The app is named Com Sinal ("with signal"), because the owner holds `comsinal.com.br`;
@@ -115,6 +134,8 @@ Asked for by the owner in chat ("I would like to have the avg signal strength to
 actually make a 'heatmap'"); the design is the agents'; no card.
 
 ## 2026-11-16: The application id is `dev.meuquerido.temsinal`
+
+Replaced by: The application id is `br.com.comsinal` (2026-11-25).
 
 The app's application id is `dev.meuquerido.temsinal`, chosen by the owner before the app was
 created on Play, the last moment it could change: Play never changes an app's id once it has one.

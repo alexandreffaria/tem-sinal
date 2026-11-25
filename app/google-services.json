@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1048309727525:android:3db2171076df4cb0299acc",
+        "mobilesdk_app_id": "1:1048309727525:android:a82578b1429bc81e299acc",
         "android_client_info": {
-          "package_name": "dev.meuquerido.temsinal"
+          "package_name": "br.com.comsinal"
         }
       },
       "oauth_client": [],
