@@ -42,9 +42,9 @@ private const val DEFAULT_MOCK_ACCURACY_M = 5f
  * Android 11 to 14.
  *
  * ```
- * adb shell appops set dev.meuquerido.temsinal android:mock_location allow
- * adb shell "am broadcast 'intent:#Intent;action=dev.meuquerido.cellsignalmapper.MOCK_LOCATION;component=dev.meuquerido.temsinal/dev.meuquerido.cellsignalmapper.MockLocationReceiver;d.lat=<lat>;d.lon=<lon>;f.accuracy=5;end'"
- * adb shell am broadcast -n dev.meuquerido.temsinal/dev.meuquerido.cellsignalmapper.MockLocationReceiver \
+ * adb shell appops set br.com.comsinal android:mock_location allow
+ * adb shell "am broadcast 'intent:#Intent;action=dev.meuquerido.cellsignalmapper.MOCK_LOCATION;component=br.com.comsinal/dev.meuquerido.cellsignalmapper.MockLocationReceiver;d.lat=<lat>;d.lon=<lon>;f.accuracy=5;end'"
+ * adb shell am broadcast -n br.com.comsinal/dev.meuquerido.cellsignalmapper.MockLocationReceiver \
  *     -a dev.meuquerido.cellsignalmapper.STOP_MOCK_LOCATION
  * ```
  */
