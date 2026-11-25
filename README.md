@@ -7,7 +7,7 @@ Download the latest signed APK from [Releases](https://github.com/alexandreffari
 
 ## The map
 
-`map/public/` is the public map, at <https://alexandreffaria.github.io/tem-sinal/>: a static
+`map/public/` is the public map, at <https://comsinal.com.br/>: a static
 page that reads the published cell files from the Storage bucket and labels each carrier in each
 cell, shading cells with signal by how strong it is (`map/public/label.js`). The Pages workflow publishes it to GitHub Pages on each merge to
 `main` that changes `map/public/`. To try it with the

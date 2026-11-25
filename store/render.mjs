@@ -20,7 +20,7 @@ if (!screens) throw new Error("Usage: node store/render.mjs <folder with the app
 
 const BLUE = "#2c7bb6";
 const PORT = 8766;
-const MAP_URL = "alexandreffaria.github.io/tem-sinal";
+const MAP_URL = "comsinal.com.br";
 /**
  * The phone the screens are drawn for: 400 dp wide at 3 px per dp, as in StoreScreensTest, whose
  * screens are 866 dp tall. The map is 816 px tall, the screen less the browser's address bar.
