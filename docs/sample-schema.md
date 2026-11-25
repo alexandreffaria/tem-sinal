@@ -356,7 +356,7 @@ with the phone's IP address. Besides that, the SDKs send (firebase-auth 22.3.0, 
   (`android-platform`: empty on a phone; `tv`, `watch`, `auto` or `embedded` otherwise), the app's target and min SDK, and the
   Kotlin and SDK versions.
 - **The upload function, on every request:** the batch, the ID token, the App Check token when
-  there is one, and `User-Agent: tem-sinal`, so no device model goes with it.
+  there is one, and `User-Agent: com-sinal`, so no device model goes with it.
 - **Auth, on every request:** `Accept-Language`, built from `Locale.getDefault()` (the phone's
   language and country); `X-Android-Package` and `X-Android-Cert` (the app's package and signing
   certificate hash); `X-Client-Version`; `X-Firebase-GMPID`; and the heartbeats when there are

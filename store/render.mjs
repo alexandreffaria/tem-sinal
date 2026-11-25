@@ -61,7 +61,7 @@ const FEATURE = html(1024, 500, `
   </svg>
   <div class="hexes">${honeycomb()}</div>
   <div class="text">
-    <h1><svg viewBox="0 0 16 16">${bars("#fff")}</svg>Tem Sinal</h1>
+    <h1><svg viewBox="0 0 16 16">${bars("#fff")}</svg>Com Sinal</h1>
     <p>Grave o sinal na trilha.<br>Veja cada operadora<br>no mapa do site.</p>
   </div>`, `
   body { background: linear-gradient(160deg, #3d93cf, ${BLUE} 60%, #2672a8); color: #fff; position: relative; }
