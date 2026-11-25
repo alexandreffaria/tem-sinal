@@ -12,8 +12,9 @@ The app is named Com Sinal ("with signal"), because the owner holds `comsinal.co
 lowercase wordmark, the map, privacy and delete pages, the store art, the docs, the release asset
 names and the uploader's `User-Agent`. The map moves to `comsinal.com.br`, served by the same
 GitHub Pages site, and the repo is renamed `com-sinal` once no released build links to the
-github.io address. Whether the application id `dev.meuquerido.temsinal` stays is card
-`20261125gc4l`. This replaces the name part of "The code goes public in a new repo, as Tem Sinal".
+github.io address. The application id changes to `br.com.comsinal` (#247), a new Play app,
+while the closed test's opt-in link isn't shared yet. This replaces the name part of "The code
+goes public in a new repo, as Tem Sinal".
 
 Decided by the owner in chat on 2026-11-24; no card.
 
