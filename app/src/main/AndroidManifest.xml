@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Firebase Auth's dependencies add reCAPTCHA's permission and the Google Sign-In and
          Credential Manager components below. The app signs in only anonymously, which needs none
          of them. -->
