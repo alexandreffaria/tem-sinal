@@ -17,6 +17,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.telephony.CellInfo
@@ -180,6 +181,7 @@ class LoggerService : Service() {
             }
         }
     }
+    private var wakeLock: PowerManager.WakeLock? = null
     private var powerReceiverRegistered = false
     private var stoppedForLowBattery = false
 
@@ -218,6 +220,16 @@ class LoggerService : Service() {
         }
 
         LoggerState.serviceStarted(sessionId, SystemClock.elapsedRealtime())
+        // On battery with the screen off the CPU sleeps between fixes, so a tick's wait for the
+        // modem's cell info and the loop's timeouts stall and ticks are skipped. Charging keeps the
+        // CPU awake, which is why only unplugged phones lost samples.
+        wakeLock = getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CellSignalMapper:logging")
+            .apply {
+                setReferenceCounted(false)
+                @Suppress("WakelockTimeout") // Held for the session; onDestroy releases it.
+                acquire()
+            }
         // A low-battery notice from an earlier session is stale once logging runs again.
         getSystemService(NotificationManager::class.java).cancel(LOW_BATTERY_NOTIFICATION_ID)
         // ACTION_BATTERY_CHANGED is sticky: the receiver gets the current level straight away, so
@@ -523,6 +535,7 @@ class LoggerService : Service() {
         START_STICKY
 
     override fun onDestroy() {
+        wakeLock?.release()
         if (powerReceiverRegistered) unregisterReceiver(powerReceiver)
         if (::locationClient.isInitialized) {
             locationClient.removeLocationUpdates(locationCallback)
